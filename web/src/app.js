@@ -1000,7 +1000,7 @@
     if (eng === 'server') {
       var rr; try { rr = await fetch('api/translate', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({html:html})}); } catch(e){ throw {code:'offline'}; }
       var jj = await rr.json().catch(function(){ return {}; });
-      if (!rr.ok) throw {code: jj.code || 'error'};
+      if (!rr.ok) throw {code: jj.code || 'error', msg: jj.msg};
       return trSanitize(jj.html);
     }
     throw {code:'no_engine'};
@@ -1032,7 +1032,7 @@
     }).catch(function(e){
       body.classList.remove('translating');
       var code = e && e.code;
-      wrap.dataset.err = code === 'not_granted' || code === 'sampling_disabled' ? 'La traducción con Claude no está permitida en esta vista.' : code === 'rate_limited' ? 'Demasiadas traducciones seguidas; intenta en un momento.' : code === 'no_engine' ? 'Aquí no hay traductor disponible.' : code === 'offline' ? 'Sin conexión: la traducción necesita internet la primera vez.' : code === 'too_large' ? 'Este texto es demasiado largo para traducirlo.' : 'No se pudo traducir.';
+      wrap.dataset.err = e && e.msg && code !== 'rate_limited' ? e.msg : code === 'not_granted' || code === 'sampling_disabled' ? 'La traducción con Claude no está permitida en esta vista.' : code === 'rate_limited' ? 'Demasiadas traducciones seguidas; intenta en un momento.' : code === 'no_engine' ? 'Aquí no hay traductor disponible.' : code === 'offline' ? 'Sin conexión: la traducción necesita internet la primera vez.' : code === 'too_large' ? 'Este texto es demasiado largo para traducirlo.' : 'No se pudo traducir.';
       wrap.dataset.st = 'err'; if (document.contains(wrap)) trBar(wrap);
     });
   }
@@ -1054,7 +1054,7 @@
     $('#trModes').innerHTML = [['off','Desactivada'],['manual','Con botón'],['auto','Automática']].map(function(x){ return '<button type="button" data-act="trmode" data-v="' + x[0] + '" aria-pressed="' + (m === x[0]) + '">' + x[1] + '</button>'; }).join('');
     $('#trStatus').textContent = 'Revisando qué traductor hay disponible…';
     trEngine().then(function(e){
-      $('#trStatus').textContent = e === 'server' ? 'Traduce el servidor del grupo' + (trServer === 'gemini' ? ' con Gemini' : trServer === 'claude' ? ' con Claude' : trServer === 'deepl' ? ' con DeepL' : '') + '. Lo que alguien ya tradujo sale al instante para todos y queda guardado en tu teléfono.' : e === 'chrome' ? 'Se usará el traductor integrado del navegador: funciona en el dispositivo y no gasta nada.' : e === 'claude' ? 'Se usará Claude con la cuenta de quien abre el diario. La primera vez pedirá permiso.' : 'Aquí no hay traductor disponible: el servidor del grupo no tiene traductor configurado y este navegador no trae uno.';
+      $('#trStatus').textContent = e === 'server' ? 'Traduce el servidor del grupo' + (trServer === 'gemini' ? ' con Gemini' : trServer === 'cloudflare' ? ' con Cloudflare' : trServer === 'claude' ? ' con Claude' : trServer === 'deepl' ? ' con DeepL' : '') + '. Lo que alguien ya tradujo sale al instante para todos y queda guardado en tu teléfono.' : e === 'chrome' ? 'Se usará el traductor integrado del navegador: funciona en el dispositivo y no gasta nada.' : e === 'claude' ? 'Se usará Claude con la cuenta de quien abre el diario. La primera vez pedirá permiso.' : 'Aquí no hay traductor disponible: el servidor del grupo no tiene traductor configurado y este navegador no trae uno.';
     });
   }
 

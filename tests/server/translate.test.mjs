@@ -39,9 +39,8 @@ test('Gemini: arma la petición, reintenta una vez y limpia la respuesta', async
     if (calls.length === 1) return new Response('{}', { status: 429 });
     return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '```html\n<p>Bola de fuego (Fireball)</p>\n```' }] } }] }), { status: 200 });
   };
-  const orig = globalThis.setTimeout; globalThis.setTimeout = (f) => orig(f, 0);
   try {
-    const t = createTranslator({ GEMINI_API_KEY: 'k', TR_MODEL: 'gemini-x' });
+    const t = createTranslator({ GEMINI_API_KEY: 'k', TR_MODEL: 'gemini-x', TR_RETRY_MS: '0' });
     assert.equal(t.provider, 'gemini');
     const out = await t.translate('<p>Fireball</p>');
     assert.equal(out.html, '<p>Bola de fuego (Fireball)</p>');
@@ -49,7 +48,7 @@ test('Gemini: arma la petición, reintenta una vez y limpia la respuesta', async
     assert.match(calls[1].url, /models\/gemini-x:generateContent$/);
     assert.equal(calls[1].opt.headers['x-goog-api-key'], 'k');
     assert.match(JSON.parse(calls[1].opt.body).systemInstruction.parts[0].text, /tirada de salvación/);
-  } finally { globalThis.fetch = real; globalThis.setTimeout = orig; }
+  } finally { globalThis.fetch = real; }
 });
 
 test('Gemini: si un modelo no existe prueba el siguiente', async () => {
@@ -57,5 +56,25 @@ test('Gemini: si un modelo no existe prueba el siguiente', async () => {
   globalThis.fetch = async (url) => { seen.push(url.match(/models\/([^:]+)/)[1]); return seen.length === 1 ? new Response('not found', { status: 404 }) : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '<p>ok</p>' }] } }] }), { status: 200 }); };
   const warn = console.warn; console.warn = () => {};
   try { const t = createTranslator({ GEMINI_API_KEY: 'k' }); assert.equal((await t.translate('<p>x</p>')).html, '<p>ok</p>'); assert.deepEqual(seen, ['gemini-flash-latest', 'gemini-flash-lite-latest']); }
+  finally { globalThis.fetch = real; console.warn = warn; }
+});
+
+test('Cloudflare m2m100: bloque por bloque, pies a metros y glosario', async () => {
+  const sent = []; const real = globalThis.fetch;
+  globalThis.fetch = async (url, opt) => { const b = JSON.parse(opt.body); sent.push(b.text); return new Response(JSON.stringify({ result: { translated_text: b.text.includes('meters') ? 'Cada criatura a 6 metros hace un tiro de salvación de Destreza.' : 'Un hechizo de acción de bonificación.' } }), { status: 200 }); };
+  const warn = console.warn; console.warn = () => {};
+  try {
+    const t = createTranslator({ CLOUDFLARE_ACCOUNT_ID: 'a', CLOUDFLARE_API_TOKEN: 't' });
+    assert.equal(t.provider, 'cloudflare');
+    const out = await t.translate('<p>Each creature within 20 feet makes a <a class="ref" data-ref="x">Dexterity saving throw</a>.</p><ul><li>A bonus action spell.</li></ul>');
+    assert.deepEqual(sent, ['Each creature within 6 meters makes a Dexterity saving throw.', 'A bonus action spell.']);
+    assert.equal(out.html, '<p>Cada criatura a 6 metros hace un tirada de salvación de Destreza.</p><ul><li>Un conjuro de acción adicional.</li></ul>');
+  } finally { globalThis.fetch = real; console.warn = warn; }
+});
+
+test('Gemini: mensaje claro cuando la cuenta no tiene plan gratis', async () => {
+  const real = globalThis.fetch; const warn = console.warn; console.warn = () => {};
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { message: 'The Gemini API free tier is not available for this project. Please set up billing' } }), { status: 429 });
+  try { const t = createTranslator({ GEMINI_API_KEY: 'k', TR_MODEL: 'm', TR_RETRY_MS: '0' }); await assert.rejects(t.translate('<p>x</p>'), /cuenta personal de Gmail/); assert.match(t.status().lastError.msg, /free tier/); }
   finally { globalThis.fetch = real; console.warn = warn; }
 });
