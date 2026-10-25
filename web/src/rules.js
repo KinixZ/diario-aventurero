@@ -468,9 +468,26 @@ var Rules5e = (function(){
       (oc.value || []).forEach(function(r){ var o = Lib5e.optionalfeature(r); if (o) { D.features.push({name:o.name, from:op.name, e:o}); grantGroups(o, 'o:' + N(o.name), null, 'niveles', oc.id, o.name); } });
     }); });
 
+    /* ---------- Objetos equipados: bonos a salvaciones, conjuros, armas, características y resistencias ---------- */
+    var fx = {save:0, spellAtk:0, spellDc:0, weapon:0, resist:[], set:{}, add:{}, notes:[]};
+    ((C.rt && C.rt.items) || []).filter(function(i){ return i.eq; }).forEach(function(i){
+      var d = itemData(i); if (!d) return;
+      var n = function(v){ return parseInt(v, 10) || 0; };
+      if (d.bonusSavingThrow) { fx.save += n(d.bonusSavingThrow); fx.notes.push(d.name); }
+      if (d.bonusSpellAttack) fx.spellAtk += n(d.bonusSpellAttack);
+      if (d.bonusSpellSaveDc) fx.spellDc += n(d.bonusSpellSaveDc);
+      if (d.hbWeaponAll) fx.weapon += n(d.hbWeaponAll);
+      if (d.ability && typeof d.ability === 'object') {
+        if (d.ability.static) Object.keys(d.ability.static).forEach(function(k){ if (ABS.indexOf(k) >= 0) fx.set[k] = Math.max(fx.set[k] || 0, n(d.ability.static[k])); });
+        ABS.forEach(function(k){ if (typeof d.ability[k] === 'number') fx.add[k] = (fx.add[k] || 0) + d.ability[k]; });
+      }
+      (d.resist || []).forEach(function(r){ var t = typeof r === 'string' ? r : null; if (t && fx.resist.indexOf(t) < 0) fx.resist.push(t); });
+    });
+    D.itemFx = fx;
+
     /* ---------- Características finales ---------- */
     D.abil = {}; D.mod = {};
-    ABS.forEach(function(k){ var cap = caps[k] || 20, b = base[k] || 8; D.abil[k] = Math.min(Math.max(cap, b), b + bonus[k]); D.mod[k] = mod(D.abil[k]); });
+    ABS.forEach(function(k){ var cap = caps[k] || 20, b = base[k] || 8; D.abil[k] = Math.min(Math.max(cap, b), b + bonus[k]); if (fx.add[k]) D.abil[k] = Math.min(30, D.abil[k] + fx.add[k]); if (fx.set[k] && fx.set[k] > D.abil[k]) D.abil[k] = fx.set[k]; D.mod[k] = mod(D.abil[k]); });
     D.bonus = bonus;
 
     /* ---------- Puntos de golpe ---------- */
@@ -503,7 +520,7 @@ var Rules5e = (function(){
       [c, s2].forEach(function(o){ if (!o) return; (o.additionalSpells || []).forEach(function(g){ var gr = spellGrants(g, L1); gr.fixed.forEach(function(s){ var e = findSpell(s.ref); if (!e) return; if (s.how === 'expandida') expanded.push(e); else D.extraSpells.push({e:e, how:'siempre preparado', from: o === s2 ? s2.name : c.name}); }); }); });
       if (!scAb) return;
       var listName = spellListOf(c, s2);
-      var K = {cls:c, sub:s2, key:E.sfx, name:c.name, list:listName, ability:scAb, dc:8 + D.pb + D.mod[scAb], atk:D.pb + D.mod[scAb], maxLv:maxLv, cantrips:[], prepared:[], full:false};
+      var K = {cls:c, sub:s2, key:E.sfx, name:c.name, list:listName, ability:scAb, dc:8 + D.pb + D.mod[scAb] + fx.spellDc, atk:D.pb + D.mod[scAb] + fx.spellAtk, maxLv:maxLv, cantrips:[], prepared:[], full:false};
       var nCan = progAt(c.cantripProgression || s2 && s2.cantripProgression, L1);
       if (nCan == null) { var tc = tableCol(c, s2, /cantrips/i, L1); nCan = tc != null ? +tc : 0; }
       var nPrep = progAt(c.preparedSpellsProgression, L1) || progAt(c.spellsKnownProgression, L1) || (s2 && (progAt(s2.preparedSpellsProgression, L1) || progAt(s2.spellsKnownProgression, L1)));
@@ -559,7 +576,8 @@ var Rules5e = (function(){
     /* ---------- Salvaciones, habilidades, defensas ---------- */
     var auraP = featNames.indexOf('aura of protection') >= 0 ? Math.max(1, D.mod.cha) : 0;
     D.aura = auraP;
-    D.save = {}; ABS.forEach(function(k){ D.save[k] = D.mod[k] + (D.saves.indexOf(k) >= 0 ? D.pb : 0) + auraP; });
+    D.save = {}; ABS.forEach(function(k){ D.save[k] = D.mod[k] + (D.saves.indexOf(k) >= 0 ? D.pb : 0) + auraP + fx.save; });
+    D.saveItems = fx.save;
     D.skill = {}; ALLSK.forEach(function(s){ D.skill[s] = D.mod[SK[s]] + (D.skills[s] ? D.pb * (D.expert[s] ? 2 : 1) : 0); });
     D.passive = 10 + D.skill.perception;
     D.init = D.mod.dex + (featNames.indexOf('alert') >= 0 ? D.pb : 0);
@@ -567,7 +585,8 @@ var Rules5e = (function(){
     D.speedFt = spd || 30; D.speed = ((spd || 30) / 5 * 1.5).toString().replace('.', ',') + ' m';
     D.size = ch.size || (race && race.size && race.size[0]) || 'M';
     D.darkvision = race && race.darkvision ? race.darkvision : 0;
-    D.resist = race && race.resist ? race.resist.filter(function(r){ return typeof r === 'string'; }) : [];
+    D.resist = [];
+    (race && race.resist ? race.resist.filter(function(r){ return typeof r === 'string'; }) : []).concat(fx.resist).forEach(function(t){ var es = DT[t] || DT[String(t).charAt(0).toUpperCase()] || t; var full = {acid:'ácido', bludgeoning:'contundente', cold:'frío', fire:'fuego', force:'fuerza', lightning:'relámpago', necrotic:'necrótico', piercing:'perforante', poison:'veneno', psychic:'psíquico', radiant:'radiante', slashing:'cortante', thunder:'trueno'}[N(t)]; es = full || es; if (D.resist.indexOf(es) < 0) D.resist.push(es); });
 
     /* ---------- Equipo inicial ---------- */
     D.equipChoices = [];
@@ -587,10 +606,10 @@ var Rules5e = (function(){
     function itemData(it){ if (!it) return null; if (it.hb) return hbData(it.hb); if (!it.ref) return null; var p = it.ref.split('|'), f = Lib5e.find(p[0], p[1], p[2]); return f && f.e; }
     var armorIt = items.filter(function(i){ return i.eq === 'armor'; })[0], shieldIt = items.filter(function(i){ return i.eq === 'off' && i.slot === 'off'; })[0];
     var ad = itemData(armorIt), ac = 10 + D.mod.dex, acNote = 'Sin armadura';
-    if (ad && ad.ac) { var t = (ad.type || '').split('|')[0]; ac = ad.ac + (t === 'HA' ? 0 : t === 'MA' ? Math.min(2, D.mod.dex) : D.mod.dex); acNote = ad.name; }
+    if (ad && ad.ac) { var t = (ad.type || '').split('|')[0]; ac = ad.ac + (t === 'HA' ? 0 : t === 'MA' ? Math.min(2, D.mod.dex) : D.mod.dex); var abn = parseInt(ad.bonusAc, 10) || 0; ac += abn; acNote = ad.name + (abn ? ' ' + sgn(abn) : ''); if (ad.stealth) acNote += ' (desventaja en Sigilo)'; if (ad.strength && D.abil.str < parseInt(ad.strength, 10)) acNote += ' (te falta Fuerza ' + ad.strength + ': −3 m de velocidad)'; }
     else if (featNames.indexOf('unarmored defense') >= 0) { var ud = CLS.filter(function(E){ return /^(barbarian|monk)$/.test(N(E.cls.name)); })[0]; if (ud && N(ud.cls.name) === 'barbarian') { ac = 10 + D.mod.dex + D.mod.con; acNote = 'Defensa sin armadura'; } else if (ud) { ac = 10 + D.mod.dex + D.mod.wis; acNote = 'Defensa sin armadura'; } }
-    var sd = itemData(shieldIt); if (shieldIt) { ac += sd && sd.ac ? sd.ac : 2; acNote += ' + escudo'; }
-    items.filter(function(i){ return i.eq; }).forEach(function(i){ var d = itemData(i); if (d && d.bonusAc) { ac += parseInt(d.bonusAc, 10) || 0; acNote += ' + ' + d.name; } });
+    var sd = itemData(shieldIt); if (shieldIt) { var sbn = sd ? parseInt(sd.bonusAc, 10) || 0 : 0; ac += (sd && sd.ac ? sd.ac : 2) + sbn; acNote += ' + escudo' + (sbn ? ' ' + sgn(sbn) : ''); }
+    items.filter(function(i){ return i.eq; }).forEach(function(i){ var d = itemData(i); if (d && d.bonusAc) { if (i === armorIt || i === shieldIt) return; ac += parseInt(d.bonusAc, 10) || 0; acNote += ' + ' + d.name; } });
     if (ad && featNames.indexOf('defense') >= 0) { ac += 1; acNote += ' + Defensa'; }
     D.ac = ac; D.acNote = acNote;
     var auraHate = featNames.indexOf('aura of hate') >= 0 ? D.mod.cha : 0, radiant = featNames.indexOf('radiant strikes') >= 0;
@@ -599,7 +618,7 @@ var Rules5e = (function(){
       var t = (d.type || '').split('|')[0], props = (d.property || []).map(function(p){ return (typeof p === 'string' ? p : p.uid || '').split('|')[0]; });
       var ranged = t === 'R', ab = ranged ? 'dex' : props.indexOf('F') >= 0 ? (D.mod.dex > D.mod.str ? 'dex' : 'str') : 'str';
       var prof = D.weapon.indexOf(d.weaponCategory) >= 0 || D.weapon.indexOf(N(d.name)) >= 0;
-      var magic = parseInt(d.bonusWeapon, 10) || 0;
+      var magic = (parseInt(d.bonusWeapon, 10) || 0) + fx.weapon;
       var dueling = !ranged && featNames.indexOf('dueling') >= 0 && props.indexOf('2H') < 0 && !items.some(function(o){ return o.eq === 'off' && o !== i && o.slot !== 'off'; }) ? 2 : 0;
       var archery = ranged && featNames.indexOf('archery') >= 0 ? 2 : 0;
       var dmgMod = D.mod[ab] + magic + (!ranged ? auraHate : 0) + dueling;
@@ -627,6 +646,14 @@ var Rules5e = (function(){
   /* ---------- Armas homebrew ---------- */
   var DT = {S:'cortante', P:'perforante', B:'contundente', A:'ácido', C:'frío', F:'fuego', O:'fuerza', L:'relámpago', N:'necrótico', I:'veneno', Y:'psíquico', R:'radiante', T:'trueno'};
   function hbData(h){
+    var k = h.kind || 'weapon', mg = h.magic ? '+' + h.magic : null;
+    if (k === 'armor') return {name:h.name, hb:h, type:h.atype || 'HA', ac:h.ac || 10, bonusAc:mg, stealth:!!h.stealth, strength:h.str || null, reqAttune:!!h.attune};
+    if (k === 'shield') return {name:h.name, hb:h, type:'S', ac:h.sac || 2, bonusAc:mg, reqAttune:!!h.attune};
+    if (k === 'item') {
+      var ab = null; if (h.setAb) { ab = {static:{}}; ab.static[h.setAb] = h.setVal; } if (h.addAb) { ab = ab || {}; ab[h.addAb] = h.addVal; }
+      return {name:h.name, hb:h, bonusAc:h.bAc ? '+' + h.bAc : null, bonusSavingThrow:h.bSave ? '+' + h.bSave : null, bonusSpellAttack:h.bSpell ? '+' + h.bSpell : null, bonusSpellSaveDc:h.bSpell ? '+' + h.bSpell : null, hbWeaponAll:h.bWeapon || 0, ability:ab, resist:(h.resist || []).map(function(t){ return DT[t] || t; }), reqAttune:!!h.attune};
+    }
+    if (k !== 'weapon') return {name:h.name, hb:h};
     return {name:h.name, hb:h, dmg1:h.dice, dmg2:h.props.indexOf('V') >= 0 ? h.vdice : null, dmgType:h.dtype, type:h.ranged ? 'R' : 'M', property:h.props.slice(), weaponCategory:h.cat,
       bonusWeapon: h.magic ? '+' + h.magic : null, mastery: h.mastery ? [h.mastery + '|XPHB'] : [], range:h.range || null, weight:h.weight || null,
       hbExtra: h.xdice ? {dice:h.xdice, type:DT[h.xtype] || h.xtype, note:'daño extra'} : null};

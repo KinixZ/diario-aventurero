@@ -21,10 +21,13 @@ El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abra
 - **Multiclase**: requisitos de 13, competencias de multiclase, PG con el dado de cada clase, espacios combinados con la tabla de multiclase y Pacto aparte.
 - **Dados físicos**: el diario no tira, te dice qué tirar ("Tira 1d20 + 8").
 - **Grimorio enlazado**: reglas, acciones, condiciones, conjuros, objetos y dotes con hipervínculos; filtros por clase, nivel, escuela, concentración y ritual; vista de tabla.
-- **Mochila tipo Resident Evil 4** con contenedores (mochila, Bag of Holding, sacos, carcajes…), equipo por ranura y armas homebrew.
+- **Mochila tipo Resident Evil 4** con contenedores (mochila, Bag of Holding, sacos, carcajes…) y equipo por ranura.
+- **Homebrew**: armas, armaduras, escudos, objetos mágicos (bonos a CA, salvaciones, conjuros y armas; características fijas o sumadas; resistencias; cargas), consumibles y objetos sueltos. Los objetos mágicos de 5etools también suman sus bonos.
+- **12 estilos** de color (claros y de páginas oscuras); el modo combate toma los colores del estilo.
 - **Compañeros**: homúnculo, defensor de acero, familiares e invocaciones con sus números calculados.
 - **Traducción automática** de textos (traductor del navegador o Claude cuando corre como artefacto).
-- **Sala de combate**: código de 4 letras, iniciativa ordenada, turnos y rondas, PNJ del DM (ocultos o visibles), daño, curación, PG temporales y condiciones aplicadas de un jugador a otro.
+- **Sala de combate**: código de 4 letras, iniciativa ordenada, turnos y rondas (aparecen cuando el DM empieza el combate), daño, curación, PG temporales y condiciones entre jugadores.
+- **Vista del DM**: sin hoja propia; crea enemigos y lleva su vida, CA, iniciativa y estados (ocultos o visibles para el grupo). Sus acciones las maneja fuera de la app.
 
 ## Traducción en el teléfono
 

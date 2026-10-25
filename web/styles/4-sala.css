@@ -45,3 +45,20 @@
 .sala-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:80;max-width:calc(100% - 32px);padding:12px 16px;border-radius:10px;background:var(--parch);color:var(--ink);border:1px solid var(--gold);box-shadow:0 8px 24px rgba(0,0,0,.45);font-size:16px}
 .sala-toast[hidden]{display:none}
 @media (max-width:420px){ .sala-npc{grid-template-columns:1fr 1fr 1fr} .sala-npc [name=name]{grid-column:1/4} .sala-npc .toggle{grid-column:1/3} .sala-npc button{grid-column:3/4} }
+
+/* Ronda en el encabezado (solo con combate iniciado) */
+.combat-h .round small{font-family:var(--body);font-size:14px;color:var(--on-dark-2);margin-left:4px}
+.combat-h .round [hidden]{display:none}
+/* Vista del DM: sin hoja propia, la sala ocupa todo */
+.combat.dm-mode #cLeft{display:none}
+.combat.dm-mode #cRight>:not(#salaBox){display:none}
+.combat.dm-mode .combat-b{grid-template-columns:1fr}
+@media (min-width:900px){ .combat.dm-mode .sala-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px} .combat.dm-mode .sala-sep{grid-column:1/-1} }
+.sala-pick[aria-disabled="true"]{cursor:default}
+.sala-npcedit{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--rule)}
+.sala-npcedit .quick{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:0}
+.sala-npcf{display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap}
+.sala-npcf label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--on-dark-2);flex:1 1 60px}
+.sala-npcf .field{height:36px;min-width:0;width:100%}
+.sala-npcf select.field{flex:2 1 140px;width:auto}
+.sala-conds button.chip{cursor:pointer}

@@ -42,7 +42,8 @@ test('aplicar daño y curación: temporales primero, aviso al jugador, PNJ direc
   const a = R.join(room.code, 'Lyra', { ...pc('Lyra', 30), temp: 5 }).member;
   R.act(room, dm.id, { t: 'npc.add', name: 'Ogro', ac: 11, hp: 59 });
   const ogro = [...room.npcs.values()][0];
-  const n = R.act(room, dm.id, { t: 'apply', kind: 'damage', amount: 12, targets: [a.id, ogro.id], note: 'Garrote' });
+  const b = R.join(room.code, 'Bram', pc('Bram')).member;
+  const n = R.act(room, b.id, { t: 'apply', kind: 'damage', amount: 12, targets: [a.id, ogro.id], note: 'Garrote' });
   assert.equal(a.char.temp, 0); assert.equal(a.char.hp, 23); assert.equal(ogro.hp, 47);
   assert.deepEqual(n.map(x => x.to), [a.id]); assert.equal(n[0].msg.amount, 12);
   R.act(room, a.id, { t: 'apply', kind: 'heal', amount: 100, targets: [a.id] });
@@ -75,4 +76,23 @@ test('limpia salas viejas', () => {
   const { room } = R.create('DM', null, true);
   t = 9 * 3600 * 1000; R.sweep();
   assert.equal(R.get(room.code), undefined);
+});
+
+test('el DM ajusta a los enemigos y no toca la hoja de los jugadores', () => {
+  const R = new Rooms();
+  const { room, member: dm } = R.create('DM', null, true);
+  const a = R.join(room.code, 'Lyra', pc('Lyra', 30)).member;
+  R.act(room, dm.id, { t: 'npc.add', name: 'Troll', ac: 15, hp: 84 });
+  const troll = [...room.npcs.values()][0];
+  R.act(room, dm.id, { t: 'npc.set', id: troll.id, delta: -10 }); assert.equal(troll.hp, 74);
+  R.act(room, dm.id, { t: 'npc.set', id: troll.id, hp: 30, ac: 16, conds: ['prone', 'nope'] });
+  assert.equal(troll.hp, 30); assert.equal(troll.ac, 16); assert.deepEqual(troll.conds, ['prone']);
+  R.act(room, dm.id, { t: 'npc.set', id: troll.id, hpMax: 20 }); assert.equal(troll.hp, 20);
+  assert.throws(() => R.act(room, a.id, { t: 'npc.set', id: troll.id, hp: 1 }), /Solo el DM/);
+  // el DM no puede dañar a un jugador; si incluye enemigos, solo se aplica a ellos
+  assert.throws(() => R.act(room, dm.id, { t: 'apply', kind: 'damage', amount: 5, targets: [a.id] }), /enemigos/);
+  const notes = R.act(room, dm.id, { t: 'apply', kind: 'damage', amount: 5, targets: [a.id, troll.id] });
+  assert.equal(a.char.hp, 30); assert.equal(troll.hp, 15); assert.equal(notes.length, 0);
+  // los jugadores sí pueden dañar enemigos y curarse entre ellos
+  R.act(room, a.id, { t: 'apply', kind: 'damage', amount: 3, targets: [troll.id] }); assert.equal(troll.hp, 12);
 });

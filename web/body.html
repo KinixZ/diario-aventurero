@@ -38,7 +38,7 @@
             <div class="case-actions" id="caseActions"></div>
           </div>
         </div>
-        <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" type="button" data-act="finditems" style="flex:1 1 200px">Buscar objetos en el grimorio</button><button class="btn" type="button" data-act="hbnew" style="flex:1 1 200px">Crear arma homebrew</button></div>
+        <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" type="button" data-act="finditems" style="flex:1 1 200px">Buscar objetos en el grimorio</button><button class="btn" type="button" data-act="hbnew" style="flex:1 1 200px">Crear homebrew: armas, armaduras, objetos</button></div>
         <div class="card torn">
           <span class="label">monedas</span>
           <div class="coins" id="coins"></div>
@@ -54,39 +54,93 @@
 
     <!-- ARMA HOMEBREW -->
     <div class="sheet" id="hbSheet" hidden role="dialog" aria-labelledby="hbTitle">
-      <div class="sheet-h"><h2 id="hbTitle">Arma homebrew</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="sheet-h"><h2 id="hbTitle">Homebrew</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="scroll">
         <div id="hbSaved"></div>
         <form id="hbForm" class="hbform" novalidate>
+          <div class="seg hbkinds" id="hbKinds" role="group" aria-label="Tipo de objeto"></div>
           <label class="fl">Nombre<input class="field" id="hbName" autocomplete="off" placeholder="Matadragones"></label>
           <div class="two">
-            <label class="fl">Daño<input class="field" id="hbDice" autocomplete="off" placeholder="2d6"></label>
-            <label class="fl">Tipo de daño<select class="field" id="hbType"></select></label>
+            <label class="fl">Rareza<select class="field" id="hbRarity"><option value="">Sin rareza</option><option value="common">Común</option><option value="uncommon">Poco común</option><option value="rare">Raro</option><option value="very rare">Muy raro</option><option value="legendary">Legendario</option><option value="artifact">Artefacto</option></select></label>
+            <label class="toggle fl-toggle"><input type="checkbox" id="hbAttune"> Requiere sintonización</label>
           </div>
-          <div class="two">
-            <label class="fl">Categoría<select class="field" id="hbCat"><option value="martial">Marcial</option><option value="simple">Sencilla</option></select></label>
-            <label class="fl">Ataque<select class="field" id="hbRanged"><option value="0">Cuerpo a cuerpo</option><option value="1">A distancia</option></select></label>
+
+          <div data-kind="weapon">
+            <div class="two">
+              <label class="fl">Daño<input class="field" id="hbDice" autocomplete="off" placeholder="2d6"></label>
+              <label class="fl">Tipo de daño<select class="field" id="hbType"></select></label>
+            </div>
+            <div class="two">
+              <label class="fl">Categoría<select class="field" id="hbCat"><option value="martial">Marcial</option><option value="simple">Sencilla</option></select></label>
+              <label class="fl">Ataque<select class="field" id="hbRanged"><option value="0">Cuerpo a cuerpo</option><option value="1">A distancia</option></select></label>
+            </div>
+            <fieldset class="fl"><legend>Propiedades</legend><div class="checks" id="hbProps"></div></fieldset>
+            <div class="two" id="hbVRow" hidden><label class="fl">Daño a dos manos (versátil)<input class="field" id="hbVDice" autocomplete="off" placeholder="2d8"></label><span></span></div>
+            <div class="two" id="hbRangeRow" hidden><label class="fl">Alcance (pies, normal/largo)<input class="field" id="hbRange" autocomplete="off" placeholder="20/60"></label><span></span></div>
+            <div class="two">
+              <label class="fl">Maestría<select class="field" id="hbMastery"></select></label>
+              <label class="fl">Daño extra (opcional)<input class="field" id="hbXDice" autocomplete="off" placeholder="1d6"></label>
+            </div>
+            <div class="two"><label class="fl">Tipo del daño extra<select class="field" id="hbXType"></select></label><span></span></div>
           </div>
-          <fieldset class="fl"><legend>Propiedades</legend><div class="checks" id="hbProps"></div></fieldset>
-          <div class="two" id="hbVRow" hidden><label class="fl">Daño a dos manos (versátil)<input class="field" id="hbVDice" autocomplete="off" placeholder="2d8"></label><span></span></div>
-          <div class="two" id="hbRangeRow" hidden><label class="fl">Alcance (pies, normal/largo)<input class="field" id="hbRange" autocomplete="off" placeholder="20/60"></label><span></span></div>
-          <div class="two">
-            <label class="fl">Maestría<select class="field" id="hbMastery"></select></label>
-            <label class="fl">Bonificador mágico<select class="field" id="hbMagic"><option value="0">Ninguno</option><option value="1">+1</option><option value="2">+2</option><option value="3">+3</option></select></label>
+
+          <div data-kind="armor">
+            <div class="two">
+              <label class="fl">Tipo de armadura<select class="field" id="hbArmorType"><option value="LA">Ligera (CA + Des)</option><option value="MA">Media (CA + Des, máx. 2)</option><option value="HA">Pesada (sin Des)</option></select></label>
+              <label class="fl">CA base<input class="field" id="hbAc" inputmode="numeric" autocomplete="off" placeholder="18"></label>
+            </div>
+            <div class="two">
+              <label class="fl">Fuerza mínima (opcional)<input class="field" id="hbStr" inputmode="numeric" autocomplete="off" placeholder="15"></label>
+              <label class="toggle fl-toggle"><input type="checkbox" id="hbStealth"> Desventaja en Sigilo</label>
+            </div>
           </div>
-          <div class="two">
-            <label class="fl">Daño extra (opcional)<input class="field" id="hbXDice" autocomplete="off" placeholder="1d6"></label>
-            <label class="fl">Tipo del daño extra<select class="field" id="hbXType"></select></label>
+
+          <div data-kind="shield">
+            <div class="two"><label class="fl">CA que da el escudo<input class="field" id="hbShieldAc" inputmode="numeric" autocomplete="off" placeholder="2"></label><span></span></div>
           </div>
+
+          <div data-kind="weapon armor shield">
+            <div class="two"><label class="fl">Bonificador mágico<select class="field" id="hbMagic"><option value="0">Ninguno</option><option value="1">+1</option><option value="2">+2</option><option value="3">+3</option></select></label><span></span></div>
+          </div>
+
+          <div data-kind="item">
+            <div class="two">
+              <label class="fl">Dónde se lleva<select class="field" id="hbSlot"><option value="acc">Anillo, amuleto o accesorio</option><option value="head">Cabeza</option><option value="cloak">Capa</option><option value="back">Espalda</option><option value="bracers">Brazales</option><option value="gloves">Guantes</option><option value="boots">Botas</option><option value="">No se equipa (se lleva en la mochila)</option></select></label>
+              <span></span>
+            </div>
+            <fieldset class="fl"><legend>Bonificadores mientras lo llevas</legend>
+              <div class="bonus-grid">
+                <label>CA<select class="field" id="hbBAc"></select></label>
+                <label>Salvaciones<select class="field" id="hbBSave"></select></label>
+                <label>Ataque y CD de conjuros<select class="field" id="hbBSpell"></select></label>
+                <label>Ataque y daño con armas<select class="field" id="hbBWeapon"></select></label>
+              </div>
+            </fieldset>
+            <div class="two">
+              <label class="fl">Fija una característica<span class="inl"><select class="field" id="hbSetAb"></select><input class="field" id="hbSetVal" inputmode="numeric" placeholder="19" aria-label="Valor fijo"></span></label>
+              <label class="fl">Suma a una característica<span class="inl"><select class="field" id="hbAddAb"></select><input class="field" id="hbAddVal" inputmode="numeric" placeholder="+2" aria-label="Cuánto suma"></span></label>
+            </div>
+            <fieldset class="fl"><legend>Resistencia a daño</legend><div class="checks" id="hbResist"></div></fieldset>
+            <div class="two">
+              <label class="fl">Cargas (opcional)<input class="field" id="hbCharges" inputmode="numeric" autocomplete="off" placeholder="7"></label>
+              <label class="fl">Se recargan<input class="field" id="hbRecharge" autocomplete="off" placeholder="1d6 + 1 al amanecer"></label>
+            </div>
+          </div>
+
+          <div data-kind="consumable">
+            <label class="fl">Qué pasa al usarlo<input class="field" id="hbUse" autocomplete="off" placeholder="Tira 4d4 + 4 y suma el resultado a tus PG."></label>
+            <div class="two"><label class="fl">Cantidad<input class="field" id="hbQty" inputmode="numeric" autocomplete="off" placeholder="1"></label><span></span></div>
+          </div>
+
           <div class="two">
-            <label class="fl">Tamaño en la mochila<select class="field" id="hbSize"><option value="auto">Automático</option><option value="1x2">1 × 2</option><option value="1x3">1 × 3</option><option value="1x4">1 × 4</option><option value="1x5">1 × 5</option><option value="2x5">2 × 5</option><option value="2x6">2 × 6</option></select></label>
+            <label class="fl">Tamaño en la mochila<select class="field" id="hbSize"></select></label>
             <label class="fl">Peso (lb, opcional)<input class="field" id="hbWeight" inputmode="decimal" autocomplete="off"></label>
           </div>
           <label class="fl">Notas y habilidades especiales<textarea class="field" id="hbNotes" rows="4" placeholder="Ej.: con una tirada de Fuerza CD 15 puedes partir escudos…"></textarea></label>
-          <label class="toggle"><input type="checkbox" id="hbEquip" checked> Equiparla en la mano principal</label>
-          <label class="toggle"><input type="checkbox" id="hbKeep" checked> Guardarla en mis armas homebrew para usarla con otros personajes</label>
+          <label class="toggle"><input type="checkbox" id="hbEquip" checked> <span id="hbEquipTxt">Equiparla en la mano principal</span></label>
+          <label class="toggle"><input type="checkbox" id="hbKeep" checked> Guardarlo en mi homebrew para usarlo con otros personajes</label>
           <p class="err" id="hbErr" hidden></p>
-          <div class="row" style="gap:8px"><button class="btn" type="button" data-act="closesheet" style="flex:1">Cancelar</button><button class="btn main" type="submit" style="flex:1" id="hbSubmit">Crear arma</button></div>
+          <div class="row" style="gap:8px"><button class="btn" type="button" data-act="closesheet" style="flex:1">Cancelar</button><button class="btn main" type="submit" style="flex:1" id="hbSubmit">Crear</button></div>
         </form>
       </div>
     </div>
@@ -152,8 +206,7 @@
     <div class="combat-h">
       <svg class="ic" style="color:var(--gold-hi)"><use href="#i-swords"/></svg>
       <h2>Combate</h2>
-      <span class="round">Ronda <b id="round">1</b></span>
-      <button class="btn sm" type="button" data-act="nextround">Siguiente ronda</button>
+      <span class="round" id="roundBox"><span id="roundTxt" hidden>Ronda <b id="round">1</b><small id="turnName"></small></span></span>
       <button class="icon-btn" type="button" data-act="endcombat" aria-label="Salir del combate" style="background:transparent;color:var(--on-dark);border-color:var(--gold-hi)"><svg class="ic"><use href="#i-x"/></svg></button>
     </div>
     <div class="sala-toast" id="salaToast" role="status" aria-live="polite" hidden></div>

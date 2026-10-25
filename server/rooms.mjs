@@ -136,6 +136,18 @@ export class Rooms {
         this.log(room, `${n.name} salió del combate`);
         break;
       }
+      case 'npc.set': {
+        // el DM ajusta a mano los números de un enemigo: PG, PG máximos, CA, nombre y estados
+        if (!isDm) throw err('dm_only', 'Solo el DM ajusta a los enemigos.');
+        const n = room.npcs.get(msg.id); if (!n) throw err('no_target', 'Ese enemigo ya no está.');
+        if (msg.hpMax != null) { n.hpMax = int(msg.hpMax, 1, 9999, n.hpMax); n.hp = Math.min(n.hp, n.hpMax); }
+        if (msg.hp != null) n.hp = int(msg.hp, 0, n.hpMax, n.hp);
+        if (msg.delta != null) { const d = int(msg.delta, -9999, 9999, 0); if (d < 0) applyTo(n, 'damage', -d); else applyTo(n, 'heal', d); }
+        if (msg.ac != null) n.ac = int(msg.ac, 0, 40, n.ac);
+        if (msg.name != null && str(msg.name, 40)) n.name = str(msg.name, 40);
+        if (Array.isArray(msg.conds)) n.conds = msg.conds.filter(x => CONDITIONS.includes(x)).slice(0, 16);
+        break;
+      }
       case 'npc.reveal': { if (!isDm) throw err('dm_only', 'Solo el DM.'); const n = room.npcs.get(msg.id); if (n) n.hidden = !n.hidden; break; }
       case 'hidepc': if (!isDm) throw err('dm_only', 'Solo el DM.'); room.hidePc = !!msg.value; break;
       case 'turn': {
@@ -163,13 +175,14 @@ export class Rooms {
         for (const tid of (Array.isArray(msg.targets) ? msg.targets : []).slice(0, 20)) {
           const npc = room.npcs.get(tid), pc = room.members.get(tid);
           if (npc) { applyTo(npc, kind, amount, cond); names.push(npc.name); }
+          else if (pc && pc.role !== 'dm' && isDm) continue; // el DM maneja solo a los enemigos; cada jugador lleva su hoja
           else if (pc && pc.role !== 'dm') {
             // la hoja del jugador aplica el cambio y luego manda su resumen; mientras, se refleja aquí
             applyTo(pc.char, kind, amount, cond); names.push(pc.char.name);
             out.push({ to: pc.id, msg: { t: 'applied', kind, amount, cond, note, from: me.name } });
           }
         }
-        if (!names.length) throw err('no_target', 'Elige al menos un objetivo.');
+        if (!names.length) throw err('no_target', isDm ? 'Como DM puedes aplicar a los enemigos; los jugadores llevan su propia hoja.' : 'Elige al menos un objetivo.');
         const verb = { damage: `hizo ${amount} de daño a`, heal: `curó ${amount} PG a`, temp: `dio ${amount} PG temporales a`, 'cond+': `aplicó ${COND_ES[cond]} a`, 'cond-': `quitó ${COND_ES[cond]} a` }[kind];
         this.log(room, `${me.name} ${verb} ${names.join(', ')}${note ? ' (' + note + ')' : ''}`);
         break;

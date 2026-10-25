@@ -18,7 +18,13 @@
     ['carmesi','Carmesí','Cuero y pergamino', ['#3a1d17','#f1e6cc','#8c2626','#b08a3e']],
     ['acero','Acero','Azul y plata', ['#1d2a3a','#e9edf0','#2f5d8a','#8797a8']],
     ['bosque','Bosque','Verde y oro viejo', ['#22311f','#ece6cf','#3f6b3a','#9c8a3e']],
-    ['obsidiana','Obsidiana','Páginas oscuras', ['#0f0e13','#1d1b21','#a8323a','#d9b866']]
+    ['obsidiana','Obsidiana','Páginas oscuras', ['#0f0e13','#1d1b21','#a8323a','#d9b866']],
+    ['arcano','Arcano','Púrpura y plata', ['#2c1f45','#efe9f5','#6a3fa0','#9b87c2']],
+    ['escarcha','Escarcha','Hielo y azul glaciar', ['#23465c','#eef6fa','#2b7fa8','#7fb0c8']],
+    ['desierto','Desierto','Arena y turquesa', ['#6b4a2b','#f5ead2','#1f8a86','#c49a4a']],
+    ['fae','Feérico','Rosa y verde hada', ['#4a2a3c','#f8eef1','#b5476f','#8fb47a']],
+    ['brasas','Brasas','Oscuro y fuego infernal', ['#1f0f0a','#1c1210','#d2491e','#f29a4a']],
+    ['abismo','Abismo','Oscuro y verde marino', ['#0c2422','#0f1e1d','#36b3a0','#7fe0cf']]
   ];
   var SLOTS = [['head','Cabeza','i-helm'],['cloak','Capa','i-cloak'],['back','Espalda','i-bag'],['armor','Armadura','i-armor'],['bracers','Brazales','i-bracer'],['gloves','Guantes','i-glove'],['boots','Botas','i-boot'],['main','Mano principal','i-sword'],['off','Mano secundaria','i-shield'],['acc','Accesorios','i-ring']];
   var SRC = {XPHB:'Manual del jugador 2024', PHB:'Manual del jugador 2014', XDMG:'Guía del DM 2024', DMG:'Guía del DM 2014', XGE:'Guía de Xanathar', TCE:'Caldero de Tasha', EFA:'Forge of the Artificer', FTD:'Tesoro de dragones de Fizban', ERLW:'Eberron: Rising from the Last War', BGG:'Gloria de los gigantes de Bigby', DSotDQ:'Dragonlance', SatO:'Sigil and the Outlands', BMT:'Book of Many Things', MTF:'Mordenkainen: Tome of Foes', SCC:'Strixhaven', FRHoF:'Heroes of Faerûn', SCAG:'Guía de la Costa de la Espada'};
@@ -71,8 +77,11 @@
 
   /* ---------- Estilos ---------- */
   function applySkin(){
+    if (!SKINS.some(function(k){ return k[0] === S.skin; })) S.skin = 'carmesi';
     if (S.skin === 'carmesi') document.documentElement.removeAttribute('data-skin');
     else document.documentElement.setAttribute('data-skin', S.skin);
+    if (/^(obsidiana|brasas|abismo)$/.test(S.skin)) document.documentElement.setAttribute('data-tone', 'dark'); else document.documentElement.removeAttribute('data-tone');
+    var tc = document.querySelector('meta[name="theme-color"]'); if (tc) tc.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--night').trim() || '#24130f');
     $('#skins').innerHTML = SKINS.map(function(k){
       return '<button type="button" class="skin" data-act="skin" data-v="'+k[0]+'" aria-pressed="'+(S.skin===k[0])+'"><span class="sw">' + k[3].map(function(c){ return '<i style="background:'+c+'"></i>'; }).join('') + '</span><b>'+k[1]+'</b><small>'+k[2]+'</small></button>';
     }).join('');
@@ -154,7 +163,7 @@
     h += '<div class="stats"><div class="stat" title="' + attr(D.acNote) + '"><div class="shield"><svg width="44" height="50" viewBox="0 0 44 50" aria-hidden="true"><path d="M22 2 L41 9 Q41 33 22 48 Q3 33 3 9 Z"/></svg><span>' + D.ac + '</span></div><span class="label">clase de armadura</span></div>'
       + '<div class="stat"><span class="big">' + sgn(D.init) + '</span><span class="label">iniciativa</span></div><div class="stat"><span class="big">' + D.speed + '</span><span class="label">velocidad</span></div></div>';
     h += '<p class="note" style="margin-top:-6px">CA: ' + esc(D.acNote) + '</p>';
-    h += '<div class="card"><div class="row" style="margin-bottom:4px"><span class="label"><a class="ref" data-ref="variantrule|Saving Throw|XPHB">tiradas de salvación</a></span>' + (D.aura ? '<span class="muted" style="font-size:13px">incluye Aura ' + sgn(D.aura) + '</span>' : '') + '</div><div class="saves">'
+    h += '<div class="card"><div class="row" style="margin-bottom:4px"><span class="label"><a class="ref" data-ref="variantrule|Saving Throw|XPHB">tiradas de salvación</a></span>' + (D.aura || D.saveItems ? '<span class="muted" style="font-size:13px">incluye ' + [D.aura ? 'Aura ' + sgn(D.aura) : '', D.saveItems ? 'objetos ' + sgn(D.saveItems) : ''].filter(Boolean).join(' y ') + '</span>' : '') + '</div><div class="saves">'
       + ['str','wis','dex','cha','con','int'].map(function(k){ return '<div class="line"><span class="dot' + (D.saves.indexOf(k) >= 0 ? ' on' : '') + '"></span><span>' + R.ABL[k] + '</span><span class="num">' + sgn(D.save[k]) + '</span></div>'; }).join('') + '</div></div>';
     h += '<div class="card"><span class="label">habilidades</span><div class="skl">' + Object.keys(R.SK).sort(function(a, b){ return R.SKES[a].localeCompare(R.SKES[b]); }).map(function(s){
       var cls = D.expert[s] ? 'dot ex' : D.skills[s] ? 'dot on' : 'dot';
@@ -527,63 +536,129 @@
     items().push(it); sel = it.id; invChanged(); return true;
   }
 
-  /* ==================== ARMAS HOMEBREW ==================== */
+  /* ==================== HOMEBREW: ARMAS, ARMADURAS, ESCUDOS, OBJETOS MÁGICOS, CONSUMIBLES ==================== */
   var HB_PROPS = [['L','Ligera'],['F','Sutileza'],['H','Pesada'],['2H','A dos manos'],['V','Versátil'],['R','Alcance extra (reach)'],['T','Arrojadiza'],['A','Munición'],['LD','Carga']];
   var HB_MAST = [['','Ninguna'],['Cleave','Cleave (hender)'],['Graze','Graze (rozar)'],['Nick','Nick (mellar)'],['Push','Push (empujar)'],['Sap','Sap (debilitar)'],['Slow','Slow (ralentizar)'],['Topple','Topple (derribar)'],['Vex','Vex (fastidiar)']];
-  var DICE_RE = /^\s*\d+\s*d\s*\d+\s*$/i, hbEdit = null;
+  var HB_KINDS = [['weapon','Arma'],['armor','Armadura'],['shield','Escudo'],['item','Objeto mágico'],['consumable','Consumible'],['gear','Objeto']];
+  var HB_SIZES = {weapon:[['auto','Automático'],['1x2','1 × 2'],['1x3','1 × 3'],['1x4','1 × 4'],['1x5','1 × 5'],['2x5','2 × 5'],['2x6','2 × 6']], armor:[['3x3','3 × 3'],['2x3','2 × 3'],['3x4','3 × 4']], shield:[['2x2','2 × 2'],['2x3','2 × 3']],
+    item:[['1x1','1 × 1'],['1x2','1 × 2'],['2x2','2 × 2'],['2x3','2 × 3']], consumable:[['1x2','1 × 2'],['1x1','1 × 1'],['2x2','2 × 2']], gear:[['1x1','1 × 1'],['1x2','1 × 2'],['2x2','2 × 2'],['2x3','2 × 3'],['3x3','3 × 3']]};
+  var SLOT_IC = {head:'i-helm', cloak:'i-cloak', back:'i-bag', bracers:'i-bracer', gloves:'i-glove', boots:'i-boot', acc:'i-ring', '':'i-gem'};
+  var RARITY_ES = {common:'común', uncommon:'poco común', rare:'raro', 'very rare':'muy raro', legendary:'legendario', artifact:'artefacto'};
+  var DICE_RE = /^\s*\d+\s*d\s*\d+\s*$/i, hbEdit = null, hbKind = 'weapon';
   S.homebrew = S.homebrew || [];
-  function hbSummary(h){ return h.dice + ' ' + (R.DT[h.dtype] || h.dtype) + ' · ' + (h.cat === 'martial' ? 'marcial' : 'sencilla') + (h.props.length ? ' · ' + h.props.map(function(p){ return HB_PROPS.filter(function(x){ return x[0] === p; })[0][1]; }).join(', ') : '') + (h.magic ? ' · +' + h.magic : '') + (h.xdice ? ' · +' + h.xdice + ' ' + (R.DT[h.xtype] || h.xtype) : ''); }
-  function hbShape(h){
-    if (h.size && h.size !== 'auto') { var p = h.size.split('x'); return {w:+p[0], h:+p[1], ic: h.ranged ? 'i-bow' : 'i-sword'}; }
-    var props = h.props; return {w:1, h: props.indexOf('2H') >= 0 || props.indexOf('H') >= 0 ? 4 : props.indexOf('V') >= 0 ? 3 : 2, ic: h.ranged ? 'i-bow' : 'i-sword'};
+  function kindOf(h){ return h.kind || 'weapon'; }
+  function plus(n){ return n ? '+' + n : ''; }
+  function hbSummary(h){
+    var k = kindOf(h), bits = [];
+    if (k === 'weapon') { bits.push(h.dice + ' ' + (R.DT[h.dtype] || h.dtype), h.cat === 'martial' ? 'marcial' : 'sencilla'); if (h.props.length) bits.push(h.props.map(function(p){ return HB_PROPS.filter(function(x){ return x[0] === p; })[0][1]; }).join(', ')); if (h.magic) bits.push('+' + h.magic); if (h.xdice) bits.push('+' + h.xdice + ' ' + (R.DT[h.xtype] || h.xtype)); }
+    else if (k === 'armor') { bits.push('Armadura ' + ({LA:'ligera', MA:'media', HA:'pesada'}[h.atype] || ''), 'CA ' + h.ac + (h.atype === 'HA' ? '' : h.atype === 'MA' ? ' + Des (máx. 2)' : ' + Des')); if (h.magic) bits.push('+' + h.magic); if (h.stealth) bits.push('desventaja en Sigilo'); if (h.str) bits.push('Fue ' + h.str); }
+    else if (k === 'shield') { bits.push('Escudo +' + (h.sac || 2) + ' CA'); if (h.magic) bits.push('+' + h.magic); }
+    else if (k === 'item') { if (h.bAc) bits.push('CA +' + h.bAc); if (h.bSave) bits.push('salvaciones +' + h.bSave); if (h.bSpell) bits.push('conjuros +' + h.bSpell); if (h.bWeapon) bits.push('armas +' + h.bWeapon); if (h.setAb) bits.push(R.AB[h.setAb] + ' ' + h.setVal); if (h.addAb) bits.push(R.AB[h.addAb] + ' +' + h.addVal); if (h.resist && h.resist.length) bits.push('resistencia: ' + h.resist.map(function(t){ return R.DT[t] || t; }).join(', ')); if (h.charges) bits.push(h.charges + ' cargas'); if (!bits.length) bits.push('Objeto mágico'); }
+    else if (k === 'consumable') bits.push(h.use || 'Consumible');
+    else bits.push('Objeto');
+    if (h.rarity) bits.push(RARITY_ES[h.rarity] || h.rarity);
+    if (h.attune) bits.push('sintonización');
+    return bits.join(' · ');
   }
-  function hbOpts(sel, list, val){ sel.innerHTML = list.map(function(x){ return '<option value="' + attr(x[0]) + '"' + (x[0] === val ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join(''); }
+  function hbShape(h){
+    var k = kindOf(h), sz = h.size && h.size !== 'auto' ? h.size.split('x').map(Number) : null;
+    if (k === 'weapon') { var props = h.props || []; return {w: sz ? sz[0] : 1, h: sz ? sz[1] : props.indexOf('2H') >= 0 || props.indexOf('H') >= 0 ? 4 : props.indexOf('V') >= 0 ? 3 : 2, ic: h.ranged ? 'i-bow' : 'i-sword', slot:'main', kk:'wpn'}; }
+    var def = {armor:[3,3], shield:[2,2], item:[1,1], consumable:[1,2], gear:[1,1]}[k] || [1,1];
+    var w = sz ? sz[0] : def[0], hh = sz ? sz[1] : def[1];
+    if (k === 'armor') return {w:w, h:hh, ic:'i-armor', slot:'armor', kk:'wpn'};
+    if (k === 'shield') return {w:w, h:hh, ic:'i-shield', slot:'off', kk:'wpn'};
+    if (k === 'item') return {w:w, h:hh, ic:SLOT_IC[h.slot || ''] || 'i-gem', slot:h.slot || null, kk:'mag'};
+    if (k === 'consumable') return {w:w, h:hh, ic:'i-flask', slot:null, kk:'con'};
+    return {w:w, h:hh, ic:'i-bag', slot:null, kk:''};
+  }
+  function hbOpts(sel, list, val){ sel.innerHTML = list.map(function(x){ return '<option value="' + attr(x[0]) + '"' + (String(x[0]) === String(val) ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join(''); }
   function hbToggleRows(){
     var on = function(p){ var el = $('#hbProps input[value="' + p + '"]'); return el && el.checked; };
     $('#hbVRow').hidden = !on('V'); $('#hbRangeRow').hidden = !(on('T') || on('A') || $('#hbRanged').value === '1');
   }
+  function hbSetKind(k){
+    hbKind = k;
+    $$('#hbKinds button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.v === k)); });
+    $$('#hbForm [data-kind]').forEach(function(el){ el.hidden = el.dataset.kind.split(' ').indexOf(k) < 0; });
+    var cur0 = $('#hbSize').value; hbOpts($('#hbSize'), HB_SIZES[k], HB_SIZES[k].some(function(x){ return x[0] === cur0; }) ? cur0 : HB_SIZES[k][0][0]);
+    var eqTxt = {weapon:'Equiparla en la mano principal', armor:'Ponérmela ya', shield:'Equiparlo en la mano secundaria', item:'Equiparlo ya', consumable:'', gear:''}[k];
+    $('#hbEquipTxt').textContent = eqTxt; $('#hbEquip').closest('label').hidden = !eqTxt || !!hbEdit || (k === 'item' && !$('#hbSlot').value);
+    $('#hbName').placeholder = {weapon:'Matadragones', armor:'Placas del Juramento', shield:'Égida de Ámbar', item:'Anillo del Cuervo', consumable:'Elixir de Vigor', gear:'Mapa de las Catacumbas'}[k];
+    if (!hbEdit) $('#hbSubmit').textContent = 'Crear ' + HB_KINDS.filter(function(x){ return x[0] === k; })[0][1].toLowerCase();
+    hbToggleRows();
+  }
   function openHb(item){
     hbEdit = item || null;
-    var h = item && item.hb || {name:'', dice:'', dtype:'S', cat:'martial', ranged:false, props:[], vdice:'', range:'', mastery:'', magic:0, xdice:'', xtype:'N', size:'auto', weight:'', notes:''};
+    var h = item && item.hb || {kind:'weapon', name:'', dice:'', dtype:'S', cat:'martial', ranged:false, props:[], vdice:'', range:'', mastery:'', magic:0, xdice:'', xtype:'N', size:'auto', weight:'', notes:''};
     var types = Object.keys(R.DT).map(function(k){ return [k, R.DT[k].charAt(0).toUpperCase() + R.DT[k].slice(1)]; });
-    $('#hbName').value = h.name; $('#hbDice').value = h.dice; hbOpts($('#hbType'), types, h.dtype); $('#hbCat').value = h.cat; $('#hbRanged').value = h.ranged ? '1' : '0';
-    $('#hbProps').innerHTML = HB_PROPS.map(function(p){ return '<label><input type="checkbox" value="' + p[0] + '"' + (h.props.indexOf(p[0]) >= 0 ? ' checked' : '') + '> ' + p[1] + '</label>'; }).join('');
+    var bon = [[0,'—'],[1,'+1'],[2,'+2'],[3,'+3']], abs = [['','—']].concat(R.ABS.map(function(k){ return [k, R.ABL[k]]; }));
+    $('#hbKinds').innerHTML = HB_KINDS.map(function(x){ return '<button type="button" data-act="hbkind" data-v="' + x[0] + '" aria-pressed="false"' + (item ? ' disabled' : '') + '>' + x[1] + '</button>'; }).join('');
+    $('#hbName').value = h.name || ''; $('#hbRarity').value = h.rarity || ''; $('#hbAttune').checked = !!h.attune;
+    $('#hbDice').value = h.dice || ''; hbOpts($('#hbType'), types, h.dtype || 'S'); $('#hbCat').value = h.cat || 'martial'; $('#hbRanged').value = h.ranged ? '1' : '0';
+    $('#hbProps').innerHTML = HB_PROPS.map(function(p){ return '<label><input type="checkbox" value="' + p[0] + '"' + ((h.props || []).indexOf(p[0]) >= 0 ? ' checked' : '') + '> ' + p[1] + '</label>'; }).join('');
     $('#hbVDice').value = h.vdice || ''; $('#hbRange').value = h.range || ''; hbOpts($('#hbMastery'), HB_MAST, h.mastery || ''); $('#hbMagic').value = String(h.magic || 0);
-    $('#hbXDice').value = h.xdice || ''; hbOpts($('#hbXType'), types, h.xtype || 'N'); $('#hbSize').value = h.size || 'auto'; $('#hbWeight').value = h.weight || ''; $('#hbNotes').value = h.notes || '';
-    $('#hbEquip').checked = !item; $('#hbEquip').closest('label').hidden = !!item; $('#hbKeep').checked = !item || S.homebrew.some(function(x){ return x.name === h.name; });
-    $('#hbTitle').textContent = item ? 'Editar ' + h.name : 'Arma homebrew'; $('#hbSubmit').textContent = item ? 'Guardar cambios' : 'Crear arma'; $('#hbErr').hidden = true;
-    $('#hbSaved').innerHTML = !item && S.homebrew.length ? '<div class="card" style="margin-bottom:14px"><span class="label">tus armas homebrew</span>' + S.homebrew.map(function(x, i){ return '<div class="line"><span style="flex:1"><b>' + esc(x.name) + '</b><br><small class="muted">' + esc(hbSummary(x)) + '</small></span><button class="btn sm" type="button" data-act="hbadd" data-i="' + i + '">Añadir</button><button class="icon-btn" type="button" data-act="hbdel" data-i="' + i + '" aria-label="Borrar ' + attr(x.name) + ' de la lista"><svg class="ic"><use href="#i-x"/></svg></button></div>'; }).join('') + '<p class="note" style="margin-top:6px">O crea una nueva abajo.</p></div>' : '';
-    hbToggleRows(); openSheet('hbSheet'); $('#hbName').focus({preventScroll:true});
+    $('#hbXDice').value = h.xdice || ''; hbOpts($('#hbXType'), types, h.xtype || 'N');
+    $('#hbArmorType').value = h.atype || 'HA'; $('#hbAc').value = h.ac || ''; $('#hbStr').value = h.str || ''; $('#hbStealth').checked = !!h.stealth; $('#hbShieldAc').value = h.sac || '';
+    $('#hbSlot').value = h.slot != null ? h.slot : 'acc';
+    hbOpts($('#hbBAc'), bon, h.bAc || 0); hbOpts($('#hbBSave'), bon, h.bSave || 0); hbOpts($('#hbBSpell'), bon, h.bSpell || 0); hbOpts($('#hbBWeapon'), bon, h.bWeapon || 0);
+    hbOpts($('#hbSetAb'), abs, h.setAb || ''); $('#hbSetVal').value = h.setVal || ''; hbOpts($('#hbAddAb'), abs, h.addAb || ''); $('#hbAddVal').value = h.addVal || '';
+    $('#hbResist').innerHTML = Object.keys(R.DT).map(function(k){ return '<label><input type="checkbox" value="' + k + '"' + ((h.resist || []).indexOf(k) >= 0 ? ' checked' : '') + '> ' + esc(R.DT[k]) + '</label>'; }).join('');
+    $('#hbCharges').value = h.charges || ''; $('#hbRecharge').value = h.recharge || ''; $('#hbUse').value = h.use || ''; $('#hbQty').value = h.qty || '';
+    $('#hbSize').innerHTML = '<option value="' + attr(h.size || 'auto') + '"></option>'; $('#hbSize').value = h.size || 'auto';
+    $('#hbWeight').value = h.weight || ''; $('#hbNotes').value = h.notes || '';
+    $('#hbEquip').checked = !item; $('#hbKeep').checked = !item || S.homebrew.some(function(x){ return x.name === h.name; });
+    $('#hbTitle').textContent = item ? 'Editar ' + h.name : 'Homebrew'; $('#hbSubmit').textContent = item ? 'Guardar cambios' : 'Crear'; $('#hbErr').hidden = true;
+    $('#hbSaved').innerHTML = !item && S.homebrew.length ? '<div class="card" style="margin-bottom:14px"><span class="label">tu homebrew guardado</span>' + S.homebrew.map(function(x, i){ return '<div class="line"><svg class="ic" style="flex:none;width:22px;height:22px"><use href="#' + hbShape(x).ic + '"/></svg><span style="flex:1"><b>' + esc(x.name) + '</b><br><small class="muted">' + esc(hbSummary(x)) + '</small></span><button class="btn sm" type="button" data-act="hbadd" data-i="' + i + '">Añadir</button><button class="icon-btn" type="button" data-act="hbdel" data-i="' + i + '" aria-label="Borrar ' + attr(x.name) + ' de la lista"><svg class="ic"><use href="#i-x"/></svg></button></div>'; }).join('') + '<p class="note" style="margin-top:6px">O crea uno nuevo abajo.</p></div>' : '';
+    hbSetKind(kindOf(h)); openSheet('hbSheet'); $('#hbName').focus({preventScroll:true});
   }
   function hbPlace(h, equipNow){
-    var sh = hbShape(h), it = {id:'h' + Date.now().toString(36), n:h.name, hb:h, k:'wpn', ic:sh.ic, w:sh.w, h:sh.h, slot:'main', d:hbSummary(h)};
-    if (equipNow) {
-      var curMain = items().filter(function(o){ return o.eq === 'main'; })[0];
-      if (curMain) { curMain.eq = null; if (!stash(curMain)) { curMain.eq = 'main'; return 'No hay espacio para guardar ' + curMain.n + '. Desmárcalo de equipar o haz espacio.'; } }
-      it.eq = 'main';
+    var sh = hbShape(h), it = {id:'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 4), n:h.name, hb:h, k:sh.kk, ic:sh.ic, w:sh.w, h:sh.h, slot:sh.slot || undefined, att: !!h.attune, d:hbSummary(h)};
+    if (kindOf(h) === 'consumable') { it.use = h.use || ''; if (h.qty > 1) it.q = h.qty; }
+    if (kindOf(h) === 'item' && h.charges) it.charges = h.charges;
+    if (equipNow && sh.slot) {
+      if (sh.slot !== 'acc') {
+        var curIt = items().filter(function(o){ return o.eq === sh.slot; })[0];
+        if (curIt) { curIt.eq = null; if (!stash(curIt)) { curIt.eq = sh.slot; return 'No hay espacio para guardar ' + curIt.n + '. Desmarca "equipar" o haz espacio.'; } }
+      }
+      it.eq = sh.slot;
     } else if (!stash(it)) return 'No cabe en tus contenedores. Haz espacio o elige un tamaño menor.';
     items().push(it); sel = it.id; return null;
   }
   $('#hbProps').addEventListener('change', hbToggleRows);
   $('#hbRanged').addEventListener('change', hbToggleRows);
+  $('#hbSlot').addEventListener('change', function(){ hbSetKind(hbKind); });
   $('#hbForm').addEventListener('submit', function(ev){
     ev.preventDefault();
     var err = function(m, el){ var e = $('#hbErr'); e.textContent = m; e.hidden = false; if (el) el.focus(); };
-    var props = $$('#hbProps input:checked').map(function(i){ return i.value; });
-    var h = {name:$('#hbName').value.trim(), dice:$('#hbDice').value.replace(/\s+/g, '').toLowerCase(), dtype:$('#hbType').value, cat:$('#hbCat').value, ranged:$('#hbRanged').value === '1', props:props,
-      vdice:$('#hbVDice').value.replace(/\s+/g, '').toLowerCase(), range:$('#hbRange').value.trim(), mastery:$('#hbMastery').value, magic:+$('#hbMagic').value,
-      xdice:$('#hbXDice').value.replace(/\s+/g, '').toLowerCase(), xtype:$('#hbXType').value, size:$('#hbSize').value, weight:parseFloat($('#hbWeight').value) || '', notes:$('#hbNotes').value.trim()};
-    if (!h.name) return err('Ponle nombre al arma.', $('#hbName'));
-    if (!DICE_RE.test(h.dice)) return err('Escribe el daño como dados, por ejemplo 2d6.', $('#hbDice'));
-    if (props.indexOf('V') >= 0 && !DICE_RE.test(h.vdice)) return err('Escribe el daño a dos manos, por ejemplo 1d10.', $('#hbVDice'));
-    if (h.xdice && !DICE_RE.test(h.xdice)) return err('El daño extra debe ser dados, por ejemplo 1d6, o déjalo vacío.', $('#hbXDice'));
+    var k = hbKind, num = function(id){ var n = parseInt($(id).value, 10); return isFinite(n) ? n : 0; };
+    var h = {kind:k, name:$('#hbName').value.trim(), rarity:$('#hbRarity').value, attune:$('#hbAttune').checked, size:$('#hbSize').value, weight:parseFloat($('#hbWeight').value) || '', notes:$('#hbNotes').value.trim()};
+    if (!h.name) return err('Ponle nombre.', $('#hbName'));
+    if (k === 'weapon') {
+      var props = $$('#hbProps input:checked').map(function(i){ return i.value; });
+      Object.assign(h, {dice:$('#hbDice').value.replace(/\s+/g, '').toLowerCase(), dtype:$('#hbType').value, cat:$('#hbCat').value, ranged:$('#hbRanged').value === '1', props:props, vdice:$('#hbVDice').value.replace(/\s+/g, '').toLowerCase(), range:$('#hbRange').value.trim(), mastery:$('#hbMastery').value, magic:+$('#hbMagic').value, xdice:$('#hbXDice').value.replace(/\s+/g, '').toLowerCase(), xtype:$('#hbXType').value});
+      if (!DICE_RE.test(h.dice)) return err('Escribe el daño como dados, por ejemplo 2d6.', $('#hbDice'));
+      if (props.indexOf('V') >= 0 && !DICE_RE.test(h.vdice)) return err('Escribe el daño a dos manos, por ejemplo 1d10.', $('#hbVDice'));
+      if (h.xdice && !DICE_RE.test(h.xdice)) return err('El daño extra debe ser dados, por ejemplo 1d6, o déjalo vacío.', $('#hbXDice'));
+    } else if (k === 'armor') {
+      Object.assign(h, {atype:$('#hbArmorType').value, ac:num('#hbAc'), str:num('#hbStr') || '', stealth:$('#hbStealth').checked, magic:+$('#hbMagic').value});
+      if (!(h.ac >= 10 && h.ac <= 25)) return err('La CA base de una armadura va de 10 a 25 (placas: 18).', $('#hbAc'));
+    } else if (k === 'shield') {
+      Object.assign(h, {sac:num('#hbShieldAc') || 2, magic:+$('#hbMagic').value});
+    } else if (k === 'item') {
+      Object.assign(h, {slot:$('#hbSlot').value, bAc:+$('#hbBAc').value, bSave:+$('#hbBSave').value, bSpell:+$('#hbBSpell').value, bWeapon:+$('#hbBWeapon').value, setAb:$('#hbSetAb').value, setVal:num('#hbSetVal'), addAb:$('#hbAddAb').value, addVal:num('#hbAddVal'), resist:$$('#hbResist input:checked').map(function(i){ return i.value; }), charges:num('#hbCharges') || '', recharge:$('#hbRecharge').value.trim()});
+      if (h.setAb && !(h.setVal >= 3 && h.setVal <= 30)) return err('El valor fijo de la característica va de 3 a 30 (por ejemplo 19).', $('#hbSetVal'));
+      if (h.addAb && !(h.addVal >= 1 && h.addVal <= 10)) return err('Escribe cuánto suma a la característica (por ejemplo 2).', $('#hbAddVal'));
+    } else if (k === 'consumable') {
+      Object.assign(h, {use:$('#hbUse').value.trim(), qty:Math.max(1, num('#hbQty') || 1)});
+    }
     if (!cur()) return err('Primero crea o elige un personaje.');
     if (hbEdit) {
-      var it = itemById(hbEdit.id); if (!it) return err('No encontré el arma en la mochila.');
+      var it = itemById(hbEdit.id); if (!it) return err('No encontré el objeto en la mochila.');
       var sh = hbShape(h);
       if (!it.eq && (sh.w !== it.w || sh.h !== it.h)) { if (fits(it, it.x, it.y, sh.w, sh.h)) { it.w = sh.w; it.h = sh.h; } else { var ow = it.w, oh = it.h; it.w = sh.w; it.h = sh.h; if (!stash(it, it.in)) { it.w = ow; it.h = oh; return err('Con ese tamaño ya no cabe en tus contenedores.'); } } }
-      it.n = h.name; it.hb = h; it.ic = sh.ic; it.d = hbSummary(h);
-    } else { var e2 = hbPlace(h, $('#hbEquip').checked); if (e2) return err(e2); }
+      it.n = h.name; it.hb = h; it.ic = sh.ic; it.d = hbSummary(h); it.k = sh.kk; it.att = !!h.attune; if (k === 'consumable') it.use = h.use;
+      if (sh.slot !== (it.slot || null)) { if (it.eq && it.eq !== sh.slot) { it.eq = null; stash(it); } it.slot = sh.slot || undefined; }
+    } else { var e2 = hbPlace(h, $('#hbEquip').checked && !$('#hbEquip').closest('label').hidden); if (e2) return err(e2); }
     if ($('#hbKeep').checked) { S.homebrew = S.homebrew.filter(function(x){ return x.name !== h.name; }); S.homebrew.push(JSON.parse(JSON.stringify(h))); }
     closeSheets(); invChanged();
   });
@@ -778,13 +853,13 @@
     save(); render(false);
   }
   window.Diario = {cur:cur, D:function(){ return D; }, rt:rt, applyToMe:applyToMe,
+    newTurn:function(){ var C = cur(); if (!C) return; rt(C).econ = {a:false,b:false,r:false,m:false}; save(); if (!$('#combat').hidden) renderCombat(); },
     compSummaries:function(){ var C = cur(); if (!C || !D || !D.ok) return []; return (rt(C).comp || []).map(function(c){ var st = compStats(c); return st ? {name:c.n || st.m.name, ac:st.ac, hp:c.hp == null ? st.hpMax : c.hp, hpMax:st.hpMax} : null; }).filter(Boolean); }};
 
   /* ==================== COMBATE ==================== */
   function renderCombat(){
-    var C = cur(); if (!C || !D || !D.ok) { $('#cLeft').innerHTML = noCharHtml(); $('#cRight').innerHTML = ''; return; }
+    var C = cur(); if (!C || !D || !D.ok) { $('#cLeft').innerHTML = noCharHtml(); $('#cRight').innerHTML = '<div id="salaBox"></div>'; if (window.Sala) Sala.mount($('#salaBox')); return; }
     var r = rt(C), L = '', Rr = '<div id="salaBox"></div>';
-    $('#round').textContent = r.round;
     L += '<div class="stats"><div class="stat"><div class="shield"><svg width="44" height="50" viewBox="0 0 44 50" aria-hidden="true"><path d="M22 2 L41 9 Q41 33 22 48 Q3 33 3 9 Z"/></svg><span>' + D.ac + '</span></div><span class="label">clase de armadura</span></div><div class="stat"><span class="big">' + sgn(D.init) + '</span><span class="label">iniciativa</span></div><div class="stat"><span class="big">' + D.speed + '</span><span class="label">velocidad</span></div></div>';
     var pct = Math.round(r.hp / D.hp.max * 100), barc = pct <= 33 ? 'var(--bad)' : pct <= 66 ? 'var(--warn)' : 'var(--ok)';
     L += '<div class="card"><div class="row"><span class="label">puntos de golpe</span><span class="muted" style="font-size:15px">Temporales ' + (r.temp || 0) + '</span></div><div class="hp-top"><b>' + r.hp + '</b><span>/ ' + D.hp.max + '</span></div><div class="bar"><i style="width:' + pct + '%;background:' + barc + '"></i></div>'
@@ -1590,6 +1665,7 @@
       case 'hbnew': if (!cur()) { openSettings(); break; } openHb(null); break;
       case 'hbedit': var hi = itemById(sel); if (hi && hi.hb) openHb(hi); break;
       case 'hbadd': var tpl = S.homebrew[+b.dataset.i]; if (tpl) { var e3 = hbPlace(JSON.parse(JSON.stringify(tpl)), false); if (e3) { var he = $('#hbErr'); he.textContent = e3; he.hidden = false; } else { closeSheets(); invChanged(); } } break;
+      case 'hbkind': hbSetKind(b.dataset.v); break;
       case 'hbdel': S.homebrew.splice(+b.dataset.i, 1); save(); openHb(null); break;
       case 'rotate': rotate(); break;
       case 'equip': equip(); break;
@@ -1605,7 +1681,6 @@
       case 'itemrule': var ci = itemById(sel); if (ci && ci.ref) openRef(ci.ref); break;
       case 'combat': closeSheets(); $('#combat').hidden = false; renderCombat(); break;
       case 'endcombat': $('#combat').hidden = true; break;
-      case 'nextround': r.round += 1; r.econ = {a:false,b:false,r:false,m:false}; save(); renderCombat(); break;
       case 'hp': r.hp = Math.max(0, Math.min(D.hp.max, r.hp + (+b.dataset.v))); save(); renderCombat(); break;
       case 'econ': r.econ[b.dataset.k] = !r.econ[b.dataset.k]; save(); renderCombat(); break;
       case 'newturn': r.econ = {a:false,b:false,r:false,m:false}; save(); renderCombat(); break;

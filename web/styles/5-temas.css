@@ -1,0 +1,66 @@
+/* ---------- Temas extra. Los de páginas oscuras llevan data-tone="dark" ---------- */
+:root[data-skin="arcano"]{
+  --night:#140f1f; --leather:#2c1f45; --leather-2:#1f1533; --leather-3:#3b2a5c; --leather-edge:#4c3a70;
+  --parch:#efe9f5; --parch-2:#e2d9ee; --parch-3:#f6f2fa; --rule:#b3a2cc; --rule-2:#d1c5e2; --track:#c7b8dc; --mastery:#e6def0;
+  --ink:#22172f; --ink-2:#57466b; --gold:#9b87c2; --gold-hi:#d6c8f0; --on-dark:#f1ecf7; --on-dark-2:#d0c4e3;
+  --oath:#6a3fa0; --oath-ink:#4c2878; --oath-tint:#e0d3f0; --cls-tint:#ddd3ea; --cls-ink:#3e3052;
+  --radiant:#6b4f12; --used:#ddd4e8; --used-ink:#66577a; --link:#5b2f93;
+  --hud-bg:#0d0915; --hud-top:#24183a; --hud-p1:#1a1426; --hud-p2:#231b33; --hud-p3:#1f182d; --hud-rule:#4a3a66; --hud-rule2:#2e2440; --hud-ink2:#c2b2de;
+}
+:root[data-skin="escarcha"]{
+  --night:#0c1a24; --leather:#23465c; --leather-2:#183547; --leather-3:#2f5a74; --leather-edge:#3e6d88;
+  --parch:#eef6fa; --parch-2:#ddeef5; --parch-3:#f6fbfd; --rule:#9cc3d6; --rule-2:#c3dde9; --track:#b2d2e1; --mastery:#e0eff6;
+  --ink:#102733; --ink-2:#3e5f70; --gold:#7fb0c8; --gold-hi:#cdeefa; --on-dark:#f0f8fc; --on-dark-2:#c4e0ec;
+  --oath:#2b7fa8; --oath-ink:#1c5d7e; --oath-tint:#d2eaf4; --cls-tint:#d8e8ef; --cls-ink:#2c4856;
+  --radiant:#5d5414; --used:#d5e6ee; --used-ink:#557282; --link:#1b6b94;
+  --hud-bg:#07121a; --hud-top:#183547; --hud-p1:#10212c; --hud-p2:#162b38; --hud-p3:#132632; --hud-rule:#33607a; --hud-rule2:#1f3a4a; --hud-ink2:#a9d2e3;
+}
+:root[data-skin="desierto"]{
+  --night:#1e140b; --leather:#6b4a2b; --leather-2:#563a20; --leather-3:#7d5a37; --leather-edge:#8d6a44;
+  --parch:#f5ead2; --parch-2:#ecdcb8; --parch-3:#faf3e3; --rule:#cfb27a; --rule-2:#e0cba0; --track:#d6be8e; --mastery:#efe2c4;
+  --ink:#33240f; --ink-2:#6b5434; --gold:#c49a4a; --gold-hi:#ecc97a; --on-dark:#fbf3e2; --on-dark-2:#ecdcb8;
+  --oath:#1f8a86; --oath-ink:#136662; --oath-tint:#cfece9; --cls-tint:#e3d6b6; --cls-ink:#4c3a22;
+  --radiant:#7a5a12; --used:#e3d6b6; --used-ink:#7a6444; --link:#157a76;
+  --hud-bg:#140d07; --hud-top:#4a321b; --hud-p1:#211710; --hud-p2:#2c1f15; --hud-p3:#271b12; --hud-rule:#6e5232; --hud-rule2:#3d2c1d; --hud-ink2:#e0c58f;
+}
+:root[data-skin="fae"]{
+  --night:#1a1016; --leather:#4a2a3c; --leather-2:#3a1f2f; --leather-3:#5c3650; --leather-edge:#6e4561;
+  --parch:#f8eef1; --parch-2:#f0dde4; --parch-3:#fcf5f7; --rule:#d6aebd; --rule-2:#e8cdd7; --track:#dfbccb; --mastery:#f2e3e9;
+  --ink:#2e1a24; --ink-2:#6a4858; --gold:#8fb47a; --gold-hi:#cfe8b8; --on-dark:#fbf1f4; --on-dark-2:#ecd3dd;
+  --oath:#b5476f; --oath-ink:#8a2f50; --oath-tint:#f3d6e1; --cls-tint:#e8dbe0; --cls-ink:#4e3440;
+  --radiant:#5f6a14; --used:#ecdde3; --used-ink:#7e6070; --link:#9c3560;
+  --hud-bg:#120a0f; --hud-top:#3a1f2f; --hud-p1:#21141b; --hud-p2:#2c1b25; --hud-p3:#271720; --hud-rule:#6a4058; --hud-rule2:#3d2533; --hud-ink2:#e6bccd;
+}
+:root[data-skin="brasas"]{
+  --night:#0b0605; --leather:#1f0f0a; --leather-2:#160a06; --leather-3:#2e1610; --leather-edge:#4a2216;
+  --parch:#1c1210; --parch-2:#261814; --parch-3:#2b1b16; --rule:#5c3424; --rule-2:#3d241a; --track:#452a1f; --mastery:#30201a;
+  --ink:#f3e3d3; --ink-2:#c7a58a; --gold:#b8642a; --gold-hi:#f29a4a; --on-dark:#f3e3d3; --on-dark-2:#d8b89c;
+  --oath:#d2491e; --oath-ink:#ffb894; --oath-tint:#4a1e10; --cls-tint:#3a2620; --cls-ink:#e6cdb6;
+  --ok:#6aa35a; --ok-ink:#a8dc96; --warn:#e09a3a; --bad:#e0553e; --radiant:#f0c060; --used:#33231d; --used-ink:#a08672; --link:#f5a35c; --scheme:dark;
+  --hud-bg:#070302; --hud-top:#2a0f07; --hud-p1:#170d0a; --hud-p2:#21130e; --hud-p3:#1c100b; --hud-rule:#6a3018; --hud-rule2:#3a1c12; --hud-ink2:#e7b48a;
+}
+:root[data-skin="abismo"]{
+  --night:#03100f; --leather:#0c2422; --leather-2:#081a18; --leather-3:#123230; --leather-edge:#1d4542;
+  --parch:#0f1e1d; --parch-2:#152826; --parch-3:#192e2c; --rule:#2f5a55; --rule-2:#21403c; --track:#264a46; --mastery:#1b3533;
+  --ink:#d8efe9; --ink-2:#9cc4bb; --gold:#3f8f84; --gold-hi:#7fe0cf; --on-dark:#d8efe9; --on-dark-2:#a9cfc6;
+  --oath:#36b3a0; --oath-ink:#a4f0e2; --oath-tint:#12403a; --cls-tint:#1f3a37; --cls-ink:#c4e2db;
+  --ok:#58a86a; --ok-ink:#a2e0ae; --warn:#d6b048; --bad:#e06a5a; --radiant:#e3d470; --used:#1d3532; --used-ink:#7fa49b; --link:#7fe0cf; --scheme:dark;
+  --hud-bg:#020a09; --hud-top:#0c2422; --hud-p1:#0b1817; --hud-p2:#10211f; --hud-p3:#0e1c1b; --hud-rule:#2a5a54; --hud-rule2:#173430; --hud-ink2:#9fd8cc;
+}
+:root[data-skin="acero"]{ --hud-bg:#080d14; --hud-top:#142030; --hud-p1:#121a24; --hud-p2:#18222e; --hud-p3:#151e29; --hud-rule:#3a4c62; --hud-rule2:#222e3c; --hud-ink2:#b3c3d4; }
+:root[data-skin="bosque"]{ --hud-bg:#0a0f09; --hud-top:#1b2818; --hud-p1:#141c12; --hud-p2:#1b2618; --hud-p3:#172114; --hud-rule:#45583a; --hud-rule2:#263222; --hud-ink2:#c4c79a; }
+:root[data-skin="obsidiana"]{ --hud-bg:#050507; --hud-top:#17161c; --hud-p1:#141318; --hud-p2:#1b1a20; --hud-p3:#18171c; --hud-rule:#4c4555; --hud-rule2:#2a2730; --hud-ink2:#c2b8a8; }
+
+/* El modo combate toma los colores del tema */
+.combat{background:var(--hud-bg,#120d0b);--parch:var(--hud-p1,#1d1613);--parch-2:var(--hud-p2,#271e1a);--parch-3:var(--hud-p3,#221a16);--rule:var(--hud-rule,#5a4632);--rule-2:var(--hud-rule2,#3a2d24);--track:var(--hud-rule2,#3a2d24);--mastery:var(--hud-p2,#2a201b);--used:var(--hud-p2,#2a201b);--ink-2:var(--hud-ink2,#c9b48a)}
+.combat-h{background:linear-gradient(var(--hud-top,#2a1714),var(--hud-bg,#120d0b))}
+
+/* Ajustes de páginas oscuras compartidos por obsidiana, brasas y abismo */
+:root[data-tone="dark"] .banner{background:color-mix(in srgb,var(--warn) 18%,var(--parch-2));color:var(--ink)}
+:root[data-tone="dark"] .flag.dm{background:color-mix(in srgb,var(--warn) 22%,var(--parch-2));color:var(--ink)}
+:root[data-tone="dark"]{ --grain:.10; }
+:root[data-tone="dark"] .page::after{opacity:.4}
+
+/* Selector de estilos: dos columnas en el teléfono, más en laptop */
+.skins{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:700px){ .skins{grid-template-columns:repeat(3,minmax(0,1fr))} }

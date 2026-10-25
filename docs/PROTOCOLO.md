@@ -12,11 +12,12 @@ WebSocket en `/ws`. Todos los mensajes son JSON con un campo `t`.
 | `init` | `value`, `id?` | jugador (el suyo) / DM (cualquiera) | Pone la iniciativa; reordena. |
 | `npc.add` | `name`, `ac`, `hp`, `init?`, `count?`, `hidden?` | DM | Agrega uno o varios PNJ ("Goblin 1", "Goblin 2"…). |
 | `npc.del` | `id` | DM | Quita un PNJ. |
+| `npc.set` | `id`, `hp?`, `hpMax?`, `delta?`, `ac?`, `name?`, `conds?` | DM | Ajusta a mano un enemigo: PG exactos, sumar o restar (`delta`), CA, nombre o la lista completa de estados. |
 | `npc.reveal` | `id` | DM | Muestra u oculta un PNJ a los jugadores. |
 | `hidepc` | `value` | DM | Oculta los PG exactos del grupo entre jugadores. |
 | `turn` | `dir`: `start` \| `next` \| `prev` | DM / quien tiene el turno | Avanza el turno; al dar la vuelta sube la ronda. |
 | `end` | — | DM | Termina el combate y borra la iniciativa. |
-| `apply` | `targets[]`, `kind`, `amount?`, `cond?`, `note?` | cualquiera | `kind`: `damage`, `heal`, `temp`, `cond+`, `cond-`. |
+| `apply` | `targets[]`, `kind`, `amount?`, `cond?`, `note?` | jugadores; el DM solo sobre enemigos | `kind`: `damage`, `heal`, `temp`, `cond+`, `cond-`. El DM no modifica la hoja de los jugadores. |
 | `leave` | — | cualquiera | Sale de la sala. |
 
 `char` (resumen del personaje):

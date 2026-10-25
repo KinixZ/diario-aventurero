@@ -52,7 +52,7 @@ var Sala = (function(){
     if (m.t === 'joined') { st.code = m.code; st.token = m.token; st.role = m.role; store(); status = 'on'; lastErr = ''; lastSent = ''; if (m.role === 'dm') { /* el DM no manda hoja */ } else sync(true); }
     else if (m.t === 'state') { room = m.room; status = 'on'; Object.keys(sel).forEach(function(k){ if (!exists(k)) delete sel[k]; }); }
     else if (m.t === 'applied') { if (window.Diario) Diario.applyToMe(m); toast(appliedText(m)); }
-    else if (m.t === 'yourturn') { toast('¡Es tu turno! Ronda ' + m.round); try { if (navigator.vibrate) navigator.vibrate([120, 60, 120]); } catch(e){} }
+    else if (m.t === 'yourturn') { toast('¡Es tu turno! Ronda ' + m.round); if (window.Diario && Diario.newTurn) Diario.newTurn(); try { if (navigator.vibrate) navigator.vibrate([120, 60, 120]); } catch(e){} }
     else if (m.t === 'error') { lastErr = m.msg || 'Error'; if (m.code === 'no_room' || m.code === 'not_member') { st.code = null; st.token = null; store(); room = null; manual = true; try { ws.close(); } catch(e){} status = 'off'; } }
     draw();
   }
@@ -75,14 +75,24 @@ var Sala = (function(){
   function draw(){
     if (!box || !document.contains(box)) { box = document.getElementById('salaBox'); if (!box) return; }
     box.innerHTML = status === 'on' && room ? roomHtml() : lobbyHtml();
+    header();
   }
+  /* Ronda y turno en el encabezado del modo combate: solo dentro de una sala con el combate empezado */
+  function header(){
+    var on = status === 'on' && room && room.round > 0, t = document.getElementById('roundTxt'), cb = document.getElementById('combat');
+    if (cb) cb.classList.toggle('dm-mode', status === 'on' && !!room && room.role === 'dm');
+    if (!t) return;
+    t.hidden = !on;
+    if (on) { document.getElementById('round').textContent = room.round; var who = room.turnId ? nameOf(room.turnId) : ''; document.getElementById('turnName').textContent = who ? ' · turno de ' + who : ''; }
+  }
+  function nameOf(id){ var m = room.members.filter(function(x){ return x.id === id; })[0]; if (m) return m.char ? m.char.name : m.name; var n = room.npcs.filter(function(x){ return x.id === id; })[0]; return n ? n.name : ''; }
   function lobbyHtml(){
     var h = '<div class="card sala"><div class="row"><span class="label">sala de combate</span>' + (status === 'connecting' ? '<span class="muted" style="font-size:14px">Conectando…</span>' : '') + '</div>';
     if (!available()) h += '<p class="note">Para jugar en grupo abre el diario desde el servidor del proyecto o escribe su dirección en Ajustes → Salas de combate.</p>';
     else {
-      h += '<p class="note">Un jugador o el DM crea la sala y comparte el código de 4 letras; los demás entran con él. Cada quien ve los PG, la CA y el turno de todos.</p>'
+      h += '<p class="note">Un jugador o el DM crea la sala y comparte el código de 4 letras; los demás entran con él. Cada quien ve los PG, la CA y el turno de todos. Las rondas empiezan cuando el DM inicia el combate.</p>'
         + '<div class="sala-join"><input class="field" id="salaCode" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="CÓDIGO" aria-label="Código de la sala" value="' + attr(st.code || '') + '"><button class="btn main" type="button" data-act="salajoin">Entrar</button></div>'
-        + '<div class="row" style="gap:8px;margin-top:8px"><button class="btn" type="button" data-act="salacreate" style="flex:1">Crear sala</button><label class="toggle" style="flex:1"><input type="checkbox" id="salaDm"' + (st.role === 'dm' ? ' checked' : '') + '> Soy el DM</label></div>';
+        + '<div class="row" style="gap:8px;margin-top:8px"><button class="btn" type="button" data-act="salacreate" style="flex:1">Crear sala</button><label class="toggle" style="flex:1"><input type="checkbox" id="salaDm"' + (st.role === 'dm' ? ' checked' : '') + '> Soy el DM</label></div><p class="note" style="font-size:14px">Como DM no necesitas hoja: agregas enemigos, llevas su vida y sus estados, y pasas los turnos.</p>';
     }
     if (lastErr) h += '<p class="err">' + esc(lastErr) + '</p>';
     return h + '</div>';
@@ -95,7 +105,8 @@ var Sala = (function(){
     var h = '<div class="card sala on"><div class="sala-h"><div><span class="label">sala</span><b class="sala-code">' + esc(R0.code) + '</b></div><div class="sala-round">' + (R0.round ? 'Ronda <b>' + R0.round + '</b>' : 'Sin iniciar') + '</div><button class="btn sm" type="button" data-act="salashare">Compartir</button><button class="btn sm" type="button" data-act="salaleave">Salir</button></div>';
     if (myTurn) h += '<div class="sala-myturn">Es tu turno<button class="btn main sm" type="button" data-act="salaturn" data-v="next">Terminar mi turno</button></div>';
     if (!dm && me.init == null) { var s = summary(); h += '<form class="sala-initf" data-form="salainit"><span>Iniciativa: tira 1d20 ' + (s ? sgn(s.initMod).replace('+', '+ ').replace('−', '− ') : '') + '</span><input class="field" name="v" inputmode="numeric" autocomplete="off" placeholder="Total" aria-label="Tu iniciativa"><button class="btn main sm" type="submit">Listo</button></form>'; }
-    if (dm) h += '<div class="sala-dm"><button class="btn sm" type="button" data-act="salaturn" data-v="' + (R0.round ? 'prev' : 'start') + '">' + (R0.round ? 'Anterior' : 'Empezar combate') + '</button>' + (R0.round ? '<button class="btn main sm" type="button" data-act="salaturn" data-v="next">Siguiente turno</button><button class="btn sm" type="button" data-act="salaend">Terminar</button>' : '') + '<button class="btn sm" type="button" data-act="salanpc">' + (npcOpen ? 'Cerrar' : 'Agregar enemigo') + '</button><label class="toggle"><input type="checkbox" data-act="salahide"' + (R0.hidePc ? ' checked' : '') + '> Ocultar PG del grupo</label></div>';
+    if (dm) h += '<div class="sala-dm">' + (R0.round ? '<button class="btn sm" type="button" data-act="salaturn" data-v="prev">Anterior</button><button class="btn main sm" type="button" data-act="salaturn" data-v="next">Siguiente turno</button><button class="btn sm" type="button" data-act="salaend">Terminar combate</button>' : '<button class="btn main sm" type="button" data-act="salaturn" data-v="start"' + (R0.order.length ? '' : ' disabled title="Primero pongan iniciativa"') + '>Empezar combate</button>') + '<button class="btn sm" type="button" data-act="salanpc">' + (npcOpen ? 'Cerrar' : 'Agregar enemigo') + '</button><label class="toggle"><input type="checkbox" data-act="salahide"' + (R0.hidePc ? ' checked' : '') + '> Ocultar PG del grupo</label></div>'
+      + (R0.round ? '' : '<p class="note" style="margin-top:6px">' + (R0.order.length ? 'Cuando todos tengan iniciativa, empieza el combate.' : 'Los jugadores ponen su iniciativa; a los enemigos se la pones tú en su fila.') + '</p>');
     if (dm && npcOpen) h += '<form class="sala-npc" data-form="salanpc"><input class="field" name="name" placeholder="Nombre (Goblin)" aria-label="Nombre del enemigo" autocomplete="off"><input class="field" name="ac" inputmode="numeric" placeholder="CA" aria-label="CA"><input class="field" name="hp" inputmode="numeric" placeholder="PG" aria-label="PG"><input class="field" name="init" inputmode="numeric" placeholder="Inic." aria-label="Iniciativa"><input class="field" name="count" inputmode="numeric" placeholder="×1" aria-label="Cantidad"><label class="toggle"><input type="checkbox" name="hidden"> Oculto</label><button class="btn main sm" type="submit">Agregar</button></form>';
     h += '<div class="sala-list" role="list">' + ordered.map(function(x){ return rowHtml(x, dm, true); }).join('') + (rest.length ? '<div class="sala-sep">Sin iniciativa</div>' + rest.map(function(x){ return rowHtml(x, dm, false); }).join('') : '') + (!ordered.length && !rest.length ? '<p class="note">Todavía no hay nadie más. Comparte el código.</p>' : '') + '</div>';
     var n = Object.keys(sel).length;
@@ -113,9 +124,16 @@ var Sala = (function(){
     if (x.pc) { var m = x.m, c = m.char || {}; name = c.name || m.name; sub = (c.cls || '') + (m.online ? '' : ' · desconectado'); ac = c.ac; init = m.init; conds = (c.conds || []).slice(); if (c.conc) conds.push('concentration'); hp = c.hp == null ? '<span class="sala-state">PG ocultos</span>' : bar(c.hp, c.hpMax, c.temp); if (c.comps && c.comps.length) sub += ' · ' + c.comps.map(function(k){ return k.name + ' ' + k.hp + '/' + k.hpMax; }).join(', '); }
     else { var n = x.n; name = n.name; init = n.init; conds = n.conds || []; if (dm) { ac = n.ac; hp = bar(n.hp, n.hpMax, n.temp); sub = n.hidden ? 'oculto para los jugadores' : 'enemigo'; } else { sub = 'enemigo'; hp = '<span class="sala-state ' + (n.state === 'caído' ? 'down' : '') + '">' + esc(n.state) + '</span>'; } }
     var me = x.id === room.you;
-    var h = '<div class="sala-row' + (turn ? ' turn' : '') + (on ? ' sel' : '') + (x.pc ? '' : ' npc') + '" role="listitem"><button type="button" class="sala-pick" data-act="salasel" data-id="' + attr(x.id) + '" aria-pressed="' + on + '" aria-label="Seleccionar a ' + attr(name) + '"><span class="sala-init">' + (init == null ? '–' : init) + '</span><span class="sala-name"><b>' + esc(name) + (me ? ' <small>(tú)</small>' : '') + '</b><small>' + esc(sub || '') + '</small></span>' + (ac !== '' && ac != null ? '<span class="sala-ac">' + ac + '</span>' : '') + '</button><div class="sala-hpbox">' + hp + '</div>';
-    if (conds.length) h += '<div class="sala-conds">' + conds.map(function(k){ return '<span class="chip">' + esc(COND[k] || k) + '</span>'; }).join('') + '</div>';
-    if (dm) h += '<div class="sala-rowdm"><input class="field" data-salainit="' + attr(x.id) + '" inputmode="numeric" placeholder="Inic." aria-label="Iniciativa de ' + attr(name) + '" value="' + (init == null ? '' : init) + '">' + (x.pc ? '' : '<button class="btn sm" type="button" data-act="salareveal" data-id="' + attr(x.id) + '">' + (x.n.hidden ? 'Mostrar' : 'Ocultar') + '</button><button class="btn sm" type="button" data-act="salanpcdel" data-id="' + attr(x.id) + '">Quitar</button>') + '</div>';
+    var pickable = !(dm && x.pc);
+    var h = '<div class="sala-row' + (turn ? ' turn' : '') + (on ? ' sel' : '') + (x.pc ? '' : ' npc') + '" role="listitem"><button type="button" class="sala-pick" ' + (pickable ? 'data-act="salasel" data-id="' + attr(x.id) + '" aria-pressed="' + on + '" aria-label="Seleccionar a ' + attr(name) + '"' : 'tabindex="-1" aria-disabled="true"') + '><span class="sala-init">' + (init == null ? '–' : init) + '</span><span class="sala-name"><b>' + esc(name) + (me ? ' <small>(tú)</small>' : '') + '</b><small>' + esc(sub || '') + '</small></span>' + (ac !== '' && ac != null ? '<span class="sala-ac">' + ac + '</span>' : '') + '</button><div class="sala-hpbox">' + hp + '</div>';
+    var dmNpc = dm && !x.pc;
+    if (conds.length) h += '<div class="sala-conds">' + conds.map(function(k){ return dmNpc ? '<button type="button" class="chip" data-act="salacondoff" data-id="' + attr(x.id) + '" data-v="' + k + '" aria-label="Quitar ' + attr(COND[k] || k) + ' a ' + attr(name) + '">' + esc(COND[k] || k) + ' ×</button>' : '<span class="chip">' + esc(COND[k] || k) + '</span>'; }).join('') + '</div>';
+    if (dmNpc) {
+      var n2 = x.n;
+      h += '<div class="sala-npcedit"><div class="quick"><button type="button" class="m" data-act="salanpchp" data-id="' + attr(x.id) + '" data-v="-10">−10</button><button type="button" class="m" data-act="salanpchp" data-id="' + attr(x.id) + '" data-v="-5">−5</button><button type="button" class="m" data-act="salanpchp" data-id="' + attr(x.id) + '" data-v="-1">−1</button><button type="button" class="p" data-act="salanpchp" data-id="' + attr(x.id) + '" data-v="1">+1</button><button type="button" class="p" data-act="salanpchp" data-id="' + attr(x.id) + '" data-v="5">+5</button></div>'
+        + '<div class="sala-npcf"><label>PG<input class="field" data-npcset="hp" data-id="' + attr(x.id) + '" inputmode="numeric" value="' + n2.hp + '" aria-label="PG de ' + attr(name) + '"></label><label>Máx.<input class="field" data-npcset="hpMax" data-id="' + attr(x.id) + '" inputmode="numeric" value="' + n2.hpMax + '" aria-label="PG máximos de ' + attr(name) + '"></label><label>CA<input class="field" data-npcset="ac" data-id="' + attr(x.id) + '" inputmode="numeric" value="' + n2.ac + '" aria-label="CA de ' + attr(name) + '"></label><label>Inic.<input class="field" data-salainit="' + attr(x.id) + '" inputmode="numeric" value="' + (init == null ? '' : init) + '" aria-label="Iniciativa de ' + attr(name) + '"></label></div>'
+        + '<div class="sala-npcf"><select class="field" data-npccond="' + attr(x.id) + '" aria-label="Agregar estado a ' + attr(name) + '"><option value="">+ Estado…</option>' + Object.keys(COND).filter(function(k){ return (n2.conds || []).indexOf(k) < 0; }).map(function(k){ return '<option value="' + k + '">' + COND[k] + '</option>'; }).join('') + '</select><button class="btn sm" type="button" data-act="salareveal" data-id="' + attr(x.id) + '">' + (n2.hidden ? 'Mostrar' : 'Ocultar') + '</button><button class="btn sm" type="button" data-act="salanpcdel" data-id="' + attr(x.id) + '">Quitar</button></div></div>';
+    } else if (dm && x.pc) h += '<div class="sala-rowdm"><label class="muted" style="font-size:14px">Inic. <input class="field" data-salainit="' + attr(x.id) + '" inputmode="numeric" value="' + (init == null ? '' : init) + '" aria-label="Iniciativa de ' + attr(name) + '"></label></div>';
     return h + '</div>';
   }
 
@@ -135,6 +153,8 @@ var Sala = (function(){
     else if (a === 'salanpcdel') send({t:'npc.del', id: b.dataset.id});
     else if (a === 'salareveal') send({t:'npc.reveal', id: b.dataset.id});
     else if (a === 'salahide') send({t:'hidepc', value: b.checked});
+    else if (a === 'salanpchp') send({t:'npc.set', id: b.dataset.id, delta: +b.dataset.v});
+    else if (a === 'salacondoff') { var nn = room.npcs.filter(function(x){ return x.id === b.dataset.id; })[0]; if (nn) send({t:'npc.set', id: nn.id, conds: (nn.conds || []).filter(function(k){ return k !== b.dataset.v; })}); }
   });
   document.addEventListener('submit', function(ev){
     var f = ev.target, kind = f.dataset && f.dataset.form; if (!kind || kind.indexOf('sala') !== 0) return;
@@ -149,7 +169,12 @@ var Sala = (function(){
       if (send({t:'apply', kind:k, amount:amt || 0, cond:cond || null, note:v('note'), targets:Object.keys(sel)})) sel = {};
     }
   });
-  document.addEventListener('change', function(ev){ var t = ev.target; if (t.dataset && t.dataset.salainit) send({t:'init', id:t.dataset.salainit, value:t.value.trim()}); });
+  document.addEventListener('change', function(ev){
+    var t = ev.target; if (!t.dataset) return;
+    if (t.dataset.salainit) send({t:'init', id:t.dataset.salainit, value:t.value.trim()});
+    else if (t.dataset.npcset) { var o = {t:'npc.set', id:t.dataset.id}; o[t.dataset.npcset] = t.value.trim(); if (o[t.dataset.npcset] !== '') send(o); }
+    else if (t.dataset.npccond && t.value) { var nn = room && room.npcs.filter(function(x){ return x.id === t.dataset.npccond; })[0]; if (nn) send({t:'npc.set', id:nn.id, conds:(nn.conds || []).concat([t.value])}); }
+  });
   document.addEventListener('input', function(ev){ if (ev.target.id === 'salaCode') ev.target.value = ev.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4); });
 
   /* Ajustes: dirección del servidor */
