@@ -4,6 +4,14 @@ Hoja de personaje de D&D 5e con forma de diario de cuero: se abre deslizando la 
 
 Pensado primero para el teléfono; en laptop se ve como libro abierto a doble página.
 
+**Para jugar:** https://diario-aventurero.onrender.com
+
+1. Ajustes → Biblioteca de 5etools → Elegir archivo → `diario-5e.json`.
+2. Ajustes → Personajes → Importar personajes (si ya tenías uno en otro dispositivo) o crea uno nuevo.
+3. Modo combate → Crear sala (o Entrar con el código de 4 letras que te pasen).
+
+El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abras en la sesión tarda unos segundos.
+
 ## Qué hace
 
 - **Creador nivel por nivel**: clase, origen, características, habilidades, conjuros, equipo. No deja subir de nivel hasta que eliges lo de ese nivel (dotes, invocaciones, conjuros, PG).
