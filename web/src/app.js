@@ -998,7 +998,8 @@
     }
     if (eng === 'claude') { var res = await trSample(TR_PROMPT + html, {modelTier:'quick', cache:{gcTime:86400000}}); return trSanitize(res.text); }
     if (eng === 'server') {
-      var rr; try { rr = await fetch('api/translate', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({html:html})}); } catch(e){ throw {code:'offline'}; }
+      var rr, ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, tmo = ctl && setTimeout(function(){ ctl.abort(); }, 90000);
+      try { rr = await fetch('api/translate', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({html:html}), signal: ctl ? ctl.signal : undefined}); } catch(e){ throw {code: e && e.name === 'AbortError' ? 'timeout' : 'offline'}; } finally { clearTimeout(tmo); }
       var jj = await rr.json().catch(function(){ return {}; });
       if (!rr.ok) throw {code: jj.code || 'error', msg: jj.msg};
       return trSanitize(jj.html);
@@ -1010,7 +1011,7 @@
     var st = wrap.dataset.st || 'orig', bar = wrap.querySelector('.trbar'), h = '';
     if (st === 'orig') h = '<button class="btn" type="button" data-act="trgo">Traducir al español</button>';
     else if (st === 'origtr') h = '<span class="trtag">Texto original</span><button class="btn" type="button" data-act="trshow">Ver traducción</button>';
-    else if (st === 'loading') h = '<span class="trtag">Traduciendo…</span>';
+    else if (st === 'loading') h = '<span class="trtag">Traduciendo…</span><span class="muted" style="font-size:13px">' + (trEng === 'server' ? 'la primera vez puede tardar hasta un minuto' : '') + '</span>';
     else if (st === 'tr') h = '<span class="trtag">Traducción automática</span><button class="btn" type="button" data-act="trorig">Ver original</button>';
     else if (st === 'err') h = '<span class="trerr">' + esc(wrap.dataset.err || 'No se pudo traducir.') + '</span><button class="btn" type="button" data-act="trgo">Reintentar</button>';
     bar.innerHTML = h;
@@ -1032,7 +1033,7 @@
     }).catch(function(e){
       body.classList.remove('translating');
       var code = e && e.code;
-      wrap.dataset.err = e && e.msg && code !== 'rate_limited' ? e.msg : code === 'not_granted' || code === 'sampling_disabled' ? 'La traducción con Claude no está permitida en esta vista.' : code === 'rate_limited' ? 'Demasiadas traducciones seguidas; intenta en un momento.' : code === 'no_engine' ? 'Aquí no hay traductor disponible.' : code === 'offline' ? 'Sin conexión: la traducción necesita internet la primera vez.' : code === 'too_large' ? 'Este texto es demasiado largo para traducirlo.' : 'No se pudo traducir.';
+      wrap.dataset.err = e && e.msg ? e.msg : code === 'not_granted' || code === 'sampling_disabled' ? 'La traducción con Claude no está permitida en esta vista.' : code === 'rate_limited' ? 'Demasiadas traducciones seguidas; intenta en un momento.' : code === 'no_engine' ? 'Aquí no hay traductor disponible.' : code === 'timeout' ? 'El traductor tardó demasiado. Intenta otra vez.' : code === 'offline' ? 'Sin conexión: la traducción necesita internet la primera vez.' : code === 'too_large' ? 'Este texto es demasiado largo para traducirlo.' : 'No se pudo traducir.';
       wrap.dataset.st = 'err'; if (document.contains(wrap)) trBar(wrap);
     });
   }
@@ -1054,6 +1055,7 @@
     $('#trModes').innerHTML = [['off','Desactivada'],['manual','Con botón'],['auto','Automática']].map(function(x){ return '<button type="button" data-act="trmode" data-v="' + x[0] + '" aria-pressed="' + (m === x[0]) + '">' + x[1] + '</button>'; }).join('');
     $('#trStatus').textContent = 'Revisando qué traductor hay disponible…';
     trEngine().then(function(e){
+      if (e === 'server') fetch('api/translate', {cache:'no-store'}).then(function(r){ return r.json(); }).then(function(j){ if (j && j.lastError) $('#trStatus').textContent += ' Último problema del servidor (' + String(j.lastError.at).slice(11, 16) + ' UTC): ' + j.lastError.msg; }).catch(function(){});
       $('#trStatus').textContent = e === 'server' ? 'Traduce el servidor del grupo' + (trServer === 'gemini' ? ' con Gemini' : trServer === 'cloudflare' ? ' con Cloudflare' : trServer === 'claude' ? ' con Claude' : trServer === 'deepl' ? ' con DeepL' : '') + '. Lo que alguien ya tradujo sale al instante para todos y queda guardado en tu teléfono.' : e === 'chrome' ? 'Se usará el traductor integrado del navegador: funciona en el dispositivo y no gasta nada.' : e === 'claude' ? 'Se usará Claude con la cuenta de quien abre el diario. La primera vez pedirá permiso.' : 'Aquí no hay traductor disponible: el servidor del grupo no tiene traductor configurado y este navegador no trae uno.';
     });
   }

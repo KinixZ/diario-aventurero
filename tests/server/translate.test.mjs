@@ -55,7 +55,7 @@ test('Gemini: si un modelo no existe prueba el siguiente', async () => {
   const seen = []; const real = globalThis.fetch;
   globalThis.fetch = async (url) => { seen.push(url.match(/models\/([^:]+)/)[1]); return seen.length === 1 ? new Response('not found', { status: 404 }) : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '<p>ok</p>' }] } }] }), { status: 200 }); };
   const warn = console.warn; console.warn = () => {};
-  try { const t = createTranslator({ GEMINI_API_KEY: 'k' }); assert.equal((await t.translate('<p>x</p>')).html, '<p>ok</p>'); assert.deepEqual(seen, ['gemini-flash-latest', 'gemini-flash-lite-latest']); }
+  try { const t = createTranslator({ GEMINI_API_KEY: 'k' }); assert.equal((await t.translate('<p>x</p>')).html, '<p>ok</p>'); assert.deepEqual(seen, ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite']); }
   finally { globalThis.fetch = real; console.warn = warn; }
 });
 
@@ -77,4 +77,29 @@ test('Gemini: mensaje claro cuando la cuenta no tiene plan gratis', async () => 
   globalThis.fetch = async () => new Response(JSON.stringify({ error: { message: 'The Gemini API free tier is not available for this project. Please set up billing' } }), { status: 429 });
   try { const t = createTranslator({ GEMINI_API_KEY: 'k', TR_MODEL: 'm', TR_RETRY_MS: '0' }); await assert.rejects(t.translate('<p>x</p>'), /cuenta personal de Gmail/); assert.match(t.status().lastError.msg, /free tier/); }
   finally { globalThis.fetch = real; console.warn = warn; }
+});
+
+test('si el proveedor se cuelga, la traducción termina con error de tiempo y libera la fila', async () => {
+  const real = globalThis.fetch; const warn = console.warn; console.warn = () => {};
+  globalThis.fetch = (url, opt) => new Promise((_, rej) => { opt.signal.addEventListener('abort', () => { const e = new Error('t'); e.name = 'TimeoutError'; rej(e); }); });
+  try {
+    const t = createTranslator({ GEMINI_API_KEY: 'k', TR_MODEL: 'm', TR_CALL_MS: '50', TR_TOTAL_MS: '200' });
+    await assert.rejects(t.translate('<p>uno</p>'), (e) => e.code === 'timeout');
+    globalThis.fetch = async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '<p>dos</p>' }] } }] }), { status: 200 });
+    assert.equal((await t.translate('<p>two</p>')).html, '<p>dos</p>');
+  } finally { globalThis.fetch = real; console.warn = warn; }
+});
+
+test('cuota diaria agotada: pasa al siguiente modelo sin esperar; si se acaban todos, avisa', async () => {
+  const seen = []; const real = globalThis.fetch; const warn = console.warn; console.warn = () => {};
+  globalThis.fetch = async (url) => { const m = url.match(/models\/([^:]+)/)[1]; seen.push(m); return m === 'gemini-flash-lite-latest' ? new Response('{"error":{"message":"Quota exceeded for metric generate_content_free_tier_requests, limit: 500, GenerateRequestsPerDayPerProjectPerModel"}}', { status: 429 }) : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '<p>ok</p>' }] } }] }), { status: 200 }); };
+  try {
+    const t = createTranslator({ GEMINI_API_KEY: 'k', TR_RETRY_MS: '0' });
+    assert.equal((await t.translate('<p>a</p>')).html, '<p>ok</p>');
+    assert.deepEqual(seen, ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite']);
+    await t.translate('<p>b</p>');
+    assert.deepEqual(seen.slice(2), ['gemini-2.5-flash-lite'], 'ya no vuelve a probar el modelo agotado hoy');
+    globalThis.fetch = async () => new Response('{"error":{"message":"GenerateRequestsPerDay"}}', { status: 429 });
+    await assert.rejects(t.translate('<p>c</p>'), /por hoy/);
+  } finally { globalThis.fetch = real; console.warn = warn; }
 });

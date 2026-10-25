@@ -28,7 +28,10 @@ export function createTranslator(env = process.env) {
   const serial = (fn) => { const run = lane.then(fn, fn); lane = run.catch(() => {}); return run; };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const retryMs = env.TR_RETRY_MS != null ? Number(env.TR_RETRY_MS) : 6000;
-  const geminiModels = env.TR_MODEL ? [env.TR_MODEL] : ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+  const callMs = Number(env.TR_CALL_MS) || 40000;      // ninguna llamada al proveedor puede tardar más que esto
+  const totalMs = Number(env.TR_TOTAL_MS) || 75000;    // ni una traducción completa (el diario espera 90 s)
+  const exhausted = new Map();                          // modelo → día en que agotó su cuota diaria
+  const geminiModels = env.TR_MODEL ? [env.TR_MODEL] : ['gemini-flash-lite-latest', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
   const daily = Number(env.TR_DAILY_CHARS) || 400000;      // tope de caracteres nuevos al día (lo cacheado no cuenta)
   const file = env.TR_CACHE_FILE || '';
   const cache = new Map(), pending = new Map();
@@ -50,6 +53,7 @@ export function createTranslator(env = process.env) {
     if (provider === 'mock') return '<span class="mock">ES</span>' + html;
     if (provider === 'gemini') {
       const call = (model) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        signal: AbortSignal.timeout(callMs),
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
         body: JSON.stringify({ systemInstruction: { parts: [{ text: PROMPT }] }, contents: [{ role: 'user', parts: [{ text: piece }] }], generationConfig: { temperature: 0.2 },
@@ -58,9 +62,22 @@ export function createTranslator(env = process.env) {
       let piece = html;
       const once = async () => {
         // si Google cambia los nombres de los modelos, prueba el siguiente y recuerda el que sirvió
+        let quotaHit = false;
         for (const model of geminiModels.slice()) {
-          let res = await call(model);
-          if (res.status === 429 || res.status === 503) { await sleep(retryMs); res = await call(model); }   // un reintento si se pasó del límite por minuto
+          if (exhausted.get(model) === today()) { quotaHit = true; continue; }
+          let res;
+          try {
+            res = await call(model);
+            if (res.status === 429) {
+              const body = await res.clone().text();
+              // límite del día (no se arregla esperando): marca el modelo y pasa al siguiente
+              if (/per ?day|PerDay|daily/i.test(body)) { exhausted.set(model, today()); note(`Gemini (${model}) llegó a su límite del día; pruebo otro modelo`); quotaHit = true; continue; }
+              await sleep(retryMs); res = await call(model);
+            } else if (res.status === 503) { await sleep(retryMs); res = await call(model); }
+          } catch (e) {
+            if (e && (e.name === 'TimeoutError' || e.name === 'AbortError')) { note(`Gemini (${model}) tardó más de ${callMs / 1000} s`); throw fail('timeout', 'Gemini tardó demasiado en responder. Intenta otra vez.'); }
+            note(`Gemini: sin conexión (${e && e.message})`); throw fail('provider', 'El servidor no pudo conectarse con Gemini.');
+          }
           if (res.status === 404 || res.status === 400 && /not found|not supported/i.test(await res.clone().text())) { console.warn(`Gemini: el modelo ${model} no está disponible; pruebo otro`); geminiModels.splice(geminiModels.indexOf(model), 1); continue; }
           if (!res.ok) {
             const body = (await res.text()).slice(0, 400);
@@ -74,6 +91,7 @@ export function createTranslator(env = process.env) {
           if (!text) note(`Gemini no devolvió texto (${cand.finishReason || (j.promptFeedback || {}).blockReason || 'sin motivo'})`);
           return text;
         }
+        if (quotaHit) throw fail('rate_limited', 'Se acabaron las traducciones gratis de Gemini por hoy; mañana se renuevan. Lo ya traducido sigue disponible.');
         throw fail('provider', 'Ningún modelo de Gemini respondió. Define TR_MODEL en Render.');
       };
       return serial(async () => {
@@ -81,7 +99,9 @@ export function createTranslator(env = process.env) {
         if (whole) return whole;
         // a veces Gemini corta textos largos que reconoce de un libro: se intenta párrafo por párrafo
         const out = [];
-        for (const b of blocks(html)) { if (!b.text) { out.push(b.raw); continue; } piece = b.raw; out.push((await once()) || b.raw); }
+        const list = blocks(html), started = Date.now();
+        if (list.filter((b) => b.text).length > 15) throw fail('provider', 'Gemini no quiso traducir este texto.');
+        for (const b of list) { if (!b.text || Date.now() - started > totalMs / 2) { out.push(b.raw); continue; } piece = b.raw; out.push((await once()) || b.raw); }
         return out.join('');
       });
     }
@@ -137,7 +157,9 @@ export function createTranslator(env = process.env) {
     if (day !== today()) { day = today(); used = 0; }
     if (used + html.length > daily) throw fail('rate_limited', 'Se llegó al límite de traducciones de hoy.');
     used += html.length;
-    const p = callProvider(html).finally(() => pending.delete(key));
+    let timer;
+    const limit = new Promise((_, rej) => { timer = setTimeout(() => rej(fail('timeout', 'La traducción tardó demasiado. Intenta otra vez.')), totalMs); });
+    const p = Promise.race([callProvider(html), limit]).finally(() => { clearTimeout(timer); pending.delete(key); });
     pending.set(key, p);
     const out = await p;
     if (!out) throw fail('provider', 'El traductor no devolvió nada.');
