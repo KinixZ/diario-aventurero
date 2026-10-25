@@ -7,19 +7,23 @@ import { extname, join, normalize, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Rooms } from './rooms.mjs';
+import { createTranslator } from './translate.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DIST = normalize(join(here, '..', 'web', 'dist'));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon' };
 const MAX_MSG = 16 * 1024;
 
-export function startServer({ port = Number(process.env.PORT) || 8080, host = process.env.HOST || '0.0.0.0', quiet = false } = {}) {
+export function startServer({ port = Number(process.env.PORT) || 8080, host = process.env.HOST || '0.0.0.0', quiet = false, env = process.env } = {}) {
   const rooms = new Rooms();
+  const tr = createTranslator(env);
+  const trHits = new Map(); // ip → [inicio de ventana, cuántas]
   const sockets = new Map(); // memberId → ws
 
   const http = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
-    if (url.pathname === '/health') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: true, rooms: rooms.rooms.size })); return; }
+    if (url.pathname === '/health') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: true, rooms: rooms.rooms.size, translate: tr.status().enabled })); return; }
+    if (url.pathname === '/api/translate') { await handleTranslate(req, res); return; }
     let p = decodeURIComponent(url.pathname); if (p.endsWith('/')) p += 'index.html';
     const file = normalize(join(DIST, p));
     if (!file.startsWith(DIST)) { res.writeHead(403); res.end(); return; }
@@ -31,6 +35,29 @@ export function startServer({ port = Number(process.env.PORT) || 8080, host = pr
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('No existe. ¿Corriste npm run build?');
     }
   });
+
+  function json(res, code, obj) { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); }
+  async function handleTranslate(req, res) {
+    if (req.method === 'GET') { json(res, 200, tr.status()); return; }
+    if (req.method !== 'POST') { json(res, 405, { code: 'bad_request' }); return; }
+    // 40 traducciones nuevas por minuto por dirección; lo que ya está en caché responde igual
+    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    const now = Date.now(), h = trHits.get(ip) || [now, 0];
+    if (now - h[0] > 60000) { h[0] = now; h[1] = 0; }
+    if (++h[1] > 40) { trHits.set(ip, h); json(res, 429, { code: 'rate_limited', msg: 'Demasiadas traducciones seguidas.' }); return; }
+    trHits.set(ip, h); if (trHits.size > 5000) trHits.clear();
+    let body = '';
+    for await (const chunk of req) { body += chunk; if (body.length > 60000) { json(res, 413, { code: 'too_large' }); return; } }
+    try {
+      const { html } = JSON.parse(body || '{}');
+      const out = await tr.translate(html);
+      json(res, 200, out);
+    } catch (e) {
+      const code = e.code || 'error';
+      json(res, code === 'rate_limited' ? 429 : code === 'no_engine' ? 503 : code === 'bad_request' || code === 'too_large' ? 400 : 502, { code, msg: e.code ? e.message : 'No se pudo traducir.' });
+      if (!e.code && !quiet) console.error(e);
+    }
+  }
 
   const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: MAX_MSG });
 

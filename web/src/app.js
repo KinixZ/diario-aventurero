@@ -953,7 +953,7 @@
   }
 
   /* ==================== TRADUCCIÓN ==================== */
-  var TRmem = {}, TRorig = {}, trEng = null, trChrome = null, trSample = null;
+  var trServer = '', TRmem = {}, TRorig = {}, trEng = null, trChrome = null, trSample = null;
   var TR_PROMPT = 'Traduce al español de México el texto en inglés de este fragmento HTML con reglas de Dungeons & Dragons.\n'
     + 'Reglas:\n1) Conserva exactamente todas las etiquetas HTML y sus atributos. No traduzcas ni cambies los valores de class ni de data-ref.\n'
     + '2) Usa la terminología oficial de D&D en español: saving throw = tirada de salvación; ability check = prueba de característica; attack roll = tirada de ataque; Advantage = ventaja; Disadvantage = desventaja; Action = acción; Bonus Action = acción adicional; Reaction = reacción; spell slot = espacio de conjuro; cantrip = truco; Hit Points = puntos de golpe; Temporary Hit Points = puntos de golpe temporales; Armor Class = clase de armadura; Proficiency Bonus = bonificador de competencia; Concentration = concentración; Difficulty Class (DC) = clase de dificultad (CD); Short Rest = descanso corto; Long Rest = descanso largo; Strength = Fuerza; Dexterity = Destreza; Constitution = Constitución; Intelligence = Inteligencia; Wisdom = Sabiduría; Charisma = Carisma; Blinded = cegado; Charmed = hechizado; Deafened = ensordecido; Frightened = asustado; Grappled = agarrado; Incapacitated = incapacitado; Paralyzed = paralizado; Petrified = petrificado; Poisoned = envenenado; Prone = derribado; Restrained = apresado; Stunned = aturdido; Unconscious = inconsciente.\n'
@@ -963,8 +963,12 @@
   function trEngine(){
     if (trEng !== null) return Promise.resolve(trEng);
     return (async function(){
-      try { if (typeof Translator !== 'undefined') { var a = await Translator.availability({sourceLanguage:'en', targetLanguage:'es'}); if (a && a !== 'unavailable') { trEng = 'chrome'; return trEng; } } } catch(e){}
+      /* 1) Claude, si el diario corre como artefacto de claude.ai */
       try { if (window.claude && window.claude.use) { trSample = await window.claude.use('sample'); if (trSample) { trEng = 'claude'; return trEng; } } } catch(e){}
+      /* 2) El servidor del proyecto, con caché compartida para todo el grupo (funciona en cualquier teléfono) */
+      try { if (/^https?:$/.test(location.protocol) && !(window.DIARIO_CONFIG && DIARIO_CONFIG.artifact)) { var r = await fetch('api/translate', {cache:'no-store'}); if (r.ok) { var j = await r.json(); if (j && j.enabled) { trEng = 'server'; trServer = j.provider; return trEng; } } } } catch(e){}
+      /* 3) El traductor integrado de Chrome de escritorio */
+      try { if (typeof Translator !== 'undefined') { var a = await Translator.availability({sourceLanguage:'en', targetLanguage:'es'}); if (a && a !== 'unavailable') { trEng = 'chrome'; return trEng; } } } catch(e){}
       trEng = ''; return trEng;
     })();
   }
@@ -993,6 +997,12 @@
       return tpl.innerHTML;
     }
     if (eng === 'claude') { var res = await trSample(TR_PROMPT + html, {modelTier:'quick', cache:{gcTime:86400000}}); return trSanitize(res.text); }
+    if (eng === 'server') {
+      var rr; try { rr = await fetch('api/translate', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({html:html})}); } catch(e){ throw {code:'offline'}; }
+      var jj = await rr.json().catch(function(){ return {}; });
+      if (!rr.ok) throw {code: jj.code || 'error'};
+      return trSanitize(jj.html);
+    }
     throw {code:'no_engine'};
   }
   function trWrap(html, key){ if (S.trMode === 'off' || !key) return html; return '<div class="trwrap" data-trkey="' + attr(key) + '"><div class="trbar"></div><div class="gtext trbody">' + html + '</div></div>'; }
@@ -1022,7 +1032,7 @@
     }).catch(function(e){
       body.classList.remove('translating');
       var code = e && e.code;
-      wrap.dataset.err = code === 'not_granted' || code === 'sampling_disabled' ? 'La traducción con Claude no está permitida en esta vista.' : code === 'rate_limited' ? 'Demasiadas traducciones seguidas; intenta en un momento.' : code === 'no_engine' ? 'Aquí no hay traductor disponible.' : 'No se pudo traducir.';
+      wrap.dataset.err = code === 'not_granted' || code === 'sampling_disabled' ? 'La traducción con Claude no está permitida en esta vista.' : code === 'rate_limited' ? 'Demasiadas traducciones seguidas; intenta en un momento.' : code === 'no_engine' ? 'Aquí no hay traductor disponible.' : code === 'offline' ? 'Sin conexión: la traducción necesita internet la primera vez.' : code === 'too_large' ? 'Este texto es demasiado largo para traducirlo.' : 'No se pudo traducir.';
       wrap.dataset.st = 'err'; if (document.contains(wrap)) trBar(wrap);
     });
   }
@@ -1044,7 +1054,7 @@
     $('#trModes').innerHTML = [['off','Desactivada'],['manual','Con botón'],['auto','Automática']].map(function(x){ return '<button type="button" data-act="trmode" data-v="' + x[0] + '" aria-pressed="' + (m === x[0]) + '">' + x[1] + '</button>'; }).join('');
     $('#trStatus').textContent = 'Revisando qué traductor hay disponible…';
     trEngine().then(function(e){
-      $('#trStatus').textContent = e === 'chrome' ? 'Se usará el traductor integrado del navegador: funciona en el dispositivo y no gasta nada.' : e === 'claude' ? 'Se usará Claude con la cuenta de quien abre el diario. La primera vez pedirá permiso.' : 'Aquí no hay traductor disponible. Funciona dentro de claude.ai o en un Chrome reciente.';
+      $('#trStatus').textContent = e === 'server' ? 'Traduce el servidor del grupo' + (trServer === 'claude' ? ' con Claude' : trServer === 'deepl' ? ' con DeepL' : '') + '. Lo que alguien ya tradujo sale al instante para todos y queda guardado en tu teléfono.' : e === 'chrome' ? 'Se usará el traductor integrado del navegador: funciona en el dispositivo y no gasta nada.' : e === 'claude' ? 'Se usará Claude con la cuenta de quien abre el diario. La primera vez pedirá permiso.' : 'Aquí no hay traductor disponible: el servidor del grupo no tiene traductor configurado y este navegador no trae uno.';
     });
   }
 

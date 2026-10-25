@@ -11,3 +11,10 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      # Traducción para teléfonos: pon UNA de las dos claves en el panel de Render (Environment).
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DEEPL_API_KEY
+        sync: false
+      - key: TR_CACHE_FILE
+        value: /tmp/traducciones.json

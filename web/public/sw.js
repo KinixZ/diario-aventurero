@@ -1,7 +1,7 @@
 // Service worker del Diario: permite instalarlo y abrirlo sin internet.
 // La página va "red primero" (siempre la versión nueva si hay conexión); íconos y fuentes, de la caché.
-// Las salas de combate (/ws) y /health nunca pasan por aquí.
-const CACHE = 'diario-v1';
+// Las salas de combate (/ws), /health y /api/ (traducción) nunca pasan por aquí.
+const CACHE = 'diario-v2';
 const SHELL = ['./', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
@@ -9,7 +9,7 @@ self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) =
 
 self.addEventListener('fetch', (e) => {
   const req = e.request, url = new URL(req.url);
-  if (req.method !== 'GET' || url.pathname.endsWith('/ws') || url.pathname.endsWith('/health')) return;
+  if (req.method !== 'GET' || url.pathname.endsWith('/ws') || url.pathname.endsWith('/health') || url.pathname.includes('/api/')) return;
   const fonts = /fonts\.(googleapis|gstatic)\.com$/.test(url.hostname);
   if (url.origin !== location.origin && !fonts) return;
   if (req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('.html')) {

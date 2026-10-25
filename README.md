@@ -26,6 +26,15 @@ El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abra
 - **Traducción automática** de textos (traductor del navegador o Claude cuando corre como artefacto).
 - **Sala de combate**: código de 4 letras, iniciativa ordenada, turnos y rondas, PNJ del DM (ocultos o visibles), daño, curación, PG temporales y condiciones aplicadas de un jugador a otro.
 
+## Traducción en el teléfono
+
+Chrome en Android y Safari no traen traductor integrado, así que en el teléfono traduce el servidor. Configúralo una vez en Render (*Environment*) con **una** de estas claves:
+
+- `ANTHROPIC_API_KEY` (de console.anthropic.com): traduce Claude con los términos oficiales de D&D y convierte pies a metros. Se paga por uso con créditos prepagados.
+- `DEEPL_API_KEY` (plan gratis de DeepL API, 500 000 caracteres al mes): buena traducción general, pero no conoce los términos de D&D ni convierte medidas.
+
+Cada texto se traduce una sola vez y queda en caché para todo el grupo; además cada teléfono guarda lo que ya tradujo. `TR_DAILY_CHARS` (por defecto 400 000) pone un tope diario de caracteres nuevos.
+
 ## Estructura
 
 ```

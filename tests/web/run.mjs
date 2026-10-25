@@ -8,7 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url)), html = join(here, '../../w
 const pkg = process.env.DIARIO_PAQUETE || join(here, '../../diario-5e.json');
 if (!existsSync(pkg)) { console.log('Sin paquete de 5etools: se saltan las pruebas de la web. Crea uno con "npm run paquete -- <carpeta data> diario-5e.json".'); process.exit(0); }
 let bad = 0;
-for (const t of ['smoke2.cjs', 'smoke3.cjs', 'smoke4.cjs', 'smoke5.cjs', 'import.cjs', 'chars.cjs', 'sala.e2e.cjs']) {
+for (const t of ['smoke2.cjs', 'smoke3.cjs', 'smoke4.cjs', 'smoke5.cjs', 'import.cjs', 'chars.cjs', 'sala.e2e.cjs', 'translate.e2e.cjs']) {
   const r = spawnSync(process.execPath, [join(here, t), html, pkg, '390'], { encoding: 'utf8', timeout: 240000 });
   const out = (r.stdout || '') + (r.stderr || ''), ok = /NO ERRORS/.test(out) && !/FAIL/.test(out);
   console.log((ok ? 'ok   ' : 'FALLA ') + t); if (!ok) { bad++; console.log(out.split('\n').slice(-25).join('\n')); }
