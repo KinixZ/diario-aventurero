@@ -3,7 +3,7 @@
 //   node tools/build-web.mjs            → página completa (para el servidor o GitHub Pages)
 //   node tools/build-web.mjs --artifact → fragmento para publicar como artefacto de claude.ai
 // Variable opcional SALA_URL=wss://tu-servidor/ws para fijar el servidor de salas en la compilación.
-import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,15 +26,24 @@ const page = artifact ? inner : `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#24130f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Diario">
 <meta name="description" content="Hoja de personaje de D&D con forma de diario, creador nivel por nivel desde 5etools y salas de combate para todo el grupo.">
 <style>*,*::before,*::after{box-sizing:border-box}html,body{margin:0;padding:0}</style>
 </head>
 <body>
-${inner}</body>
+${inner}<script>if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });</script>
+</body>
 </html>
 `;
 mkdirSync(join(root, 'dist'), { recursive: true });
 const out = join(root, 'dist', artifact ? 'diario-artefacto.html' : 'index.html');
+if (!artifact && existsSync(join(root, 'public'))) cpSync(join(root, 'public'), join(root, 'dist'), { recursive: true });
 writeFileSync(out, page);
 writeFileSync(join(root, 'dist', 'all.js'), js);
 console.log(`Listo: ${out} (${(page.length / 1024).toFixed(0)} KB)`);

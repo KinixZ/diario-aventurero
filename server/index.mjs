@@ -25,7 +25,7 @@ export function startServer({ port = Number(process.env.PORT) || 8080, host = pr
     if (!file.startsWith(DIST)) { res.writeHead(403); res.end(); return; }
     try {
       const s = await stat(file); if (!s.isFile()) throw new Error('dir');
-      res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream', 'cache-control': extname(file) === '.html' ? 'no-cache' : 'public, max-age=3600' });
+      res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream', 'cache-control': /\.(html|webmanifest)$|sw\.js$/.test(file) ? 'no-cache' : 'public, max-age=3600' });
       res.end(await readFile(file));
     } catch {
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('No existe. ¿Corriste npm run build?');

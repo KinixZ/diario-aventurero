@@ -12,6 +12,8 @@ Pensado primero para el teléfono; en laptop se ve como libro abierto a doble p�
 
 El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abras en la sesión tarda unos segundos.
 
+**Instalarlo como app:** en Android (Chrome), menú ⋮ → *Instalar app*. En iPhone (Safari), Compartir → *Agregar a inicio*. Una vez abierto, funciona sin internet; las salas de combate sí necesitan conexión.
+
 ## Qué hace
 
 - **Creador nivel por nivel**: clase, origen, características, habilidades, conjuros, equipo. No deja subir de nivel hasta que eliges lo de ese nivel (dotes, invocaciones, conjuros, PG).

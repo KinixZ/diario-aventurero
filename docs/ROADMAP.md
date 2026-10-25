@@ -15,7 +15,7 @@
 
 ## Diario
 
-- [ ] PWA instalable y sin conexión (manifest + service worker).
+- [x] PWA instalable y sin conexión (manifest + service worker).
 - [ ] Subrazas 2014 (Alto Elfo, Enano de las colinas…).
-- [ ] Exportar e importar personajes como archivo para pasarlos entre dispositivos.
+- [x] Exportar e importar personajes como archivo para pasarlos entre dispositivos.
 - [ ] Partir `app.js` en módulos (hoja, creador, mochila, grimorio, combate) cuando se meta un bundler.
