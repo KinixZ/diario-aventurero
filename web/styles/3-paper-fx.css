@@ -135,3 +135,20 @@
 .inl input{flex:1;min-width:0}
 @media (min-width:700px){ .bonus-grid{grid-template-columns:repeat(4,minmax(0,1fr))} }
 .checks input{accent-color:var(--oath);color-scheme:var(--scheme)}
+
+/* ---------- Hoja del compañero ---------- */
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.four{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.six{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.four label,.six label{display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--ink-2);text-align:center}
+.four .field,.six .field{text-align:center;padding:0 4px;min-width:0}
+.ce-skills{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.ce-skills label{display:flex;flex-direction:column;gap:2px;font-size:13px;color:var(--ink-2)}
+.ce-atk{display:grid;grid-template-columns:2fr 1fr 1fr 44px;gap:6px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--rule-2)}
+.ce-atk [name=ad]{grid-column:1/2}.ce-atk [name=at]{grid-column:2/4}.ce-atk [name=ano]{grid-column:1/4}
+.ce-atk .icon-btn{grid-column:4;grid-row:1}
+.ce-atk .field{min-width:0}
+.comp-btns{gap:6px;flex-wrap:wrap}
+.comp-notes{white-space:pre-line}
+.comp-blank{border-style:dashed}
+@media (max-width:420px){ .six{grid-template-columns:repeat(3,minmax(0,1fr))} }

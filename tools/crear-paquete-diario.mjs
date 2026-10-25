@@ -48,12 +48,21 @@ const out = { _diario: 1, creado: new Date().toISOString(), spellLookup: {} };
 for (const k of KEYS) out[k] = [];
 
 let read = 0;
+const allMonsters = [];
 for (const file of files) {
   if (!existsSync(file)) { console.warn('No encontré', basename(file), '(se omite)'); continue; }
   const json = JSON.parse(readFileSync(file, 'utf8'));
   for (const k of KEYS) if (Array.isArray(json[k])) out[k].push(...(k === 'monster' ? json[k].filter(keepMonster) : json[k]));
+  if (Array.isArray(json.monster)) allMonsters.push(...json.monster);
   read++;
 }
+
+// Algunos compañeros son copia de otra criatura (Hound of Ill Omen → Dire Wolf): se incluye también la base
+const key = (n, src) => String(n).toLowerCase() + '|' + String(src).toLowerCase();
+const have = new Set(out.monster.map(m => key(m.name, m.source)));
+const byKey = new Map(allMonsters.map(m => [key(m.name, m.source), m]));
+for (let pass = 0; pass < 3; pass++) for (const m of out.monster.slice()) if (m._copy) { const k = key(m._copy.name, m._copy.source); if (!have.has(k) && byKey.has(k)) { out.monster.push(byKey.get(k)); have.add(k); } }
+allMonsters.length = 0;
 
 const lookup = join(dataDir, 'generated', 'gendata-spell-source-lookup.json');
 if (existsSync(lookup)) { out.spellLookup = JSON.parse(readFileSync(lookup, 'utf8')); read++; }

@@ -694,8 +694,25 @@
     var lib = (Lib5e.get() && Lib5e.get().monster) || [], out = lib.slice(), have = {};
     lib.forEach(function(m){ have[N(m.name) + '|' + N(m.source)] = 1; });
     COMP_BUILTIN.forEach(function(m){ if (!have[N(m.name) + '|' + N(m.source)]) out.push(m); });
-    return out.filter(function(m){ return !m._copy; });
+    return out.filter(function(m){ return !m._copy && (m._builtin || Lib5e.keepMonster(m)); });
   }
+  /* ---------- Hoja propia de un compañero (Haku, mascotas, compañeros homebrew) ---------- */
+  var SKILL_AB = {perception:'wis', stealth:'dex', athletics:'str', acrobatics:'dex', insight:'wis', survival:'wis', investigation:'int', arcana:'int', history:'int', deception:'cha', intimidation:'cha', persuasion:'cha', performance:'cha'};
+  function customPb(cu){ return +cu.pb || (D && D.pb) || 2; }
+  function customToMon(cu){
+    var pb = customPb(cu), md = function(k){ return R.mod((cu.abil || {})[k] || 10); }, save = {}, skill = {};
+    (cu.saves || []).forEach(function(k){ save[k] = '+' + (md(k) + pb); });
+    (cu.skills || []).forEach(function(sk){ skill[sk.k] = '+' + (md(SKILL_AB[sk.k] || 'wis') + pb * (sk.p || 1)); });
+    var pass = 10 + md('wis') + ((cu.skills || []).filter(function(x){ return x.k === 'perception'; }).map(function(x){ return pb * (x.p || 1); })[0] || 0);
+    var paras = String(cu.traits || '').split(/\n\s*\n|\n/).map(function(x){ return x.trim(); }).filter(Boolean).map(function(x){ return x.replace(/[{}]/g, '').replace(/^([^.:]{2,40})[.:]\s/, '{@b $1.} '); });
+    return {_custom:1, name:cu.name || 'Compañero', source:'Hoja propia', size:[cu.size || 'S'], type:cu.kind || '', ac:[+cu.ac || 10], hp:{average:+cu.hpMax || 1},
+      speed:{walk:+((cu.speed || {}).walk) || 0, fly:+((cu.speed || {}).fly) || 0, swim:+((cu.speed || {}).swim) || 0, climb:+((cu.speed || {}).climb) || 0},
+      str:(cu.abil || {}).str || 10, dex:(cu.abil || {}).dex || 10, con:(cu.abil || {}).con || 10, int:(cu.abil || {}).int || 10, wis:(cu.abil || {}).wis || 10, cha:(cu.abil || {}).cha || 10,
+      save:save, skill:skill, senses:cu.senses ? [cu.senses] : [], passive:pass, languages:cu.langs ? [cu.langs] : null, resist:cu.resist ? [cu.resist] : null, immune:cu.immune ? [cu.immune] : null,
+      trait: paras.length ? [{name:'Rasgos y acciones', entries:paras}] : [], action:[],
+      _attacks:(cu.attacks || []).filter(function(a){ return a.name; }).map(function(a){ var bonus = a.bonus === 'none' ? null : a.bonus === '' || a.bonus == null ? md(a.ab || 'str') + pb : +a.bonus; return {name:a.name, atk:bonus, dmg:a.dmg || '', type:a.type || '', note:a.note || ''}; })};
+  }
+  function compMonFor(c){ return c.custom ? customToMon(c.custom) : compMon(c.ref); }
   function compMon(ref){ var p = String(ref).split('|'); return compAll().filter(function(m){ return N(m.name) === N(p[0]) && N(m.source) === N(p[1]); })[0] || null; }
   function compOwner(m){
     var cn = m.summonedByClass ? N(m.summonedByClass.split('|')[0]) : null;
@@ -707,6 +724,12 @@
     if (txt == null) return null;
     if (typeof txt === 'number') return txt;
     var o = compOwner(m), sl = c.sl || m.summonedBySpellLevel || 1, t = String(txt);
+    var vre = function(label){ return !!c.v && label.split(/\s*(?:,|\bor\b|\band\b)\s*/i).some(function(x){ return N(x) === N(c.v); }); };
+    /* "+ 2 (Defender only)": solo suma si elegiste esa forma */
+    t = t.replace(/\+\s*(\d+)\s*\(([^)]+?)\s+only\)/gi, function(_, n, lab){ return vre(lab) ? '+ ' + n : ''; });
+    /* "10 (Medium or smaller), 20 (Large), 40 (Huge)": se toma el de la forma elegida */
+    var sizes = []; t.replace(/(\d+)\s*\(([^)]+)\)/g, function(_, n, lab){ if (!/only/i.test(lab)) sizes.push([n, lab]); return ''; });
+    if (sizes.length > 1 && !/spell level|times your/i.test(t)) { var hit = sizes.filter(function(x){ return c.v && N(x[1]) === N(c.v); })[0] || sizes[0]; t = hit[0]; }
     var parts = t.split(/\s+or\s+/);
     if (parts.length > 1) { var pick = parts.filter(function(x){ return c.v && new RegExp('\\(' + c.v.replace(/[^\w ]/g, '') + '\\b', 'i').test(x); })[0] || parts[0]; var tail = parts[parts.length - 1].replace(/^\s*\d+\s*\([^)]*only\)/i, ''); t = pick.replace(/\+.*$/, '') + (/\+/.test(tail) ? tail.slice(tail.indexOf('+')) : ''); }
     t = t.replace(/\([^)]*only\)/gi, '').replace(/\bplus\b/gi, '+').replace(/×/g, '*');
@@ -734,20 +757,26 @@
   function compSub(m, c){
     var o = compOwner(m), atk = o.K ? o.K.atk : D.pb, dc = o.K ? o.K.dc : 8 + D.pb;
     var j = JSON.stringify({trait:m.trait || [], action:m.action || [], bonus:m.bonus || [], reaction:m.reaction || []});
+    var castMod = o.K ? D.mod[o.K.ability] : 0;
     j = j.replace(/\{@hitYourSpellAttack[^}]*\}/g, '{@hit ' + atk + '}').replace(/\{@dcYourSpellSave[^}]*\}/g, '{@dc ' + dc + '}');
+    j = j.replace(/your spell attack modifier to hit/gi, '{@hit ' + atk + '} to hit').replace(/your spell save DC/gi, '{@dc ' + dc + '}');
+    j = j.replace(/\{@hit (-?\d+)\}\s*(?:plus|\+)\s*PB/g, function(_, n){ return '{@hit ' + (+n + D.pb) + '}'; });
+    /* "{@damage 1d8 + 2} plus your Wisdom modifier" o "plus PB": se mete dentro de los dados */
+    j = j.replace(/\{@(damage|dice) ([^}|]+)(\|[^}]*)?\}\s*(?:plus|\+)\s*(?:(PB)|your (\w+)(?: ability)? modifier)/gi, function(_, tg, ex, alt, pb, ab){ var add = pb ? D.pb : /spellcasting/i.test(ab) ? castMod : D.mod[ABW[N(ab)]] || 0; return '{@' + tg + ' ' + ex + ' + ' + add + '}'; });
     j = j.replace(/\{@(damage|dice) ([^}|]+)(\|[^}]*)?\}/g, function(_, tg, ex){ return '{@' + tg + ' ' + compDice(ex, c, m) + '}'; });
     return JSON.parse(j);
   }
   function compStats(c){
-    var m = compMon(c.ref); if (!m) return null;
+    var m = compMonFor(c); if (!m) return null;
     var a0 = (m.ac || [])[0], ac = typeof a0 === 'number' ? a0 : a0 && a0.ac != null ? a0.ac : a0 && a0.special ? compEval(a0.special, c, m) : 10;
     var hpMax = c.hpMax || (m.hp && m.hp.special ? compEval(m.hp.special, c, m) : m.hp && m.hp.average) || 1;
     var save = {}, skill = {}; Object.keys(m.save || {}).forEach(function(k){ save[k] = compEval(m.save[k], c, m); }); Object.keys(m.skill || {}).forEach(function(k){ skill[k] = compEval(m.skill[k], c, m); });
     if (/vínculo mágico|magic bond/i.test(JSON.stringify(m.trait || []))) { var sl = c.sl || m.summonedBySpellLevel || 1; R.ABS.forEach(function(k){ save[k] = (save[k] != null ? save[k] : R.mod(m[k] || 10)) + sl; }); }
-    var sub = compSub(m, c), attacks = [];
-    (sub.action || []).concat(sub.bonus || []).forEach(function(a){
+    var sub = m._custom ? {trait:m.trait, action:[], bonus:[], reaction:[]} : compSub(m, c), attacks = m._custom ? m._attacks.slice() : [];
+    if (!m._custom) (sub.action || []).concat(sub.bonus || []).forEach(function(a){
+      if (!compFormOk(a.name, c)) return;
       var s = JSON.stringify(a.entries || []), h = /\{@hit (-?\d+)\}/.exec(s), dm = /\{@(?:damage|dice) ([^}]+)\}\)?\s*(?:de daño de\s+)?(\w+)?/.exec(s);
-      if (h) attacks.push({name:a.name, atk:+h[1], dmg: dm ? dm[1] : '', type: dm && dm[2] ? (DMGW[N(dm[2])] || dm[2]) : ''});
+      if (h) attacks.push({name:String(a.name).replace(/\s*\([^)]*only\)/i, ''), atk:+h[1], dmg: dm ? dm[1] : '', type: dm && dm[2] ? (DMGW[N(dm[2])] || dm[2]) : ''});
     });
     var spd = m.speed || {}, ft = function(v){ return ((typeof v === 'object' ? v.number : v) / 5 * 1.5).toString().replace('.', ',') + ' m'; };
     return {m:m, ac:ac, hpMax:Math.max(1, hpMax), save:save, skill:skill, attacks:attacks, sub:sub,
@@ -763,18 +792,29 @@
     }).sort(function(a, b){ return a.score - b.score || a.m.name.localeCompare(b.m.name); });
   }
   function compSuggest(){ var r = rt(cur()); return compCandidates().filter(function(x){ return x.score === 0 && !(r.comp || []).some(function(c){ return c.ref === x.ref; }); }); }
-  function compVariants(m){ var s = JSON.stringify([m.hp, m.ac]), v = {}; s.replace(/\(([A-Z][\w ]*?) only\)/g, function(_, n){ n.split(/ and | or /).forEach(function(x){ v[x.trim()] = 1; }); return ''; }); return Object.keys(v); }
+  window.__compTest = {stats:function(c){ return compStats(c); }, variants:function(m){ return compVariants(m); }}; /* para pruebas */
+  function compVariants(m){
+    if (m._custom) return [];
+    var s = JSON.stringify([m.hp, m.ac, (m.action || []).map(function(a){ return a.name; }), (m.bonus || []).map(function(a){ return a.name; }), m.trait, m.action]), v = {};
+    s.replace(/\(([A-Z][\w ,]*?) [Oo]nly\)/g, function(_, n){ n.split(/\s*(?:,|\bor\b|\band\b)\s*/).forEach(function(x){ x = x.trim(); if (x && x.length < 24) v[x] = 1; }); return ''; });
+    if (!Object.keys(v).length && m.hp && m.hp.special) m.hp.special.replace(/(\d+)\s*\(([^)]+)\)/g, function(_, n, lab){ if (!/dice|hit|level/i.test(lab)) v[lab] = 1; return ''; });
+    return Object.keys(v);
+  }
+  /* Una acción "Bite (Tyrannosaur Only)" solo cuenta si elegiste esa forma */
+  function compFormOk(name, c){ var mm = /\(([^)]+?) only\)/i.exec(name || ''); if (!mm) return true; return !!c.v && mm[1].split(/\s*(?:,|\bor\b|\band\b)\s*/i).some(function(x){ return N(x) === N(c.v); }); }
   function compCard(c, i, compact){
-    var st = compStats(c); if (!st) return '<div class="compc"><p class="note">No encuentro la ficha de ' + esc(c.ref.split('|')[0]) + '. Carga el bestiario en Ajustes.</p><button class="btn sm" type="button" data-act="compdel" data-i="' + i + '">Quitar</button></div>';
+    var st = compStats(c); if (!st) return '<div class="compc"><p class="note">No encuentro la ficha de ' + esc(String(c.ref || '').split('|')[0]) + '. Carga el bestiario en Ajustes.</p><button class="btn sm" type="button" data-act="compdel" data-i="' + i + '">Quitar</button></div>';
     var m = st.m, hp = c.hp == null ? st.hpMax : Math.min(c.hp, st.hpMax), pct = Math.round(hp / st.hpMax * 100), barc = pct <= 33 ? 'var(--bad)' : pct <= 66 ? 'var(--warn)' : 'var(--ok)';
-    var h = '<div class="compc" data-i="' + i + '"><div class="comp-h"><svg class="ic"><use href="#i-paw"/></svg><div style="flex:1;min-width:0"><b>' + esc(c.n || m.name) + '</b><small>' + esc((SIZE[(m.size || [])[0]] || '') + ' ' + (CTYPE[typeof m.type === 'string' ? m.type : m.type && m.type.type] || '')) + ' · ' + esc(R.srcName(m.source)) + (m._builtin ? ' · ficha integrada' : '') + '</small></div>'
+    var h = '<div class="compc" data-i="' + i + '"><div class="comp-h"><svg class="ic"><use href="#i-paw"/></svg><div style="flex:1;min-width:0"><b>' + esc(c.n || m.name) + '</b><small>' + esc((SIZE[(m.size || [])[0]] || '') + ' ' + (CTYPE[typeof m.type === 'string' ? m.type : m.type && m.type.type] || (typeof m.type === 'string' ? m.type : ''))) + ' · ' + esc(c.n && !m._custom ? m.name + ' · ' : '') + esc(R.srcName(m.source)) + (m._builtin ? ' · ficha integrada' : '') + (c.v ? ' · ' + esc(c.v) : '') + '</small></div>'
       + (compact ? '' : '<button class="icon-btn" type="button" data-act="compdel" data-i="' + i + '" aria-label="Quitar a ' + attr(c.n || m.name) + '"><svg class="ic"><use href="#i-x"/></svg></button>') + '</div>';
     h += '<div class="comp-stats"><div><b>' + st.ac + '</b><span>CA</span></div><div><b>' + hp + '<small>/' + st.hpMax + '</small></b><span>PG</span></div><div><b>' + esc(st.speed.split(',')[0] || '–') + '</b><span>' + esc(st.speed.split(',').slice(1).join(',') || 'velocidad') + '</span></div></div>';
     h += '<div class="bar"><i style="width:' + pct + '%;background:' + barc + '"></i></div>';
     h += '<div class="quick comp-q"><button type="button" class="m" data-act="comphp" data-i="' + i + '" data-v="-5">−5</button><button type="button" class="m" data-act="comphp" data-i="' + i + '" data-v="-1">−1</button><button type="button" class="p" data-act="comphp" data-i="' + i + '" data-v="1">+1</button><button type="button" class="p" data-act="comphp" data-i="' + i + '" data-v="5">+5</button><button type="button" data-act="comphp" data-i="' + i + '" data-v="full">Lleno</button></div>';
     if (st.spellSummon) h += '<label class="comp-sl">Nivel del conjuro<select class="field" data-compsl="' + i + '">' + [1,2,3,4,5,6,7,8,9].filter(function(l){ return l >= (m.summonedBySpellLevel || 1) && l <= Math.max(m.summonedBySpellLevel || 1, D.maxSpellLevel || 1); }).map(function(l){ return '<option value="' + l + '"' + ((c.sl || m.summonedBySpellLevel || 1) === l ? ' selected' : '') + '>' + l + '</option>'; }).join('') + '</select></label>';
     var vs = compVariants(m); if (vs.length) h += '<label class="comp-sl">Forma<select class="field" data-compv="' + i + '">' + vs.map(function(v){ return '<option' + (c.v === v ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') + '</select></label>';
-    st.attacks.forEach(function(a){ h += '<div class="comp-atk"><span>' + esc(a.name) + '</span><span class="roll">Tira 1d20 ' + sgn(a.atk).replace('+', '+ ').replace('−', '− ') + '</span>' + (a.dmg ? '<span class="dmg">' + esc(a.dmg) + ' ' + esc(a.type) + '</span>' : '') + '</div>'; });
+    st.attacks.forEach(function(a){ h += '<div class="comp-atk"><span>' + esc(a.name) + (a.note ? ' <small class="muted">· ' + esc(a.note) + '</small>' : '') + '</span>' + (a.atk == null ? '' : '<span class="roll">Tira 1d20 ' + sgn(a.atk).replace('+', '+ ').replace('−', '− ') + '</span>') + (a.dmg ? '<span class="dmg">' + esc(a.dmg) + ' ' + esc(a.type) + '</span>' : '') + '</div>'; });
+    if (c.notes || (m._custom && c.custom.notes)) h += '<p class="note comp-notes">' + esc(c.notes || c.custom.notes) + '</p>';
+    if (!compact) h += '<div class="row comp-btns">' + (m._custom ? '<button class="btn sm" type="button" data-act="compedit" data-i="' + i + '">Editar hoja</button>' : '<button class="btn sm" type="button" data-act="compnick" data-i="' + i + '">Apodo y notas</button><button class="btn sm" type="button" data-act="compfork" data-i="' + i + '">Convertir en hoja editable</button>') + '</div>';
     if (m.actionNote) h += '<p class="note">' + esc(/bonus action/i.test(m.actionNote) ? 'Actúa cuando gastas tu acción adicional para ordenárselo.' : /your action/i.test(m.actionNote) ? 'Actúa cuando gastas tu acción para ordenárselo.' : m.actionNote) + '</p>';
     if (!compact) {
       var body = '<div class="abil comp-abil">' + R.ABS.map(function(k){ return '<div class="ab"><small>' + R.AB[k].toUpperCase() + '</small><div class="medal">' + sgn(R.mod(m[k] || 10)) + '</div><span class="score">' + (m[k] || 10) + '</span></div>'; }).join('') + '</div>';
@@ -816,6 +856,75 @@
     r.comp.push(c); var st = compStats(c); c.hp = st ? st.hpMax : 1;
     save(); closeSheets(); render(false);
   }
+  /* ---------- Editor de la hoja del compañero ---------- */
+  var CE = null, SKILL_ES = {perception:'Percepción', stealth:'Sigilo', athletics:'Atletismo', acrobatics:'Acrobacias', insight:'Perspicacia', survival:'Supervivencia', investigation:'Investigación', arcana:'Arcanos', history:'Historia', deception:'Engaño', intimidation:'Intimidación', persuasion:'Persuasión', performance:'Interpretación'};
+  function blankCustom(){ return {name:'', kind:'', size:'S', ac:13, hpMax:10, pb:'', speed:{walk:30}, abil:{str:10, dex:12, con:12, int:6, wis:12, cha:8}, saves:[], skills:[], senses:'', langs:'', resist:'', immune:'', attacks:[{name:'', bonus:'', ab:'str', dmg:'', type:'', note:''}], traits:'', notes:''}; }
+  function ceAttackRow(a, i){
+    return '<div class="ce-atk" data-row="' + i + '"><input class="field" name="an" value="' + attr(a.name || '') + '" placeholder="Mordisco" aria-label="Nombre del ataque"><input class="field" name="ab2" value="' + attr(a.bonus == null ? '' : a.bonus === 'none' ? '–' : a.bonus) + '" placeholder="auto" aria-label="Bonificador de ataque (vacío: característica + competencia; – si no hay tirada de ataque)"><select class="field" name="aab" aria-label="Característica del ataque">' + ['str','dex','con','int','wis','cha'].map(function(k){ return '<option value="' + k + '"' + ((a.ab || 'str') === k ? ' selected' : '') + '>' + R.AB[k] + '</option>'; }).join('') + '</select><input class="field" name="ad" value="' + attr(a.dmg || '') + '" placeholder="1d6 + 2" aria-label="Daño"><input class="field" name="at" value="' + attr(a.type || '') + '" placeholder="perforante" aria-label="Tipo de daño"><input class="field" name="ano" value="' + attr(a.note || '') + '" placeholder="Nota (alcance, efecto…)" aria-label="Nota del ataque"><button class="icon-btn" type="button" data-act="cedelatk" data-i="' + i + '" aria-label="Quitar ataque"><svg class="ic"><use href="#i-x"/></svg></button></div>';
+  }
+  function openCompEdit(i, mode){
+    var r = rt(cur()), c = i >= 0 ? r.comp[i] : null;
+    CE = {i:i, mode:mode, data: mode === 'nick' ? {n:c.n || '', notes:c.notes || ''} : JSON.parse(JSON.stringify(c && c.custom || blankCustom()))};
+    var d = CE.data, f = $('#ceForm'), h = '';
+    $('#ceTitle').textContent = mode === 'nick' ? 'Apodo y notas' : i >= 0 ? 'Editar a ' + (d.name || 'tu compañero') : 'Nuevo compañero';
+    if (mode === 'nick') {
+      h += '<label class="fl">Apodo<input class="field" name="n" value="' + attr(d.n) + '" placeholder="Haku" autocomplete="off"></label><label class="fl">Notas<textarea class="field" name="notes" rows="4" placeholder="Personalidad, trucos que sabe, de dónde vino…">' + esc(d.notes) + '</textarea></label>';
+    } else {
+      h += '<label class="fl">Nombre<input class="field" name="name" value="' + attr(d.name) + '" placeholder="Haku" autocomplete="off"></label>'
+        + '<div class="two"><label class="fl">Qué es<input class="field" name="kind" value="' + attr(d.kind) + '" placeholder="Dragón feérico" autocomplete="off"></label><label class="fl">Tamaño<select class="field" name="size">' + [['T','Diminuto'],['S','Pequeño'],['M','Mediano'],['L','Grande'],['H','Enorme']].map(function(x){ return '<option value="' + x[0] + '"' + (d.size === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label></div>'
+        + '<div class="three"><label class="fl">CA<input class="field" name="ac" inputmode="numeric" value="' + attr(d.ac) + '"></label><label class="fl">PG máximos<input class="field" name="hpMax" inputmode="numeric" value="' + attr(d.hpMax) + '"></label><label class="fl">Competencia<input class="field" name="pb" inputmode="numeric" value="' + attr(d.pb) + '" placeholder="' + (D ? D.pb : 2) + ' (la tuya)"></label></div>'
+        + '<fieldset class="fl"><legend>Velocidad (pies)</legend><div class="four">' + [['walk','Caminar'],['fly','Volar'],['swim','Nadar'],['climb','Trepar']].map(function(x){ return '<label>' + x[1] + '<input class="field" name="sp_' + x[0] + '" inputmode="numeric" value="' + attr((d.speed || {})[x[0]] || '') + '" placeholder="0"></label>'; }).join('') + '</div></fieldset>'
+        + '<fieldset class="fl"><legend>Características</legend><div class="six">' + R.ABS.map(function(k){ return '<label>' + R.AB[k] + '<input class="field" name="ab_' + k + '" inputmode="numeric" value="' + attr((d.abil || {})[k] || 10) + '"></label>'; }).join('') + '</div></fieldset>'
+        + '<fieldset class="fl"><legend>Salvaciones con competencia</legend><div class="checks">' + R.ABS.map(function(k){ return '<label><input type="checkbox" name="sv" value="' + k + '"' + ((d.saves || []).indexOf(k) >= 0 ? ' checked' : '') + '> ' + R.ABL[k] + '</label>'; }).join('') + '</div></fieldset>'
+        + '<fieldset class="fl"><legend>Habilidades</legend><div class="ce-skills">' + Object.keys(SKILL_ES).map(function(k){ var cur0 = (d.skills || []).filter(function(x){ return x.k === k; })[0]; return '<label>' + SKILL_ES[k] + '<select class="field" name="sk_' + k + '"><option value="0">—</option><option value="1"' + (cur0 && cur0.p === 1 ? ' selected' : '') + '>Competente</option><option value="2"' + (cur0 && cur0.p === 2 ? ' selected' : '') + '>Pericia</option></select></label>'; }).join('') + '</div></fieldset>'
+        + '<div class="two"><label class="fl">Sentidos<input class="field" name="senses" value="' + attr(d.senses) + '" placeholder="visión en la oscuridad 18 m" autocomplete="off"></label><label class="fl">Idiomas<input class="field" name="langs" value="' + attr(d.langs) + '" placeholder="entiende Dracónico" autocomplete="off"></label></div>'
+        + '<div class="two"><label class="fl">Resistencias<input class="field" name="resist" value="' + attr(d.resist) + '" placeholder="fuego" autocomplete="off"></label><label class="fl">Inmunidades<input class="field" name="immune" value="' + attr(d.immune) + '" placeholder="hechizado" autocomplete="off"></label></div>'
+        + '<fieldset class="fl"><legend>Ataques <small class="muted">(bonificador vacío = característica + competencia; pon – si no tira ataque, como un aliento)</small></legend><div id="ceAtks">' + (d.attacks || []).map(ceAttackRow).join('') + '</div><button class="btn sm" type="button" data-act="ceaddatk">Agregar ataque</button></fieldset>'
+        + '<label class="fl">Rasgos y acciones<textarea class="field" name="traits" rows="5" placeholder="Aliento de niebla. Exhala un cono de 4,5 m; salvación de Con CD 12 o queda cegado hasta su siguiente turno.&#10;Vínculo. Si estás a 9 m o menos, puede usar tu reacción para…">' + esc(d.traits) + '</textarea></label>'
+        + '<label class="fl">Notas<textarea class="field" name="notes" rows="3" placeholder="Personalidad, de dónde vino, qué le gusta comer…">' + esc(d.notes) + '</textarea></label>';
+    }
+    h += '<p class="err" id="ceErr" hidden></p><div class="row" style="gap:8px">' + (i >= 0 && mode !== 'nick' ? '' : '') + '<button class="btn" type="button" data-act="closesheet" style="flex:1">Cancelar</button><button class="btn main" type="submit" style="flex:1">' + (i >= 0 ? 'Guardar' : 'Crear compañero') + '</button></div>';
+    f.innerHTML = h; openSheet('compEditSheet');
+  }
+  function ceRead(){
+    var f = $('#ceForm'), v = function(n){ var el = f.elements[n]; return el ? el.value.trim() : ''; }, d = CE.data;
+    if (CE.mode === 'nick') return {n:v('n'), notes:v('notes')};
+    var o = {name:v('name'), kind:v('kind'), size:v('size'), ac:parseInt(v('ac'), 10) || 10, hpMax:parseInt(v('hpMax'), 10) || 1, pb:parseInt(v('pb'), 10) || '', speed:{}, abil:{}, saves:[], skills:[], senses:v('senses'), langs:v('langs'), resist:v('resist'), immune:v('immune'), attacks:[], traits:v('traits'), notes:v('notes')};
+    ['walk','fly','swim','climb'].forEach(function(k){ var n = parseInt(v('sp_' + k), 10); if (n > 0) o.speed[k] = n; });
+    R.ABS.forEach(function(k){ o.abil[k] = Math.max(1, Math.min(30, parseInt(v('ab_' + k), 10) || 10)); });
+    $$('#ceForm input[name="sv"]:checked').forEach(function(x){ o.saves.push(x.value); });
+    Object.keys(SKILL_ES).forEach(function(k){ var p2 = +v('sk_' + k); if (p2) o.skills.push({k:k, p:p2}); });
+    $$('#ceAtks .ce-atk').forEach(function(row){ var q = function(n){ return row.querySelector('[name="' + n + '"]').value.trim(); }; var bonus = q('ab2'); o.attacks.push({name:q('an'), bonus: bonus === '' ? '' : /^[-–—]$|^no/i.test(bonus) ? 'none' : parseInt(bonus, 10) || 0, ab:q('aab'), dmg:q('ad'), type:q('at'), note:q('ano')}); });
+    return o;
+  }
+  $('#ceForm').addEventListener('submit', function(ev){
+    ev.preventDefault();
+    var r = rt(cur()), o = ceRead(), e = $('#ceErr');
+    if (CE.mode === 'nick') { var c0 = r.comp[CE.i]; c0.n = o.n || undefined; c0.notes = o.notes || undefined; closeSheets(); save(); render(false); return; }
+    if (!o.name) { e.textContent = 'Ponle nombre a tu compañero.'; e.hidden = false; return; }
+    var bad = o.attacks.filter(function(a){ return a.name && a.dmg && !/^\s*\d+\s*d\s*\d+(\s*[+-]\s*\d+)*\s*$/i.test(a.dmg) && !/^\d+$/.test(a.dmg); })[0];
+    if (bad) { e.textContent = 'Escribe el daño de "' + bad.name + '" como dados, por ejemplo 1d6 + 2.'; e.hidden = false; return; }
+    o.attacks = o.attacks.filter(function(a){ return a.name; });
+    if (CE.i >= 0) { var c = r.comp[CE.i]; c.custom = o; if (c.hp == null || c.hp > o.hpMax) c.hp = o.hpMax; }
+    else { r.comp = r.comp || []; r.comp.push({id:'k' + Date.now().toString(36), custom:o, hp:o.hpMax}); }
+    closeSheets(); save(); render(false);
+  });
+  /* Pasa un compañero de la biblioteca a hoja editable con sus números de ahora */
+  function compFork(i){
+    var r = rt(cur()), c = r.comp[i], st = compStats(c); if (!st) return;
+    var m = st.m, cu = blankCustom(), tmp = document.createElement('div');
+    cu.name = c.n || m.name; cu.kind = CTYPE[typeof m.type === 'string' ? m.type : m.type && m.type.type] || ''; cu.size = (m.size || ['S'])[0]; cu.ac = st.ac; cu.hpMax = st.hpMax;
+    cu.speed = {}; ['walk','fly','swim','climb'].forEach(function(k){ var x = (m.speed || {})[k]; if (x) cu.speed[k] = typeof x === 'object' ? x.number : x; });
+    R.ABS.forEach(function(k){ cu.abil[k] = m[k] || 10; });
+    cu.saves = Object.keys(st.save).filter(function(k){ return st.save[k] > R.mod(m[k] || 10); });
+    cu.skills = Object.keys(st.skill).filter(function(k){ return SKILL_ES[k]; }).map(function(k){ var extra = st.skill[k] - R.mod(m[SKILL_AB[k]] || 10); return {k:k, p: extra >= 2 * D.pb ? 2 : 1}; });
+    cu.senses = (m.senses || []).join(', '); cu.langs = (m.languages || []).join(', ');
+    cu.attacks = st.attacks.map(function(a){ return {name:a.name, bonus:a.atk, ab:'str', dmg:a.dmg, type:a.type, note:''}; });
+    ['trait','action','bonus','reaction'].forEach(function(g){ (st.sub[g] || []).forEach(function(x){ tmp.innerHTML = Render5e.entries(x.entries || []); cu.traits += (cu.traits ? '\n' : '') + x.name + '. ' + tmp.textContent.replace(/\s+/g, ' ').trim(); }); });
+    cu.notes = c.notes || ''; cu.pb = '';
+    c.custom = cu; delete c.ref; delete c.sl; delete c.v; delete c.n; delete c.notes; c.hp = Math.min(c.hp == null ? cu.hpMax : c.hp, cu.hpMax);
+    save(); render(false); openCompEdit(i, 'sheet');
+  }
   var compQ = '';
   function openComp(){
     compQ = ''; renderCompList(); openSheet('compSheet');
@@ -823,7 +932,7 @@
   }
   function renderCompList(){
     var q = N(compQ), list = compCandidates().filter(function(x){ return !q || N(x.m.name).indexOf(q) >= 0; }), lib = (Lib5e.get() && Lib5e.get().monster || []).length;
-    $('#compList').innerHTML = (lib ? '' : '<p class="note">Tu biblioteca no trae criaturas todavía: solo aparece la ficha integrada del Homúnculo. Vuelve a crear el paquete con el script nuevo para tener defensores, familiares e invocaciones.</p>')
+    $('#compList').innerHTML = '<div class="prow comp-blank"><div class="top"><button type="button" class="sel" data-act="compblank"><svg class="ic" style="width:26px;height:26px;flex:none"><use href="#i-quill"/></svg><span class="nm"><b>Hoja en blanco</b><small>Tu propio compañero: mascota, dragoncito, montura o homebrew. Escribes sus números.</small></span></button></div></div>' + (lib ? '' : '<p class="note">Tu biblioteca no trae criaturas todavía: solo aparece la ficha integrada del Homúnculo. Vuelve a crear el paquete con el script nuevo para tener defensores, familiares e invocaciones.</p>')
       + list.slice(0, 120).map(function(x){ var m = x.m; return '<div class="prow"><div class="top"><button type="button" class="sel" data-act="compadd" data-ref="' + attr(x.ref) + '"><span class="nm"><b>' + esc(m.name) + '</b><small>' + esc(x.why + ' · ' + R.srcName(m.source)) + (x.score === 0 ? ' <span class="flag taken">Sugerido</span>' : '') + '</small></span></button></div></div>'; }).join('')
       + (list.length > 120 ? '<p class="note">Se muestran 120 de ' + list.length + '. Escribe para afinar.</p>' : '') + (!list.length ? '<p class="empty-state">Nada coincide con la búsqueda.</p>' : '');
   }
@@ -1705,6 +1814,12 @@
       case 'compnew': openComp(); break;
       case 'compadd': compAdd(b.dataset.ref); break;
       case 'compdel': r.comp.splice(+b.dataset.i, 1); save(); render(false); break;
+      case 'compblank': closeSheets(); openCompEdit(-1, 'sheet'); break;
+      case 'compedit': openCompEdit(+b.dataset.i, 'sheet'); break;
+      case 'compnick': openCompEdit(+b.dataset.i, 'nick'); break;
+      case 'compfork': compFork(+b.dataset.i); break;
+      case 'ceaddatk': var box2 = $('#ceAtks'); if (box2.children.length < 8) box2.insertAdjacentHTML('beforeend', ceAttackRow({}, box2.children.length)); break;
+      case 'cedelatk': var rw = b.closest('.ce-atk'); if (rw) rw.remove(); break;
       case 'comphp': var cp = r.comp[+b.dataset.i], cst = compStats(cp); if (cst) { cp.hp = b.dataset.v === 'full' ? cst.hpMax : Math.max(0, Math.min(cst.hpMax, (cp.hp == null ? cst.hpMax : cp.hp) + (+b.dataset.v))); save(); render(false); } break;
       case 'crdown': var Lc = CD.level; if (Lc <= 1) break;
         CD.choices.filter(function(x){ return x.lv === Lc; }).forEach(function(x){ delete CR.C.ch[x.id]; }); delete CR.C.ch['hp:' + Lc];
