@@ -13,6 +13,11 @@
 - [ ] Mapa simple o lista de distancias (opcional).
 - [ ] Persistencia de salas (Redis o SQLite) si se usan sesiones de varios días.
 
+- [x] Mesa de juego: chat, tiradas compartidas, imágenes, susurros, pizarra, tablero del DM y guardado de la sesión.
+- [x] Hojas propias de compañeros.
+- [ ] Dados virtuales opcionales en la mesa (para quien no traiga dados).
+- [ ] Mapa con fichas que se mueven en la pizarra.
+
 ## Diario
 
 - [x] PWA instalable y sin conexión (manifest + service worker).

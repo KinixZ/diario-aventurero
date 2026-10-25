@@ -24,9 +24,10 @@ El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abra
 - **Mochila tipo Resident Evil 4** con contenedores (mochila, Bag of Holding, sacos, carcajes…) y equipo por ranura.
 - **Homebrew**: armas, armaduras, escudos, objetos mágicos (bonos a CA, salvaciones, conjuros y armas; características fijas o sumadas; resistencias; cargas), consumibles y objetos sueltos. Los objetos mágicos de 5etools también suman sus bonos.
 - **12 estilos** de color (claros y de páginas oscuras); el modo combate toma los colores del estilo.
-- **Compañeros**: homúnculo, defensor de acero, familiares e invocaciones con sus números calculados.
+- **Compañeros**: homúnculo, defensor de acero, compañeros de Beast Master y Drakewarden, familiares e invocaciones con sus números calculados (formas, nivel del conjuro, tu competencia y tus modificadores). También **hojas propias** para mascotas y compañeros homebrew, o para convertir uno de la biblioteca en hoja editable.
 - **Traducción automática** de textos (traductor del navegador o Claude cuando corre como artefacto).
 - **Sala de combate**: código de 4 letras, iniciativa ordenada, turnos y rondas (aparecen cuando el DM empieza el combate), daño, curación, PG temporales y condiciones entre jugadores.
+- **Mesa de juego**: el DM abre la mesa y todos entran con el código. Pestañas de **Chat** (notas de la sesión, tiradas compartidas, imágenes del DM y susurros), **Pizarra** (dibujo con el dedo, colores, borrador, hojas), **Tablero** (misión, PNJ, lugares y pistas fijados por el DM) y **Combate**. Al terminar, la sesión se guarda en las Notas de cada quien y como archivo descargable con el chat y los dibujos.
 - **Vista del DM**: sin hoja propia; crea enemigos y lleva su vida, CA, iniciativa y estados (ocultos o visibles para el grupo). Sus acciones las maneja fuera de la app.
 
 ## Traducción en el teléfono

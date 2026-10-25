@@ -962,6 +962,7 @@
     save(); render(false);
   }
   window.Diario = {cur:cur, D:function(){ return D; }, rt:rt, applyToMe:applyToMe,
+    addNote:function(text){ var C = cur(); if (!C) return false; var r = rt(C); r.notes = (r.notes ? r.notes.replace(/\s+$/, '') + '\n\n' : '') + text; save(); if ($('#notes')) $('#notes').value = r.notes; return true; },
     newTurn:function(){ var C = cur(); if (!C) return; rt(C).econ = {a:false,b:false,r:false,m:false}; save(); if (!$('#combat').hidden) renderCombat(); },
     compSummaries:function(){ var C = cur(); if (!C || !D || !D.ok) return []; return (rt(C).comp || []).map(function(c){ var st = compStats(c); return st ? {name:c.n || st.m.name, ac:st.ac, hp:c.hp == null ? st.hpMax : c.hp, hpMax:st.hpMax} : null; }).filter(Boolean); }};
 
@@ -1788,7 +1789,8 @@
       case 'moveto': moveTo(b.dataset.id); break;
       case 'dropno': pendingDrop = null; renderInfo(); break;
       case 'itemrule': var ci = itemById(sel); if (ci && ci.ref) openRef(ci.ref); break;
-      case 'combat': closeSheets(); $('#combat').hidden = false; renderCombat(); break;
+      case 'combat': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('combate'); break;
+      case 'mesa': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('chat'); break;
       case 'endcombat': $('#combat').hidden = true; break;
       case 'hp': r.hp = Math.max(0, Math.min(D.hp.max, r.hp + (+b.dataset.v))); save(); renderCombat(); break;
       case 'econ': r.econ[b.dataset.k] = !r.econ[b.dataset.k]; save(); renderCombat(); break;

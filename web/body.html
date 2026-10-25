@@ -13,6 +13,7 @@
         <h1 id="hName">Diario del Aventurero</h1>
         <p id="hSub"></p>
       </div>
+      <button class="icon-btn" type="button" data-act="mesa" aria-label="Abrir la mesa de juego" title="Mesa: chat, pizarra y tablero"><svg class="ic"><use href="#i-chat"/></svg></button>
       <button class="icon-btn war" type="button" data-act="combat" aria-label="Entrar en combate" title="Entrar en combate"><svg class="ic"><use href="#i-swords"/></svg></button>
       <button class="icon-btn" type="button" data-act="settings" aria-label="Ajustes del diario" title="Ajustes"><svg class="ic"><use href="#i-gear"/></svg></button>
       <button class="icon-btn" type="button" data-act="close" aria-label="Cerrar diario" title="Cerrar diario"><svg class="ic"><use href="#i-book"/></svg></button>
@@ -48,6 +49,7 @@
       <div class="panel" data-panel="notas" hidden>
         <label for="notes" class="label">diario de sesión</label>
         <textarea id="notes" class="notes" placeholder="Escribe aquí lo que pasó en la sesión: nombres, pistas y promesas rotas…"></textarea>
+        <div class="card ses-list" id="sesList"></div>
       </div>
       <div class="panel" data-panel="grimorio" id="grim" hidden></div>
     </div>
@@ -206,14 +208,23 @@
   <nav class="ribbons" id="ribbons" aria-label="Separadores del diario"></nav>
 
   <!-- MODO COMBATE -->
-  <section class="combat" id="combat" hidden aria-label="Modo combate">
+  <section class="combat" id="combat" hidden aria-label="Mesa de juego" data-tab="combate">
     <div class="combat-h">
-      <svg class="ic" style="color:var(--gold-hi)"><use href="#i-swords"/></svg>
-      <h2>Combate</h2>
+      <svg class="ic" style="color:var(--gold-hi)"><use href="#i-d20"/></svg>
+      <h2>Mesa</h2>
       <span class="round" id="roundBox"><span id="roundTxt" hidden>Ronda <b id="round">1</b><small id="turnName"></small></span></span>
       <button class="icon-btn" type="button" data-act="endcombat" aria-label="Salir del combate" style="background:transparent;color:var(--on-dark);border-color:var(--gold-hi)"><svg class="ic"><use href="#i-x"/></svg></button>
     </div>
+    <nav class="mesa-tabs" id="mesaTabs" role="tablist" aria-label="Secciones de la mesa">
+      <button type="button" role="tab" data-act="mesatab" data-v="chat" aria-selected="false"><svg class="ic"><use href="#i-chat"/></svg><span>Chat</span><i class="badge" hidden></i></button>
+      <button type="button" role="tab" data-act="mesatab" data-v="pizarra" aria-selected="false"><svg class="ic"><use href="#i-brush"/></svg><span>Pizarra</span></button>
+      <button type="button" role="tab" data-act="mesatab" data-v="tablero" aria-selected="false"><svg class="ic"><use href="#i-pin"/></svg><span>Tablero</span></button>
+      <button type="button" role="tab" data-act="mesatab" data-v="combate" aria-selected="true"><svg class="ic"><use href="#i-swords"/></svg><span>Combate</span></button>
+    </nav>
     <div class="sala-toast" id="salaToast" role="status" aria-live="polite" hidden></div>
+    <div class="mesa-p" id="mesaChat"></div>
+    <div class="mesa-p" id="mesaDraw"></div>
+    <div class="mesa-p" id="mesaBoard"></div>
     <div class="combat-b">
       <div class="combat-col" id="cLeft"></div>
       <div class="combat-col" id="cRight"></div>

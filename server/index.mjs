@@ -12,7 +12,7 @@ import { createTranslator } from './translate.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const DIST = normalize(join(here, '..', 'web', 'dist'));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon' };
-const MAX_MSG = 16 * 1024;
+const MAX_MSG = 512 * 1024; // alcanza para reabrir una mesa con su chat y su pizarra
 
 export function startServer({ port = Number(process.env.PORT) || 8080, host = process.env.HOST || '0.0.0.0', quiet = false, env = process.env } = {}) {
   const rooms = new Rooms();
@@ -24,6 +24,7 @@ export function startServer({ port = Number(process.env.PORT) || 8080, host = pr
     const url = new URL(req.url, 'http://x');
     if (url.pathname === '/health') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: true, rooms: rooms.rooms.size, translate: tr.status().enabled })); return; }
     if (url.pathname === '/api/translate') { await handleTranslate(req, res); return; }
+    if (url.pathname.startsWith('/api/img')) { await handleImage(req, res, url); return; }
     let p = decodeURIComponent(url.pathname); if (p.endsWith('/')) p += 'index.html';
     const file = normalize(join(DIST, p));
     if (!file.startsWith(DIST)) { res.writeHead(403); res.end(); return; }
@@ -37,6 +38,24 @@ export function startServer({ port = Number(process.env.PORT) || 8080, host = pr
   });
 
   function json(res, code, obj) { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); }
+  /* Imágenes de la mesa: el DM (o cualquiera) sube una y el chat solo lleva su id */
+  async function handleImage(req, res, url) {
+    if (req.method === 'POST') {
+      const room = rooms.get(String(url.searchParams.get('code') || '').toUpperCase()), token = url.searchParams.get('token') || '';
+      const me = room && [...room.members.values()].find((m) => m.token === token);
+      if (!room || !me) { json(res, 403, { code: 'no_room', msg: 'No estás en esa sala.' }); return; }
+      const chunks = []; let size = 0;
+      for await (const c of req) { size += c.length; if (size > 1700 * 1024) { json(res, 413, { code: 'too_large', msg: 'La imagen es demasiado grande.' }); return; } chunks.push(c); }
+      try { const im = rooms.addImage(room, me.id, Buffer.concat(chunks), String(req.headers['content-type'] || '').split(';')[0]); json(res, 200, { id: im.id }); }
+      catch (e) { json(res, 400, { code: e.code || 'error', msg: e.message }); }
+      return;
+    }
+    const m = /^\/api\/img\/([A-Z]{4})\/(i[\w-]+)$/.exec(url.pathname);
+    const im = m && rooms.get(m[1]) && rooms.get(m[1]).images.get(m[2]);
+    if (!im) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('Esa imagen ya no está en el servidor.'); return; }
+    res.writeHead(200, { 'content-type': im.type, 'cache-control': 'private, max-age=86400' }); res.end(im.data);
+  }
+
   async function handleTranslate(req, res) {
     if (req.method === 'GET') { json(res, 200, tr.status()); return; }
     if (req.method !== 'POST') { json(res, 405, { code: 'bad_request' }); return; }
@@ -72,16 +91,17 @@ export function startServer({ port = Number(process.env.PORT) || 8080, host = pr
     ws.on('message', (raw) => {
       // límite sencillo: 30 mensajes cada 5 segundos
       if (Date.now() - windowStart > 5000) { windowStart = Date.now(); count = 0; }
-      if (++count > 30) { send(ws, { t: 'error', code: 'rate', msg: 'Vas muy rápido; espera un momento.' }); return; }
+      if (++count > 80) { send(ws, { t: 'error', code: 'rate', msg: 'Vas muy rápido; espera un momento.' }); return; }
       let msg; try { msg = JSON.parse(raw); } catch { return; }
       try {
         if (msg.t === 'create' || msg.t === 'join') {
           if (room && me) { rooms.leave(room, me.id, false); sockets.delete(me.id); broadcast(room); }
-          const r = msg.t === 'create' ? rooms.create(msg.name, msg.char, !!msg.dm) : rooms.join(msg.code, msg.name, msg.char, msg.token, !!msg.dm);
+          const r = msg.t === 'create' ? rooms.create(msg.name, msg.char, !!msg.dm, msg.restore) : rooms.join(msg.code, msg.name, msg.char, msg.token, !!msg.dm);
           room = r.room; me = r.member;
           const old = sockets.get(me.id); if (old && old !== ws) old.close(4000, 'otra conexión');
           sockets.set(me.id, ws);
-          send(ws, { t: 'joined', code: room.code, you: me.id, token: me.token, role: me.role, rejoined: !!r.rejoined });
+          send(ws, { t: 'joined', code: room.code, you: me.id, token: me.token, role: me.role, rejoined: !!r.rejoined, restored: !!r.restored });
+          send(ws, rooms.mesaInit(room, me.id));
           broadcast(room); return;
         }
         if (!room || !me) { send(ws, { t: 'error', code: 'no_room', msg: 'Primero entra a una sala.' }); return; }
@@ -89,7 +109,7 @@ export function startServer({ port = Number(process.env.PORT) || 8080, host = pr
         if (msg.t === 'ping') { send(ws, { t: 'pong' }); return; }
         const notes = rooms.act(room, me.id, msg);
         for (const n of notes) send(sockets.get(n.to), n.msg);
-        broadcast(room);
+        if (!notes.quiet) broadcast(room);
       } catch (e) {
         send(ws, { t: 'error', code: e.code || 'error', msg: e.code ? e.message : 'Algo salió mal en el servidor.' });
         if (!e.code && !quiet) console.error(e);

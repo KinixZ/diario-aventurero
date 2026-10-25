@@ -20,6 +20,24 @@ WebSocket en `/ws`. Todos los mensajes son JSON con un campo `t`.
 | `apply` | `targets[]`, `kind`, `amount?`, `cond?`, `note?` | jugadores; el DM solo sobre enemigos | `kind`: `damage`, `heal`, `temp`, `cond+`, `cond-`. El DM no modifica la hoja de los jugadores. |
 | `leave` | — | cualquiera | Sale de la sala. |
 
+### Mesa (chat, pizarra, tablero, sesión)
+
+| `t` | Campos | Quién | Qué hace |
+|---|---|---|---|
+| `create` | … `restore?` | DM | Con `restore` (copia local: `code`, `title`, `started`, `chat`, `board`, `strokes`, `pages`) reabre la mesa con el mismo código si el servidor se reinició. |
+| `chat.send` | `text`, `to?` | cualquiera | Mensaje. Con `to` es un susurro: solo entre un jugador y el DM. |
+| `chat.roll` | `label`, `total`, `nat?`, `adv?`, `to?` | cualquiera | Tirada compartida (dados físicos): qué se tiró, el total y lo que salió en el d20. |
+| `chat.img` | `img`, `caption?`, `to?` | cualquiera | Imagen ya subida por HTTP (`POST /api/img?code=&token=`, JPG/PNG/WebP/GIF ≤ 1,6 MB). Se ve en `GET /api/img/CODE/ID`. |
+| `board.add` / `board.edit` | `item: {cat, title, text}`, `id?`, `img?` | DM | Nota del tablero. `cat`: `mision`, `pnj`, `lugar`, `pista`, `objeto`, `otro`. |
+| `board.done` / `board.del` | `id` | DM | Marca como hecha o borra. |
+| `draw.add` | `stroke: {color, w, pts, erase?}` | cualquiera | Trazo de la pizarra. `pts` es `[x, y, x, y…]` normalizado al ancho (y llega a 1,33). |
+| `draw.undo` | — | cualquiera | Quita tu último trazo. |
+| `draw.clear` | — | DM | Hoja nueva: la actual se archiva en `pages`. |
+| `session.title` | `title` | DM | Título de la sesión. |
+| `session.end` | — | DM | Termina la sesión: cada quien recibe `ended` con su resumen. |
+
+Del servidor: `mesa.init` (al entrar: chat visible para ti y trazos actuales), `chat` (un mensaje nuevo, solo a quien puede verlo), `draw`, `draw.undo`, `draw.clear`, `ended` (`snapshot` con título, horas, chat visible, tablero, hojas de la pizarra y participantes). El estado (`state`) incluye además `board`, `session` y `pages`.
+
 `char` (resumen del personaje):
 
 ```json

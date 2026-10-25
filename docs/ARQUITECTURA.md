@@ -12,7 +12,8 @@ Los scripts se cargan en este orden y cada uno expone un objeto global:
 | `render.js` | `Render5e` | `Lib5e` | Convierte `entries` y etiquetas `{@spell …}` en HTML; los enlaces son `a.ref[data-ref="tipo\|nombre\|libro"]`. |
 | `rules.js` | `Rules5e` | `Lib5e` | `derive(C)` toma un personaje guardado y devuelve todo lo calculado (`D`) más la lista de elecciones pendientes. Sin DOM: se puede probar en Node. |
 | `app.js` | `Diario` | los anteriores | El libro: hoja, conjuros, mochila, rasgos, notas, grimorio, creador, compañeros, traducción, modo combate. |
-| `sala.js` | `Sala` | `Diario` | Cliente WebSocket de la sala de combate. |
+| `sala.js` | `Sala` | `Diario` | Cliente WebSocket de la sala (conexión, reconexión, combate). Expone `Sala.on/send` para otros módulos. |
+| `mesa.js` | `Mesa` | `Sala` | Pestañas de la mesa: chat, tiradas, imágenes, susurros, pizarra, tablero y guardado de la sesión (Notas + archivo en IndexedDB). |
 
 ## El personaje
 
@@ -46,9 +47,15 @@ Las elecciones de una clase de multiclase llevan sufijo `@clase` (`sub@warlock`,
                   rooms.mjs  (estado en memoria)
 ```
 
-- El servidor guarda las salas en memoria; no hay base de datos. Una sala vive mientras alguien la use (hasta 8 horas; 30 minutos si se quedó vacía).
+- El servidor guarda las salas en memoria; no hay base de datos. Una sala vive mientras alguien la use (hasta 10 horas; 30 minutos si se quedó vacía; 20 minutos después de terminar la sesión).
 - **La hoja de cada jugador manda sobre sus propios PG.** Cuando alguien te aplica daño, el servidor lo refleja en tu resumen y te reenvía `applied`; tu diario lo aplica con las mismas reglas que la hoja (temporales primero, CD de concentración) y manda tu resumen nuevo con `char`.
 - Los PNJ los guarda el servidor; los jugadores ven su estado ("herido", "malherido"), no sus números. El DM puede ocultarlos o esconder los PG del grupo.
 - Reconexión: el servidor da un `token` al entrar; con él recuperas tu lugar si se cae la señal. El cliente reintenta solo.
 
 El detalle de los mensajes está en [PROTOCOLO.md](PROTOCOLO.md).
+
+## La mesa
+
+La mesa es la misma sala del combate con más cosas: chat, pizarra y tablero. Para no mandar todo en cada cambio, el chat y la pizarra viajan como eventos sueltos (`chat`, `draw`) y el tablero va dentro del estado. Las imágenes se suben por HTTP y el chat solo lleva su id.
+
+Cada teléfono guarda una copia de la mesa en `localStorage['diario-mesa']`. Si el servidor se reinicia (Render gratis se duerme), el DM la reabre automáticamente con esa copia y el mismo código; los jugadores reintentan solos durante dos minutos. Al terminar la sesión, cada quien recibe su resumen (sin los susurros ajenos), lo agrega a las Notas de su personaje y guarda un HTML con el chat, el tablero, las imágenes y las hojas de la pizarra en IndexedDB (`ses:<id>`), descargable desde la pestaña Notas.

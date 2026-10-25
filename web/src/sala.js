@@ -7,6 +7,9 @@ var Sala = (function(){
   var KEY = 'diario-sala';
   var COND = {blinded:'Cegado', charmed:'Hechizado', deafened:'Ensordecido', exhaustion:'Agotamiento', frightened:'Asustado', grappled:'Agarrado', incapacitated:'Incapacitado', invisible:'Invisible', paralyzed:'Paralizado', petrified:'Petrificado', poisoned:'Envenenado', prone:'Derribado', restrained:'Apresado', stunned:'Aturdido', unconscious:'Inconsciente', concentration:'Concentración'};
   var st = {}; try { st = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch(e){ st = {}; }
+  var hooks = {}, retriesNoRoom = 0;
+  function on(t, fn){ (hooks[t] = hooks[t] || []).push(fn); }
+  function emit(t, m){ (hooks[t] || []).forEach(function(fn){ try { fn(m); } catch(e){ if (window.console) console.warn(e); } }); }
   var ws = null, room = null, status = 'off', lastErr = '', sel = {}, retry = 0, retryT = null, manual = false, toastT = null, lastSent = '', syncT = null, box = null, npcOpen = false;
 
   function store(){ try { localStorage.setItem(KEY, JSON.stringify(st)); } catch(e){} }
@@ -49,11 +52,21 @@ var Sala = (function(){
   function send(m){ if (ws && ws.readyState === 1) { ws.send(JSON.stringify(m)); return true; } lastErr = 'Sin conexión con la sala.'; draw(); return false; }
 
   function onMsg(m){
-    if (m.t === 'joined') { st.code = m.code; st.token = m.token; st.role = m.role; store(); status = 'on'; lastErr = ''; lastSent = ''; if (m.role === 'dm') { /* el DM no manda hoja */ } else sync(true); }
-    else if (m.t === 'state') { room = m.room; status = 'on'; Object.keys(sel).forEach(function(k){ if (!exists(k)) delete sel[k]; }); }
+    if (m.t === 'joined') { st.code = m.code; st.token = m.token; st.role = m.role; store(); status = 'on'; lastErr = ''; lastSent = ''; retriesNoRoom = 0; if (m.restored) toast('Mesa reabierta con tu copia: los demás vuelven a entrar solos.'); if (m.role !== 'dm') sync(true); emit('joined', m); }
+    else if (m.t === 'state') { room = m.room; status = 'on'; Object.keys(sel).forEach(function(k){ if (!exists(k)) delete sel[k]; }); emit('state', m.room); }
     else if (m.t === 'applied') { if (window.Diario) Diario.applyToMe(m); toast(appliedText(m)); }
     else if (m.t === 'yourturn') { toast('¡Es tu turno! Ronda ' + m.round); if (window.Diario && Diario.newTurn) Diario.newTurn(); try { if (navigator.vibrate) navigator.vibrate([120, 60, 120]); } catch(e){} }
-    else if (m.t === 'error') { lastErr = m.msg || 'Error'; if (m.code === 'no_room' || m.code === 'not_member') { st.code = null; st.token = null; store(); room = null; manual = true; try { ws.close(); } catch(e){} status = 'off'; } }
+    else if (m.t === 'error') {
+      lastErr = m.msg || 'Error';
+      if (m.code === 'no_room' || m.code === 'not_member') {
+        /* El servidor pudo reiniciarse: el DM reabre con su copia local; los jugadores esperan y reintentan */
+        var snap = st.role === 'dm' && st.code && window.Mesa ? Mesa.restoreSnapshot(st.code) : null;
+        if (snap) { lastErr = 'El servidor se reinició; reabriendo la mesa…'; connect({t:'create', name:'DM', char:null, dm:true, restore:snap}); return; }
+        if (st.role !== 'dm' && st.code && retriesNoRoom < 24) { retriesNoRoom++; lastErr = 'Esperando a que el DM reabra la mesa ' + st.code + '…'; manual = true; try { ws.close(); } catch(e){} status = 'connecting'; clearTimeout(retryT); retryT = setTimeout(rejoin, 5000); draw(); return; }
+        st.code = null; st.token = null; store(); room = null; manual = true; try { ws.close(); } catch(e){} status = 'off'; emit('left');
+      }
+    }
+    else emit(m.t, m);
     draw();
   }
   function exists(id){ return room && (room.members.some(function(x){ return x.id === id; }) || room.npcs.some(function(x){ return x.id === id; })); }
@@ -87,12 +100,12 @@ var Sala = (function(){
   }
   function nameOf(id){ var m = room.members.filter(function(x){ return x.id === id; })[0]; if (m) return m.char ? m.char.name : m.name; var n = room.npcs.filter(function(x){ return x.id === id; })[0]; return n ? n.name : ''; }
   function lobbyHtml(){
-    var h = '<div class="card sala"><div class="row"><span class="label">sala de combate</span>' + (status === 'connecting' ? '<span class="muted" style="font-size:14px">Conectando…</span>' : '') + '</div>';
+    var h = '<div class="card sala"><div class="row"><span class="label">mesa de juego</span>' + (status === 'connecting' ? '<span class="muted" style="font-size:14px">Conectando…</span>' : '') + '</div>';
     if (!available()) h += '<p class="note">Para jugar en grupo abre el diario desde el servidor del proyecto o escribe su dirección en Ajustes → Salas de combate.</p>';
     else {
-      h += '<p class="note">Un jugador o el DM crea la sala y comparte el código de 4 letras; los demás entran con él. Cada quien ve los PG, la CA y el turno de todos. Las rondas empiezan cuando el DM inicia el combate.</p>'
+      h += '<p class="note">El DM abre la mesa y comparte el código de 4 letras; los demás entran con él. Adentro hay chat de la sesión, pizarra para dibujar, tablero de notas y combate.</p>'
         + '<div class="sala-join"><input class="field" id="salaCode" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="CÓDIGO" aria-label="Código de la sala" value="' + attr(st.code || '') + '"><button class="btn main" type="button" data-act="salajoin">Entrar</button></div>'
-        + '<div class="row" style="gap:8px;margin-top:8px"><button class="btn" type="button" data-act="salacreate" style="flex:1">Crear sala</button><label class="toggle" style="flex:1"><input type="checkbox" id="salaDm"' + (st.role === 'dm' ? ' checked' : '') + '> Soy el DM</label></div><p class="note" style="font-size:14px">Como DM no necesitas hoja: agregas enemigos, llevas su vida y sus estados, y pasas los turnos.</p>';
+        + '<div class="row" style="gap:8px;margin-top:8px"><button class="btn" type="button" data-act="salacreate" style="flex:1">Abrir mesa</button><label class="toggle" style="flex:1"><input type="checkbox" id="salaDm"' + (st.role === 'dm' ? ' checked' : '') + '> Soy el DM</label></div><p class="note" style="font-size:14px">Como DM no necesitas hoja: llevas el tablero, los enemigos y los turnos, y al final cierras la sesión para que se guarde en el diario de todos.</p>';
     }
     if (lastErr) h += '<p class="err">' + esc(lastErr) + '</p>';
     return h + '</div>';
@@ -140,10 +153,11 @@ var Sala = (function(){
   /* ---------- Eventos ---------- */
   document.addEventListener('click', function(ev){
     var b = ev.target.closest && ev.target.closest('[data-act]'); if (!b || b.dataset.act.indexOf('sala') !== 0) return;
-    var a = b.dataset.act, s = summary();
-    if (a === 'salacreate') { var dm = !!(document.getElementById('salaDm') || {}).checked; st.role = dm ? 'dm' : 'player'; st.token = null; connect({t:'create', name: dm ? 'DM' : s ? s.name : 'Jugador', char: dm ? null : s, dm: dm}); }
-    else if (a === 'salajoin') { var code = String((document.getElementById('salaCode') || {}).value || '').toUpperCase().replace(/[^A-Z]/g, ''); if (code.length !== 4) { lastErr = 'El código tiene 4 letras.'; draw(); return; } var dm2 = !!(document.getElementById('salaDm') || {}).checked; if (code !== st.code) st.token = null; st.code = code; st.role = dm2 ? 'dm' : 'player'; store(); connect({t:'join', code: code, token: st.token, name: dm2 ? 'DM' : s ? s.name : 'Jugador', char: dm2 ? null : s, dm: dm2}); }
-    else if (a === 'salaleave') { send({t:'leave'}); manual = true; st.code = null; st.token = null; store(); room = null; sel = {}; try { ws.close(); } catch(e){} status = 'off'; draw(); }
+    var a = b.dataset.act, s = summary(), card = b.closest('.sala') || document;
+    var q = function(id){ return card.querySelector('#' + id) || document.getElementById(id); };
+    if (a === 'salacreate') { var dm = !!(q('salaDm') || {}).checked; st.role = dm ? 'dm' : 'player'; st.token = null; connect({t:'create', name: dm ? 'DM' : s ? s.name : 'Jugador', char: dm ? null : s, dm: dm}); }
+    else if (a === 'salajoin') { var code = String((q('salaCode') || {}).value || '').toUpperCase().replace(/[^A-Z]/g, ''); if (code.length !== 4) { lastErr = 'El código tiene 4 letras.'; draw(); return; } var dm2 = !!(q('salaDm') || {}).checked; if (code !== st.code) st.token = null; st.code = code; st.role = dm2 ? 'dm' : 'player'; store(); connect({t:'join', code: code, token: st.token, name: dm2 ? 'DM' : s ? s.name : 'Jugador', char: dm2 ? null : s, dm: dm2}); }
+    else if (a === 'salaleave') { send({t:'leave'}); manual = true; st.code = null; st.token = null; store(); room = null; sel = {}; try { ws.close(); } catch(e){} status = 'off'; emit('left'); draw(); }
     else if (a === 'salashare') { var txt = 'Únete a la sala ' + room.code + ' del Diario del Aventurero'; if (navigator.share) navigator.share({title:'Sala ' + room.code, text: txt, url: location.href.split('#')[0]}).catch(function(){}); else if (navigator.clipboard) navigator.clipboard.writeText(room.code).then(function(){ toast('Código copiado: ' + room.code); }, function(){}); }
     else if (a === 'salasel') { var id = b.dataset.id; if (sel[id]) delete sel[id]; else sel[id] = 1; draw(); }
     else if (a === 'salaclear') { sel = {}; draw(); }
@@ -188,5 +202,7 @@ var Sala = (function(){
   /* Al abrir el diario, si estabas en una sala, vuelve a entrar sola */
   function resume(){ if (st.code && st.token && available() && status === 'off') rejoin(); }
 
-  return {mount:mount, sync:sync, settings:settings, resume:resume, status:function(){ return status; }, room:function(){ return room; }};
+  /* Dirección HTTP del mismo servidor (para subir y ver imágenes) */
+  function httpBase(){ var u = serverUrl(); return u ? u.replace(/^ws/, 'http').replace(/\/ws$/, '') : ''; }
+  return {mount:mount, sync:sync, settings:settings, resume:resume, status:function(){ return status; }, room:function(){ return room; }, on:on, send:send, toast:toast, httpBase:httpBase, code:function(){ return st.code; }, token:function(){ return st.token; }, role:function(){ return st.role; }, redraw:function(){ draw(); }};
 })();

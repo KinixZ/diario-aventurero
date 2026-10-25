@@ -74,7 +74,7 @@ test('lo que ve un jugador: sin PNJ ocultos ni PG exactos de enemigos', () => {
 test('limpia salas viejas', () => {
   let t = 0; const R = new Rooms(() => t);
   const { room } = R.create('DM', null, true);
-  t = 9 * 3600 * 1000; R.sweep();
+  t = 11 * 3600 * 1000; R.sweep();
   assert.equal(R.get(room.code), undefined);
 });
 

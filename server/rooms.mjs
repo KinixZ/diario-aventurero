@@ -16,7 +16,11 @@ const MAX_ROOMS = 500;
 const MAX_MEMBERS = 12;
 const MAX_NPCS = 40;
 const LOG_LEN = 60;
-export const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
+export const ROOM_TTL_MS = 10 * 60 * 60 * 1000;
+const CHAT_MAX = 800, BOARD_MAX = 80, STROKES_MAX = 4000, PAGES_MAX = 30, PTS_MAX = 900;
+export const IMG_MAX_BYTES = 1600 * 1024, ROOM_IMG_BYTES = 30 * 1024 * 1024;
+export const BOARD_CATS = ['mision', 'pnj', 'lugar', 'pista', 'objeto', 'otro'];
+const COLOR_RE = /^#[0-9a-f]{6}$/i;
 
 const int = (v, lo, hi, def = 0) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def; };
 const str = (v, max) => String(v ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, max);
@@ -51,14 +55,27 @@ export class Rooms {
     throw new Error('no_code');
   }
 
-  create(name, char, asDm) {
+  create(name, char, asDm, restore) {
     if (this.rooms.size >= MAX_ROOMS) this.sweep();
     if (this.rooms.size >= MAX_ROOMS) throw err('full', 'El servidor tiene demasiadas salas abiertas. Intenta en un rato.');
-    const room = { code: this.newCode(), created: this.now(), touched: this.now(), members: new Map(), npcs: new Map(), order: [], turn: -1, round: 0, hidePc: false, log: [] };
+    // Si el servidor se reinició, el DM puede reabrir la mesa con su copia local y el mismo código
+    const want = restore && /^[A-Z]{4}$/.test(String(restore.code || '')) && !this.rooms.has(restore.code) ? restore.code : null;
+    const room = { code: want || this.newCode(), created: this.now(), touched: this.now(), members: new Map(), npcs: new Map(), order: [], turn: -1, round: 0, hidePc: false, log: [],
+      chat: [], board: [], strokes: [], pages: [], images: new Map(), imgBytes: 0, session: { title: '', started: this.now(), ended: null } };
+    if (want) this.restore(room, restore);
     this.rooms.set(room.code, room);
     const m = this.addMember(room, name, char, asDm ? 'dm' : 'player');
-    this.log(room, `${m.name} abrió la sala`);
-    return { room, member: m };
+    this.log(room, want ? `${m.name} reabrió la mesa` : `${m.name} abrió la sala`);
+    return { room, member: m, restored: !!want };
+  }
+
+  restore(room, r) {
+    room.session.title = str(r.title, 80);
+    room.session.started = Number(r.started) || this.now();
+    room.chat = (Array.isArray(r.chat) ? r.chat : []).slice(-CHAT_MAX).map((c) => cleanChatMsg(c)).filter(Boolean);
+    room.board = (Array.isArray(r.board) ? r.board : []).slice(0, BOARD_MAX).map((b) => cleanBoard(b)).filter(Boolean);
+    room.strokes = (Array.isArray(r.strokes) ? r.strokes : []).slice(-STROKES_MAX).map((k) => cleanStroke(k, k && k.by)).filter(Boolean);
+    room.pages = (Array.isArray(r.pages) ? r.pages : []).slice(-PAGES_MAX).map((pg) => ({ at: Number(pg.at) || 0, strokes: (pg.strokes || []).slice(0, STROKES_MAX).map((k) => cleanStroke(k, k && k.by)).filter(Boolean) }));
   }
 
   join(code, name, char, token, asDm) {
@@ -92,6 +109,7 @@ export class Rooms {
   sweep() {
     const t = this.now();
     for (const [code, r] of this.rooms) {
+      if (r.session && r.session.ended && t - r.session.ended > 20 * 60 * 1000) { this.rooms.delete(code); continue; }
       const anyone = [...r.members.values()].some(m => m.online);
       if (t - r.touched > ROOM_TTL_MS || (!anyone && t - r.touched > 30 * 60 * 1000)) this.rooms.delete(code);
     }
@@ -187,9 +205,91 @@ export class Rooms {
         this.log(room, `${me.name} ${verb} ${names.join(', ')}${note ? ' (' + note + ')' : ''}`);
         break;
       }
+      /* ---------- Mesa: chat, tiradas, imágenes, susurros ---------- */
+      case 'chat.send': case 'chat.roll': case 'chat.img': {
+        let to = msg.to ? String(msg.to) : null;
+        if (to) {
+          const tm = room.members.get(to);
+          if (!tm || tm.id === me.id) throw err('no_target', 'No encuentro a quién mandarle el susurro.');
+          if (!isDm && tm.role !== 'dm') throw err('dm_only', 'Los susurros son entre un jugador y el DM.');
+        }
+        const base = { id: 'm' + id(5), at: this.now(), from: me.id, name: isDm ? 'DM' : (me.char && me.char.name) || me.name, role: me.role, to };
+        let m;
+        if (msg.t === 'chat.send') { const text = str(msg.text, 1200); if (!text) throw err('empty', 'Escribe algo primero.'); m = { ...base, kind: 'msg', text }; }
+        else if (msg.t === 'chat.roll') { const total = int(msg.total, -50, 300, NaN); if (!Number.isFinite(total)) throw err('bad_roll', 'Escribe el total de tu tirada.'); m = { ...base, kind: 'roll', roll: { label: str(msg.label, 50) || 'Tirada', total, nat: msg.nat == null || msg.nat === '' ? null : int(msg.nat, 1, 20, null), adv: ['adv', 'dis'].includes(msg.adv) ? msg.adv : null } }; }
+        else { const im = room.images.get(String(msg.img || '')); if (!im) throw err('no_img', 'La imagen no se subió bien; vuelve a intentar.'); m = { ...base, kind: 'img', img: im.id, text: str(msg.caption, 200) }; }
+        room.chat.push(m); if (room.chat.length > CHAT_MAX) room.chat.splice(0, room.chat.length - CHAT_MAX);
+        for (const mm of room.members.values()) if (visible(m, mm.id)) out.push({ to: mm.id, msg: { t: 'chat', msg: m } });
+        out.quiet = true;
+        break;
+      }
+      /* ---------- Tablero del DM ---------- */
+      case 'board.add': case 'board.edit': {
+        if (!isDm) throw err('dm_only', 'Solo el DM escribe en el tablero.');
+        if (msg.img && !room.images.has(String(msg.img))) throw err('no_img', 'Esa imagen ya no está en la sala.');
+        const b = cleanBoard({ ...msg.item, img: msg.img || (msg.item && msg.item.img) });
+        if (!b) throw err('empty', 'Ponle título a la nota.');
+        if (msg.t === 'board.add') { if (room.board.length >= BOARD_MAX) throw err('too_many', 'El tablero está lleno; borra notas viejas.'); b.id = 'b' + id(4); b.at = this.now(); room.board.unshift(b); }
+        else { const i = room.board.findIndex((x) => x.id === msg.id); if (i < 0) throw err('no_target', 'Esa nota ya no está.'); room.board[i] = { ...room.board[i], ...b, id: room.board[i].id, at: room.board[i].at }; }
+        break;
+      }
+      case 'board.del': if (!isDm) throw err('dm_only', 'Solo el DM borra notas del tablero.'); room.board = room.board.filter((x) => x.id !== msg.id); break;
+      case 'board.done': { if (!isDm) throw err('dm_only', 'Solo el DM.'); const b = room.board.find((x) => x.id === msg.id); if (b) b.done = !b.done; break; }
+      /* ---------- Pizarra ---------- */
+      case 'draw.add': {
+        if (room.strokes.length >= STROKES_MAX) throw err('board_full', 'La pizarra está llena: que el DM pase a una hoja nueva.');
+        const k = cleanStroke(msg.stroke, me.id); if (!k) throw err('bad_stroke', 'No se pudo guardar el trazo.');
+        k.id = 'k' + id(5); room.strokes.push(k);
+        for (const mm of room.members.values()) out.push({ to: mm.id, msg: { t: 'draw', stroke: k } });
+        out.quiet = true;
+        break;
+      }
+      case 'draw.undo': {
+        let i = -1; for (let j = room.strokes.length - 1; j >= 0; j--) if (room.strokes[j].by === me.id) { i = j; break; }
+        if (i < 0) { out.quiet = true; break; }
+        const [k] = room.strokes.splice(i, 1);
+        for (const mm of room.members.values()) out.push({ to: mm.id, msg: { t: 'draw.undo', id: k.id } });
+        out.quiet = true;
+        break;
+      }
+      case 'draw.clear': {
+        if (!isDm) throw err('dm_only', 'Solo el DM pasa a una hoja nueva.');
+        if (room.strokes.length) { room.pages.push({ at: this.now(), strokes: room.strokes }); if (room.pages.length > PAGES_MAX) room.pages.shift(); }
+        room.strokes = [];
+        for (const mm of room.members.values()) out.push({ to: mm.id, msg: { t: 'draw.clear', pages: room.pages.length } });
+        out.quiet = true;
+        break;
+      }
+      /* ---------- Sesión ---------- */
+      case 'session.title': if (!isDm) throw err('dm_only', 'Solo el DM.'); room.session.title = str(msg.title, 80); break;
+      case 'session.end': {
+        if (!isDm) throw err('dm_only', 'Solo el DM termina la sesión.');
+        room.session.ended = this.now();
+        if (room.strokes.length) { room.pages.push({ at: this.now(), strokes: room.strokes }); room.strokes = []; }
+        this.log(room, 'El DM terminó la sesión');
+        for (const mm of room.members.values()) out.push({ to: mm.id, msg: { t: 'ended', snapshot: this.snapshot(room, mm.id) } });
+        break;
+      }
       default: throw err('bad_msg', 'Mensaje desconocido.');
     }
     return out;
+  }
+
+  /* Lo que recibe cada quien al entrar: el chat que puede ver y la pizarra */
+  mesaInit(room, forId) { return { t: 'mesa.init', chat: room.chat.filter((m) => visible(m, forId)).slice(-400), strokes: room.strokes, pages: room.pages.length }; }
+  /* Todo lo de la sesión para guardarlo en el diario de cada quien */
+  snapshot(room, forId) {
+    return { code: room.code, title: room.session.title, started: room.session.started, ended: room.session.ended || this.now(), chat: room.chat.filter((m) => visible(m, forId)), board: room.board, pages: room.pages,
+      members: [...room.members.values()].map((m) => ({ id: m.id, name: m.role === 'dm' ? 'DM' : (m.char && m.char.name) || m.name, role: m.role })) };
+  }
+  addImage(room, who, buf, type) {
+    const me = room.members.get(who); if (!me) throw err('not_member', 'Ya no estás en la sala.');
+    if (!/^image\/(jpeg|png|webp|gif)$/.test(type)) throw err('bad_img', 'Solo imágenes JPG, PNG, WebP o GIF.');
+    if (buf.length > IMG_MAX_BYTES) throw err('too_large', 'La imagen es demasiado grande.');
+    if (room.imgBytes + buf.length > ROOM_IMG_BYTES) throw err('too_many', 'La sala ya tiene demasiadas imágenes.');
+    const im = { id: 'i' + id(8), by: who, type, data: buf, at: this.now() };
+    room.images.set(im.id, im); room.imgBytes += buf.length; this.touch(room);
+    return im;
   }
 
   nameOf(room, oid) { const m = room.members.get(oid); if (m) return m.char ? m.char.name : m.name; const n = room.npcs.get(oid); return n ? n.name : '?'; }
@@ -210,8 +310,25 @@ export class Rooms {
     const me = room.members.get(forId), dm = me && me.role === 'dm';
     const members = [...room.members.values()].map(m => ({ id: m.id, role: m.role, name: m.name, online: m.online, init: m.init, char: m.char && (dm || m.id === forId || !room.hidePc ? m.char : { ...m.char, hp: null, temp: null }) }));
     const npcs = [...room.npcs.values()].filter(n => dm || !n.hidden).map(n => dm ? n : { id: n.id, name: n.name, init: n.init, conds: n.conds, state: hpState(n) });
-    return { code: room.code, you: forId, role: me ? me.role : null, members, npcs, order: room.order.filter(x => dm || !room.npcs.get(x)?.hidden), turnId: room.order[room.turn] || null, round: room.round, hidePc: room.hidePc, log: room.log.slice(-20) };
+    return { code: room.code, you: forId, role: me ? me.role : null, members, npcs, board: room.board, session: room.session, pages: room.pages.length, order: room.order.filter(x => dm || !room.npcs.get(x)?.hidden), turnId: room.order[room.turn] || null, round: room.round, hidePc: room.hidePc, log: room.log.slice(-20) };
   }
+}
+
+/* Un susurro solo lo ven quien lo manda y quien lo recibe */
+function visible(m, forId) { return !m.to || m.to === forId || m.from === forId; }
+function cleanChatMsg(c) {
+  if (!c || !['msg', 'roll', 'img'].includes(c.kind)) return null;
+  return { id: str(c.id, 20) || 'm' + id(5), at: Number(c.at) || 0, from: str(c.from, 20), name: str(c.name, 40), role: c.role === 'dm' ? 'dm' : 'player', to: c.to ? str(c.to, 20) : null, kind: c.kind,
+    text: c.text ? str(c.text, 1200) : undefined, img: c.img ? str(c.img, 20) : undefined, roll: c.roll ? { label: str(c.roll.label, 50), total: int(c.roll.total, -50, 300, 0), nat: c.roll.nat == null ? null : int(c.roll.nat, 1, 20, null), adv: ['adv', 'dis'].includes(c.roll.adv) ? c.roll.adv : null } : undefined };
+}
+function cleanBoard(b) {
+  if (!b) return null; const title = str(b.title, 80); if (!title) return null;
+  return { id: b.id ? str(b.id, 20) : undefined, at: Number(b.at) || undefined, cat: BOARD_CATS.includes(b.cat) ? b.cat : 'otro', title, text: str(b.text, 1500), img: b.img ? str(b.img, 20) : null, done: !!b.done };
+}
+function cleanStroke(k, by) {
+  if (!k || !Array.isArray(k.pts) || k.pts.length < 2 || k.pts.length > PTS_MAX * 2) return null;
+  const pts = []; for (let i = 0; i + 1 < k.pts.length; i += 2) { const x = Number(k.pts[i]), y = Number(k.pts[i + 1]); if (!(x >= -0.01 && x <= 1.01 && y >= -0.01 && y <= 1.34)) return null; pts.push(Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000); }
+  return { id: k.id ? str(k.id, 20) : undefined, by: str(by, 20), color: COLOR_RE.test(k.color) ? k.color : '#2b1d12', w: int(k.w, 1, 40, 4), pts, erase: !!k.erase };
 }
 
 function applyTo(t, kind, amount, cond) {

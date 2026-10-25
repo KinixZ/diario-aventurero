@@ -32,4 +32,10 @@
   <symbol id="i-tool" viewBox="-17 -17 34 34"><path d="M-12 12 L4 -4 M4 -4 Q2 -12 10 -13 L6 -8 L9 -5 L14 -9 Q13 -1 4 -4"/></symbol>
   <symbol id="i-paw" viewBox="-17 -17 34 34"><path d="M-7 9 C-7 3 -3 1 0 1 C3 1 7 3 7 9 C7 13 3 13 0 12 C-3 13 -7 13 -7 9 Z M-11 -2 a3 4 0 1 0 0.1 0 Z M11 -2 a3 4 0 1 0 0.1 0 Z M-5 -9 a3 4 0 1 0 0.1 0 Z M5 -9 a3 4 0 1 0 0.1 0 Z"/></symbol>
   <symbol id="i-up" viewBox="-17 -17 34 34"><path d="M0 14 V-12 M-9 -3 L0 -12 L9 -3"/></symbol>
+  <symbol id="i-chat" viewBox="-17 -17 34 34"><path d="M-13 -11 H13 Q15 -11 15 -9 V5 Q15 7 13 7 H-2 L-9 13 V7 H-13 Q-15 7 -15 5 V-9 Q-15 -11 -13 -11 Z M-8 -4 H8 M-8 1 H4"/></symbol>
+  <symbol id="i-d20" viewBox="-17 -17 34 34"><path d="M0 -15 L13 -7.5 V7.5 L0 15 L-13 7.5 V-7.5 Z M0 -15 L-7 4 H7 Z M-7 4 L0 15 L7 4 M-13 -7.5 L-7 4 M13 -7.5 L7 4 M-13 7.5 L-7 4 M13 7.5 L7 4"/></symbol>
+  <symbol id="i-image" viewBox="-17 -17 34 34"><path d="M-14 -11 H14 V11 H-14 Z M-14 7 L-5 -2 L3 6 L7 2 L14 9"/><circle cx="7" cy="-5" r="2.5"/></symbol>
+  <symbol id="i-eye" viewBox="-17 -17 34 34"><path d="M-15 0 Q0 -14 15 0 Q0 14 -15 0 Z"/><circle cx="0" cy="0" r="4.5"/></symbol>
+  <symbol id="i-brush" viewBox="-17 -17 34 34"><path d="M12 -14 L-2 4 M8 -14 L14 -8 M-2 4 Q-10 4 -11 14 Q-2 13 0 6 Z"/></symbol>
+  <symbol id="i-pin" viewBox="-17 -17 34 34"><path d="M-5 -14 H5 L3 -4 L9 2 H-9 L-3 -4 Z M0 2 V15"/></symbol>
 </svg>
