@@ -31,3 +31,31 @@ test('endpoint /api/translate', async () => {
   const off = await startServer({ port: 0, host: '127.0.0.1', quiet: true, env: {} });
   try { assert.equal((await (await fetch(`http://127.0.0.1:${off.port}/api/translate`)).json()).enabled, false); } finally { await off.close(); }
 });
+
+test('Gemini: arma la petición, reintenta una vez y limpia la respuesta', async () => {
+  const calls = []; const real = globalThis.fetch;
+  globalThis.fetch = async (url, opt) => {
+    calls.push({ url, opt });
+    if (calls.length === 1) return new Response('{}', { status: 429 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '```html\n<p>Bola de fuego (Fireball)</p>\n```' }] } }] }), { status: 200 });
+  };
+  const orig = globalThis.setTimeout; globalThis.setTimeout = (f) => orig(f, 0);
+  try {
+    const t = createTranslator({ GEMINI_API_KEY: 'k', TR_MODEL: 'gemini-x' });
+    assert.equal(t.provider, 'gemini');
+    const out = await t.translate('<p>Fireball</p>');
+    assert.equal(out.html, '<p>Bola de fuego (Fireball)</p>');
+    assert.equal(calls.length, 2);
+    assert.match(calls[1].url, /models\/gemini-x:generateContent$/);
+    assert.equal(calls[1].opt.headers['x-goog-api-key'], 'k');
+    assert.match(JSON.parse(calls[1].opt.body).systemInstruction.parts[0].text, /tirada de salvación/);
+  } finally { globalThis.fetch = real; globalThis.setTimeout = orig; }
+});
+
+test('Gemini: si un modelo no existe prueba el siguiente', async () => {
+  const seen = []; const real = globalThis.fetch;
+  globalThis.fetch = async (url) => { seen.push(url.match(/models\/([^:]+)/)[1]); return seen.length === 1 ? new Response('not found', { status: 404 }) : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '<p>ok</p>' }] } }] }), { status: 200 }); };
+  const warn = console.warn; console.warn = () => {};
+  try { const t = createTranslator({ GEMINI_API_KEY: 'k' }); assert.equal((await t.translate('<p>x</p>')).html, '<p>ok</p>'); assert.deepEqual(seen, ['gemini-flash-latest', 'gemini-flash-lite-latest']); }
+  finally { globalThis.fetch = real; console.warn = warn; }
+});

@@ -30,6 +30,7 @@ El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abra
 
 Chrome en Android y Safari no traen traductor integrado, así que en el teléfono traduce el servidor. Configúralo una vez en Render (*Environment*) con **una** de estas claves:
 
+- `GEMINI_API_KEY` (de aistudio.google.com, **gratis y sin tarjeta**): traduce Gemini con los mismos términos de D&D y la conversión a metros. El plan gratis permite pocas traducciones por minuto; el servidor las hace de una en una y la caché evita repetirlas.
 - `ANTHROPIC_API_KEY` (de console.anthropic.com): traduce Claude con los términos oficiales de D&D y convierte pies a metros. Se paga por uso con créditos prepagados.
 - `DEEPL_API_KEY` (plan gratis de DeepL API, 500 000 caracteres al mes): buena traducción general, pero no conoce los términos de D&D ni convierte medidas.
 

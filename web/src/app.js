@@ -1054,7 +1054,7 @@
     $('#trModes').innerHTML = [['off','Desactivada'],['manual','Con botón'],['auto','Automática']].map(function(x){ return '<button type="button" data-act="trmode" data-v="' + x[0] + '" aria-pressed="' + (m === x[0]) + '">' + x[1] + '</button>'; }).join('');
     $('#trStatus').textContent = 'Revisando qué traductor hay disponible…';
     trEngine().then(function(e){
-      $('#trStatus').textContent = e === 'server' ? 'Traduce el servidor del grupo' + (trServer === 'claude' ? ' con Claude' : trServer === 'deepl' ? ' con DeepL' : '') + '. Lo que alguien ya tradujo sale al instante para todos y queda guardado en tu teléfono.' : e === 'chrome' ? 'Se usará el traductor integrado del navegador: funciona en el dispositivo y no gasta nada.' : e === 'claude' ? 'Se usará Claude con la cuenta de quien abre el diario. La primera vez pedirá permiso.' : 'Aquí no hay traductor disponible: el servidor del grupo no tiene traductor configurado y este navegador no trae uno.';
+      $('#trStatus').textContent = e === 'server' ? 'Traduce el servidor del grupo' + (trServer === 'gemini' ? ' con Gemini' : trServer === 'claude' ? ' con Claude' : trServer === 'deepl' ? ' con DeepL' : '') + '. Lo que alguien ya tradujo sale al instante para todos y queda guardado en tu teléfono.' : e === 'chrome' ? 'Se usará el traductor integrado del navegador: funciona en el dispositivo y no gasta nada.' : e === 'claude' ? 'Se usará Claude con la cuenta de quien abre el diario. La primera vez pedirá permiso.' : 'Aquí no hay traductor disponible: el servidor del grupo no tiene traductor configurado y este navegador no trae uno.';
     });
   }
 

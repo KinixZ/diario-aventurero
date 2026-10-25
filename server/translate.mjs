@@ -1,6 +1,7 @@
 // Traducción en el servidor, para teléfonos sin traductor integrado (Chrome Android, Safari).
 // Proveedor según las variables de entorno:
-//   ANTHROPIC_API_KEY  → Claude (mejor con términos de D&D: salvación, ventaja, pies → metros)
+//   GEMINI_API_KEY     → Google Gemini, plan gratis sin tarjeta (aistudio.google.com); sigue los términos de D&D
+//   ANTHROPIC_API_KEY  → Claude (mejor con términos de D&D: salvación, ventaja, pies → metros; de pago)
 //   DEEPL_API_KEY      → DeepL (hay plan gratis; no convierte medidas)
 //   TR_PROVIDER=mock   → solo para pruebas
 // Cada texto se traduce una vez y queda en una caché compartida por todo el grupo.
@@ -20,7 +21,12 @@ Reglas:
 const MAX_CHARS = 24000;
 
 export function createTranslator(env = process.env) {
-  const provider = env.TR_PROVIDER || (env.ANTHROPIC_API_KEY ? 'claude' : env.DEEPL_API_KEY ? 'deepl' : '');
+  const provider = env.TR_PROVIDER || (env.GEMINI_API_KEY ? 'gemini' : env.ANTHROPIC_API_KEY ? 'claude' : env.DEEPL_API_KEY ? 'deepl' : '');
+  // el plan gratis de Gemini permite pocas peticiones por minuto: van de una en una
+  let lane = Promise.resolve();
+  const serial = (fn) => { const run = lane.then(fn, fn); lane = run.catch(() => {}); return run; };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const geminiModels = env.TR_MODEL ? [env.TR_MODEL] : ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
   const daily = Number(env.TR_DAILY_CHARS) || 400000;      // tope de caracteres nuevos al día (lo cacheado no cuenta)
   const file = env.TR_CACHE_FILE || '';
   const cache = new Map(), pending = new Map();
@@ -39,6 +45,26 @@ export function createTranslator(env = process.env) {
 
   async function callProvider(html) {
     if (provider === 'mock') return '<span class="mock">ES</span>' + html;
+    if (provider === 'gemini') {
+      const call = (model) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: PROMPT }] }, contents: [{ role: 'user', parts: [{ text: html }] }], generationConfig: { temperature: 0.2 } }),
+      });
+      return serial(async () => {
+        // si Google cambia los nombres de los modelos, prueba el siguiente y recuerda el que sirvió
+        for (const model of geminiModels.slice()) {
+          let res = await call(model);
+          if (res.status === 429 || res.status === 503) { await sleep(6000); res = await call(model); }   // un reintento si se pasó del límite por minuto
+          if (res.status === 404 || res.status === 400 && /not found|not supported/i.test(await res.clone().text())) { console.warn(`Gemini: el modelo ${model} no está disponible; pruebo otro`); geminiModels.splice(geminiModels.indexOf(model), 1); continue; }
+          if (!res.ok) { console.warn(`Gemini respondió ${res.status}: ${(await res.text()).slice(0, 300)}`); throw fail(res.status === 429 ? 'rate_limited' : 'provider', `Gemini respondió ${res.status}`); }
+          const j = await res.json();
+          const parts = (((j.candidates || [])[0] || {}).content || {}).parts || [];
+          return parts.map((x) => x.text || '').join('').replace(/^\s*```(?:html)?\s*/i, '').replace(/\s*```\s*$/, '');
+        }
+        throw fail('provider', 'Ningún modelo de Gemini respondió. Define TR_MODEL en Render.');
+      });
+    }
     if (provider === 'claude') {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
