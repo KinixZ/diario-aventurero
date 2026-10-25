@@ -1444,13 +1444,22 @@
   /* ---------- Exportar e importar personajes ---------- */
   function exportChars(){
     var data = JSON.stringify({diario:'personajes', v:4, exportado:new Date().toISOString(), chars:S.chars, homebrew:S.homebrew || []});
-    var msg = $('#charMsg'), ta = $('#charText');
+    var msg = $('#charMsg'), ta = $('#charText'), n = S.chars.length, what = n + ' personaje' + (n === 1 ? '' : 's');
+    ta.hidden = false; ta.value = data;
+    /* Dentro de claude.ai la descarga pasa por la capacidad "downloads" (el visor pide confirmación) */
+    if (window.claude && window.claude.use) {
+      msg.textContent = 'Preparando la descarga…';
+      window.claude.use('downloads').then(function(dl){
+        if (!dl) throw {code:'unavailable'};
+        return dl.save({filename:'personajes-diario.json', data:new Blob([data], {type:'application/json'})}).then(function(){ msg.textContent = 'Listo: guardaste personajes-diario.json con ' + what + '.'; });
+      }).catch(function(e){ msg.textContent = e && e.code === 'declined' ? 'Cancelaste la descarga. Puedes copiar el texto de abajo.' : 'Aquí no se puede descargar; copia el texto de abajo y guárdalo en un archivo .json.'; });
+      return;
+    }
     try {
       var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], {type:'application/json'})); a.download = 'personajes-diario.json';
       document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-      msg.textContent = 'Listo: se descargó personajes-diario.json con ' + S.chars.length + ' personaje' + (S.chars.length === 1 ? '' : 's') + '. Si no ves la descarga, copia el texto de abajo.';
+      msg.textContent = 'Listo: se descargó personajes-diario.json con ' + what + '. Si no ves la descarga, copia el texto de abajo.';
     } catch(e){ msg.textContent = 'No pude descargar el archivo aquí; copia el texto de abajo.'; }
-    ta.hidden = false; ta.value = data;
     if (navigator.clipboard) navigator.clipboard.writeText(data).then(function(){ msg.textContent += ' También quedó copiado.'; }, function(){});
   }
   function importChars(txt){
