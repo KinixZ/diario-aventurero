@@ -1,0 +1,13 @@
+# Despliegue en Render (plan gratis): un solo servicio que sirve la web y las salas por WebSocket.
+# En Render: New → Blueprint → elige este repo.
+services:
+  - type: web
+    name: diario-aventurero
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

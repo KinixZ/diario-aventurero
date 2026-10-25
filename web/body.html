@@ -1,0 +1,211 @@
+<div class="app">
+<div class="book" id="book">
+  <div class="veil" id="veil"></div>
+
+  <nav class="ctabs" id="ctabs" aria-label="Contra-pestañas del grimorio"></nav>
+  <section class="page page-left" id="pageLeft" aria-label="Página izquierda"></section>
+  <div class="spine" aria-hidden="true"></div>
+
+  <section class="page page-right" id="pageRight">
+    <header class="head" id="head">
+      <button class="lvl btn-lvl" type="button" data-act="levelup" aria-label="Subir de nivel o editar el personaje" title="Subir de nivel o editar"><b id="hLvl">1</b><span>nivel</span></button>
+      <div class="who">
+        <h1 id="hName">Diario del Aventurero</h1>
+        <p id="hSub"></p>
+      </div>
+      <button class="icon-btn war" type="button" data-act="combat" aria-label="Entrar en combate" title="Entrar en combate"><svg class="ic"><use href="#i-swords"/></svg></button>
+      <button class="icon-btn" type="button" data-act="settings" aria-label="Ajustes del diario" title="Ajustes"><svg class="ic"><use href="#i-gear"/></svg></button>
+      <button class="icon-btn" type="button" data-act="close" aria-label="Cerrar diario" title="Cerrar diario"><svg class="ic"><use href="#i-book"/></svg></button>
+    </header>
+    <div class="scroll" id="scroll">
+      <div class="folio"><span id="folio">Folio I · Personaje</span></div>
+      <div class="panel" data-panel="personaje" id="pPersonaje"></div>
+      <div class="panel" data-panel="conjuros" id="pConjuros" hidden></div>
+      <div class="panel" data-panel="equipo" id="pEquipo" hidden>
+        <div class="card worn">
+          <div class="row"><span class="label">equipado</span><span class="muted" style="font-size:13px" id="attuneCount">Sintonización 0 / 3</span></div>
+          <div class="slots" id="bodySlots"></div>
+          <p class="note" style="margin-top:8px">Un objeto por tipo: un par de botas, guantes y brazales, una capa, algo en la cabeza y una armadura (guía de la DMG). Anillos y amuletos van en accesorios; su límite real es la sintonización.</p>
+        </div>
+        <div class="case">
+          <div class="boxtabs" id="boxTabs" role="tablist" aria-label="Contenedores"></div>
+          <div class="case-h"><b id="caseName">Mochila</b><span id="caseCount">0 / 80 casillas</span></div>
+          <div class="grid" id="grid" role="group" aria-label="Contenedor abierto. Arrastra los objetos para acomodarlos; con un objeto elegido, las flechas lo mueven y la R lo gira.">
+            <div class="ghost" id="ghost" hidden></div>
+          </div>
+          <div class="case-info" aria-live="polite">
+            <div class="txt" id="caseText"></div>
+            <div class="case-actions" id="caseActions"></div>
+          </div>
+        </div>
+        <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" type="button" data-act="finditems" style="flex:1 1 200px">Buscar objetos en el grimorio</button><button class="btn" type="button" data-act="hbnew" style="flex:1 1 200px">Crear arma homebrew</button></div>
+        <div class="card torn">
+          <span class="label">monedas</span>
+          <div class="coins" id="coins"></div>
+        </div>
+      </div>
+      <div class="panel" data-panel="rasgos" id="pRasgos" hidden></div>
+      <div class="panel" data-panel="notas" hidden>
+        <label for="notes" class="label">diario de sesión</label>
+        <textarea id="notes" class="notes" placeholder="Escribe aquí lo que pasó en la sesión: nombres, pistas y promesas rotas…"></textarea>
+      </div>
+      <div class="panel" data-panel="grimorio" id="grim" hidden></div>
+    </div>
+
+    <!-- ARMA HOMEBREW -->
+    <div class="sheet" id="hbSheet" hidden role="dialog" aria-labelledby="hbTitle">
+      <div class="sheet-h"><h2 id="hbTitle">Arma homebrew</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll">
+        <div id="hbSaved"></div>
+        <form id="hbForm" class="hbform" novalidate>
+          <label class="fl">Nombre<input class="field" id="hbName" autocomplete="off" placeholder="Matadragones"></label>
+          <div class="two">
+            <label class="fl">Daño<input class="field" id="hbDice" autocomplete="off" placeholder="2d6"></label>
+            <label class="fl">Tipo de daño<select class="field" id="hbType"></select></label>
+          </div>
+          <div class="two">
+            <label class="fl">Categoría<select class="field" id="hbCat"><option value="martial">Marcial</option><option value="simple">Sencilla</option></select></label>
+            <label class="fl">Ataque<select class="field" id="hbRanged"><option value="0">Cuerpo a cuerpo</option><option value="1">A distancia</option></select></label>
+          </div>
+          <fieldset class="fl"><legend>Propiedades</legend><div class="checks" id="hbProps"></div></fieldset>
+          <div class="two" id="hbVRow" hidden><label class="fl">Daño a dos manos (versátil)<input class="field" id="hbVDice" autocomplete="off" placeholder="2d8"></label><span></span></div>
+          <div class="two" id="hbRangeRow" hidden><label class="fl">Alcance (pies, normal/largo)<input class="field" id="hbRange" autocomplete="off" placeholder="20/60"></label><span></span></div>
+          <div class="two">
+            <label class="fl">Maestría<select class="field" id="hbMastery"></select></label>
+            <label class="fl">Bonificador mágico<select class="field" id="hbMagic"><option value="0">Ninguno</option><option value="1">+1</option><option value="2">+2</option><option value="3">+3</option></select></label>
+          </div>
+          <div class="two">
+            <label class="fl">Daño extra (opcional)<input class="field" id="hbXDice" autocomplete="off" placeholder="1d6"></label>
+            <label class="fl">Tipo del daño extra<select class="field" id="hbXType"></select></label>
+          </div>
+          <div class="two">
+            <label class="fl">Tamaño en la mochila<select class="field" id="hbSize"><option value="auto">Automático</option><option value="1x2">1 × 2</option><option value="1x3">1 × 3</option><option value="1x4">1 × 4</option><option value="1x5">1 × 5</option><option value="2x5">2 × 5</option><option value="2x6">2 × 6</option></select></label>
+            <label class="fl">Peso (lb, opcional)<input class="field" id="hbWeight" inputmode="decimal" autocomplete="off"></label>
+          </div>
+          <label class="fl">Notas y habilidades especiales<textarea class="field" id="hbNotes" rows="4" placeholder="Ej.: con una tirada de Fuerza CD 15 puedes partir escudos…"></textarea></label>
+          <label class="toggle"><input type="checkbox" id="hbEquip" checked> Equiparla en la mano principal</label>
+          <label class="toggle"><input type="checkbox" id="hbKeep" checked> Guardarla en mis armas homebrew para usarla con otros personajes</label>
+          <p class="err" id="hbErr" hidden></p>
+          <div class="row" style="gap:8px"><button class="btn" type="button" data-act="closesheet" style="flex:1">Cancelar</button><button class="btn main" type="submit" style="flex:1" id="hbSubmit">Crear arma</button></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- AJUSTES -->
+    <div class="sheet" id="compSheet" hidden role="dialog" aria-labelledby="compTitle">
+      <div class="sheet-h"><h2 id="compTitle">Añadir compañero</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll">
+        <input class="field" id="compQ" type="search" placeholder="Buscar: homunculus, steel defender, owl…" aria-label="Buscar compañero" autocomplete="off">
+        <div id="compList" class="pklist" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <div class="sheet" id="settingsSheet" hidden role="dialog" aria-labelledby="setTitle">
+      <div class="sheet-h"><h2 id="setTitle">Ajustes del diario</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar ajustes"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll" style="display:flex;flex-direction:column;gap:22px">
+        <section>
+          <div class="row"><span class="label">personajes</span><button class="btn main sm" type="button" data-act="newchar">Nuevo personaje</button></div>
+          <div class="chars" id="charList"></div>
+          <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn sm" type="button" data-act="charexport">Exportar personajes</button>
+            <label class="btn sm pickbtn">Importar personajes<input type="file" id="charIn" aria-label="Importar personajes desde un archivo"></label>
+          </div>
+          <p class="note" id="charMsg" style="margin:6px 0 0">Para pasarlos a otro dispositivo o a la web del grupo: exporta aquí e importa allá.</p>
+          <textarea class="field" id="charText" rows="4" hidden aria-label="Personajes como texto" style="margin-top:8px;width:100%;font-family:monospace;font-size:12px"></textarea>
+        </section>
+        <section>
+          <span class="label">traducción al español</span>
+          <p style="margin:6px 0 0;font-size:15px">Los textos de 5etools vienen en inglés. El diario puede traducirlos y guardar cada traducción en este dispositivo para no repetirla.</p>
+          <div class="seg" id="trModes" style="margin-top:8px"></div>
+          <p class="note" id="trStatus" style="margin-top:6px"></p>
+          <button class="btn sm" type="button" data-act="trclear" style="margin-top:8px">Borrar traducciones guardadas</button>
+        </section>
+        <section>
+          <span class="label">salas de combate</span>
+          <p style="margin:6px 0 0;font-size:15px">Dirección del servidor de salas. Si abriste el diario desde el servidor del proyecto no hace falta escribir nada.</p>
+          <input class="field" id="salaUrl" type="url" inputmode="url" autocomplete="off" aria-label="Dirección del servidor de salas" style="margin-top:8px">
+          <p class="note" id="salaStatus" style="margin:6px 0 0"></p>
+        </section>
+        <section>
+          <span class="label">estilo del diario</span>
+          <div class="skins" id="skins"></div>
+        </section>
+        <section>
+          <span class="label">biblioteca de 5etools</span>
+          <p style="margin:6px 0 0;font-size:15px">Carga los datos de tu copia de 5etools. Se guardan solo en este dispositivo y funcionan sin internet.</p>
+          <div class="picks">
+            <label class="pick" id="dirPick"><input type="file" id="dirIn" webkitdirectory directory multiple aria-label="Elegir la carpeta data de 5etools"><b>Carpeta data</b><span class="muted" style="font-size:14px">En la laptop: elige la carpeta <code>data</code> completa</span></label>
+            <label class="pick"><input type="file" id="fileIn" multiple aria-label="Elegir el archivo diario-5e.json"><b>Elegir archivo</b><span class="muted" style="font-size:14px">El paquete <code>diario-5e.json</code> o archivos sueltos de 5etools</span></label>
+          </div>
+          <p class="status" id="libProgress" aria-live="polite" style="margin:8px 0 0;font-size:15px"></p>
+          <p class="note" id="libHint" style="margin:6px 0 0">En el teléfono: si al tocar no se abre el selector, abre el diario en el navegador (Chrome o Safari) y cárgalo ahí. Si el archivo está en Drive o WhatsApp, guárdalo primero en Descargas.</p>
+          <table class="libtable" id="libTable"></table>
+          <button class="btn" type="button" data-act="clearlib" id="clearLib" style="margin-top:10px" hidden>Quitar datos importados</button>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <nav class="ribbons" id="ribbons" aria-label="Separadores del diario"></nav>
+
+  <!-- MODO COMBATE -->
+  <section class="combat" id="combat" hidden aria-label="Modo combate">
+    <div class="combat-h">
+      <svg class="ic" style="color:var(--gold-hi)"><use href="#i-swords"/></svg>
+      <h2>Combate</h2>
+      <span class="round">Ronda <b id="round">1</b></span>
+      <button class="btn sm" type="button" data-act="nextround">Siguiente ronda</button>
+      <button class="icon-btn" type="button" data-act="endcombat" aria-label="Salir del combate" style="background:transparent;color:var(--on-dark);border-color:var(--gold-hi)"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="sala-toast" id="salaToast" role="status" aria-live="polite" hidden></div>
+    <div class="combat-b">
+      <div class="combat-col" id="cLeft"></div>
+      <div class="combat-col" id="cRight"></div>
+    </div>
+  </section>
+
+  <!-- CREADOR DE PERSONAJES -->
+  <section class="creator" id="creator" hidden aria-labelledby="crTitle">
+    <div class="cr-h">
+      <svg class="ic" style="color:var(--gold-hi)"><use href="#i-quill"/></svg>
+      <h2 id="crTitle">Nuevo personaje</h2>
+      <button class="icon-btn" type="button" data-act="crclose" aria-label="Cerrar sin guardar"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <nav class="steps" id="crSteps" aria-label="Pasos del creador"></nav>
+    <div class="cr-b" id="crBody"><div class="cr-in" id="crIn"></div></div>
+    <div class="cr-f">
+      <button class="btn" type="button" data-act="crprev" id="crPrev">Atrás</button>
+      <span class="hint" id="crHint"></span>
+      <button class="btn main" type="button" data-act="crnext" id="crNext">Siguiente</button>
+    </div>
+  </section>
+
+  <!-- SELECTOR EMERGENTE -->
+  <div class="picker" id="picker" hidden>
+    <div class="pk" role="dialog" aria-modal="true" aria-labelledby="pkTitle">
+      <div class="pk-h"><h2 id="pkTitle"></h2><span class="count" id="pkCount"></span><button class="icon-btn" type="button" data-act="pkclose" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="pk-f" id="pkFilters"></div>
+      <div class="pk-b" id="pkList"></div>
+      <div class="pk-x"><button class="btn main" type="button" data-act="pkdone">Listo</button></div>
+    </div>
+  </div>
+
+  <div class="fx" id="fx" aria-hidden="true"></div>
+  <div class="cover" id="cover">
+    <div class="hinge"></div>
+    <button class="clasp" type="button" data-act="open" aria-label="Abrir diario"><span></span></button>
+    <span class="eyebrow">diario del</span>
+    <h2>Aventurero</h2>
+    <svg class="emblem" viewBox="0 0 150 150" role="img" aria-label="Emblema">
+      <circle class="e-ring" cx="75" cy="75" r="70" stroke-width="2"/>
+      <circle class="e-ring" cx="75" cy="75" r="60" stroke-width="1" stroke-dasharray="3 5"/>
+      <path class="e-shield" d="M75 22 L118 40 Q118 92 75 126 Q32 92 32 40 Z"/>
+      <path class="e-crack" d="M75 22 L71 50 L80 64 L70 82 L78 98 L75 126"/>
+      <path class="e-cross" d="M50 56 L100 56 M75 36 L75 112"/>
+    </svg>
+    <span class="name" id="cvName">Sin personaje</span>
+    <span class="sub" id="cvSub"></span>
+    <span class="swipe-hint" aria-hidden="true">desliza la tapa o toca el broche</span>
+    <button class="cover-new" type="button" data-act="newchar"><svg class="ic"><use href="#i-quill"/></svg>Crear personaje</button>
+  </div>
+</div>
+</div>

@@ -1,0 +1,47 @@
+/* ---------- Sala de combate compartida (modo combate, HUD oscuro) ---------- */
+.sala .note{margin:6px 0 0}
+.sala-join{display:flex;gap:8px;margin-top:10px}
+.sala-join .field{flex:1;min-width:0;text-transform:uppercase;letter-spacing:.3em;font-family:var(--display);font-size:20px;text-align:center}
+.sala-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sala-h>div:first-child{flex:1;min-width:0}
+.sala-code{display:block;font-family:var(--display);font-size:26px;letter-spacing:.25em;color:var(--gold-hi);line-height:1}
+.sala-round{font-size:15px;color:var(--on-dark-2)}
+.sala-round b{font-family:var(--display);font-size:20px;color:var(--on-dark)}
+.sala-myturn{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding:8px 12px;border-radius:8px;background:rgba(217,184,102,.16);border:1px solid var(--gold-hi);font-family:var(--hand);font-size:22px;color:var(--gold-hi)}
+.sala-initf{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.sala-initf span{flex:1 1 100%;font-size:15px;color:var(--on-dark-2)}
+.sala-initf .field{flex:1;min-width:0;height:40px}
+.sala-dm{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.sala-npc{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:6px;margin-top:8px}
+.sala-npc .field{min-width:0;height:40px}
+.sala-npc .toggle{grid-column:1/4}
+.sala-npc button{grid-column:4/6}
+.sala-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.sala-sep{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--on-dark-2);margin-top:4px}
+.sala-row{border:1px solid var(--leather-edge);border-radius:10px;padding:6px 8px 8px;background:rgba(255,255,255,.03)}
+.sala-row.turn{border-color:var(--gold-hi);box-shadow:0 0 0 1px var(--gold-hi),0 0 14px rgba(217,184,102,.25)}
+.sala-row.sel{background:rgba(217,184,102,.12);border-color:var(--gold)}
+.sala-row.npc .sala-init{background:#5a1f1a}
+.sala-pick{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;color:inherit;text-align:left;padding:2px 0;min-height:44px}
+.sala-init{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--leather-3);font-family:var(--display);font-weight:700;color:var(--on-dark)}
+.sala-name{flex:1;min-width:0}
+.sala-name b{display:block;font-size:17px;line-height:1.15;overflow-wrap:anywhere}
+.sala-name small{display:block;font-size:13px;color:var(--on-dark-2)}
+.sala-ac{flex:none;min-width:34px;height:30px;padding:0 6px;border-radius:6px 6px 14px 14px;border:1px solid var(--gold);display:grid;place-items:center;font-family:var(--display);font-weight:700}
+.sala-hpbox{display:flex;align-items:center;gap:8px}
+.sala-hpbox .bar{flex:1;margin:0}
+.sala-hp{font-variant-numeric:tabular-nums;font-size:14px;min-width:56px;text-align:right}
+.sala-state{font-family:var(--hand);font-size:19px;color:var(--on-dark-2)}
+.sala-state.down{color:var(--bad)}
+.sala-conds{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.sala-rowdm{display:flex;gap:6px;margin-top:6px;align-items:center}
+.sala-rowdm .field{width:76px;height:36px}
+.sala-apply{position:sticky;bottom:0;margin-top:10px;padding:10px;border-radius:10px;border:1px solid var(--gold-hi);background:var(--leather-2);display:flex;flex-direction:column;gap:8px;z-index:2}
+.sala-apply-h{display:flex;align-items:center;justify-content:space-between}
+.sala-apply-row{display:flex;gap:6px}
+.sala-apply-row .field{flex:1;min-width:0;height:42px}
+.sala-apply-row .btn{flex:none}
+.sala-log{margin-top:10px}
+.sala-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:80;max-width:calc(100% - 32px);padding:12px 16px;border-radius:10px;background:var(--parch);color:var(--ink);border:1px solid var(--gold);box-shadow:0 8px 24px rgba(0,0,0,.45);font-size:16px}
+.sala-toast[hidden]{display:none}
+@media (max-width:420px){ .sala-npc{grid-template-columns:1fr 1fr 1fr} .sala-npc [name=name]{grid-column:1/4} .sala-npc .toggle{grid-column:1/3} .sala-npc button{grid-column:3/4} }

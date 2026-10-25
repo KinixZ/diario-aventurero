@@ -1,0 +1,35 @@
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-sword" viewBox="-17 -17 34 34"><path d="M-11 11 L12 -12 M12 -12 L12 -6 M12 -12 L6 -12 M-12 1 L-1 12 M-11 11 L-15 15"/></symbol>
+  <symbol id="i-swords" viewBox="-17 -17 34 34"><path d="M-12 -12 L10 10 M-12 -12 L-6 -12 M-12 -12 L-12 -6 M12 -12 L-10 10 M12 -12 L6 -12 M12 -12 L12 -6 M6 14 L14 6 M-6 14 L-14 6"/></symbol>
+  <symbol id="i-scroll" viewBox="-17 -17 34 34"><path d="M-10 -12 H10 V12 H-10 Z M-10 -12 Q-15 -12 -15 -8 Q-15 -4 -10 -4 M10 12 Q15 12 15 8 Q15 4 10 4 M-5 -5 H5 M-5 0 H5 M-5 5 H2"/></symbol>
+  <symbol id="i-star" viewBox="-17 -17 34 34"><path d="M0 -15 L3.5 -3.5 L15 0 L3.5 3.5 L0 15 L-3.5 3.5 L-15 0 L-3.5 -3.5 Z"/></symbol>
+  <symbol id="i-bag" viewBox="-17 -17 34 34"><path d="M-7 -6 Q-15 2 -12 11 Q-8 16 0 16 Q8 16 12 11 Q15 2 7 -6 Z M-7 -6 L-5 -11 L5 -11 L7 -6 M-3 -11 L-6 -16 M3 -11 L6 -16"/></symbol>
+  <symbol id="i-shield" viewBox="-17 -17 34 34"><path d="M0 -15 L13 -10 Q13 6 0 15 Q-13 6 -13 -10 Z M0 -10 V10 M-7 -2 H7"/></symbol>
+  <symbol id="i-quill" viewBox="-17 -17 34 34"><path d="M13 -15 Q-2 -10 -7 7 L-12 14 M13 -15 Q8 3 -5 5 M13 -15 Q-4 -6 -6 4"/></symbol>
+  <symbol id="i-book" viewBox="-17 -17 34 34"><path d="M-13 -12 H13 V12 H-13 Z M-9 -12 V12 M13 -3 H16 V3 H13"/></symbol>
+  <symbol id="i-tome" viewBox="-17 -17 34 34"><path d="M-14 -11 Q-7 -14 0 -10 Q7 -14 14 -11 V12 Q7 9 0 13 Q-7 9 -14 12 Z M0 -10 V13"/></symbol>
+  <symbol id="i-armor" viewBox="-17 -17 34 34"><path d="M-12 -12 L-5 -14 L0 -10 L5 -14 L12 -12 L10 4 L6 14 H-6 L-10 4 Z M0 -10 V14"/></symbol>
+  <symbol id="i-gear" viewBox="-17 -17 34 34"><path d="M0 -6 A6 6 0 1 1 0 6 A6 6 0 1 1 0 -6 M0 -15 V-10 M0 10 V15 M-15 0 H-10 M10 0 H15 M-10.6 -10.6 L-7 -7 M7 7 L10.6 10.6 M-10.6 10.6 L-7 7 M7 -7 L10.6 -10.6"/></symbol>
+  <symbol id="i-x" viewBox="-17 -17 34 34"><path d="M-10 -10 L10 10 M10 -10 L-10 10"/></symbol>
+  <symbol id="i-back" viewBox="-17 -17 34 34"><path d="M8 -12 L-4 0 L8 12"/></symbol>
+  <symbol id="i-helm" viewBox="-17 -17 34 34"><path d="M-12 8 V-2 Q-12 -14 0 -14 Q12 -14 12 -2 V8 Z M-12 0 H-3 V8 M12 0 H3 V8"/></symbol>
+  <symbol id="i-cloak" viewBox="-17 -17 34 34"><path d="M-5 -14 H5 L13 14 H-13 Z M-5 -14 Q0 -8 5 -14"/></symbol>
+  <symbol id="i-bracer" viewBox="-17 -17 34 34"><path d="M-9 -13 H9 L11 13 H-11 Z M-10 -4 H10 M-10.6 5 H10.6"/></symbol>
+  <symbol id="i-glove" viewBox="-17 -17 34 34"><path d="M-8 14 V-2 L-12 -6 M-8 -2 V-12 M-3 -2 V-15 M2 -2 V-14 M7 -2 V-11 M7 -2 Q10 6 8 14 Z M-8 14 H8"/></symbol>
+  <symbol id="i-boot" viewBox="-17 -17 34 34"><path d="M-6 -14 H4 V4 L13 8 V14 H-6 Z"/></symbol>
+  <symbol id="i-ring" viewBox="-17 -17 34 34"><path d="M0 -4 A9 9 0 1 1 -0.1 -4 M-4 -6 L0 -13 L4 -6"/></symbol>
+  <symbol id="i-flask" viewBox="-17 -17 34 34"><path d="M-4 -14 H4 M-3 -14 V-5 L-11 10 Q-12 14 -8 14 H8 Q12 14 11 10 L3 -5 V-14 M-7 4 H7"/></symbol>
+  <symbol id="i-rope" viewBox="-17 -17 34 34"><path d="M0 -12 A12 12 0 1 1 -0.1 -12 M0 -6 A6 6 0 1 1 -0.1 -6 M10 7 L15 14"/></symbol>
+  <symbol id="i-torch" viewBox="-17 -17 34 34"><path d="M-2 -2 H2 L1 15 H-1 Z M0 -4 Q-7 -9 0 -16 Q7 -9 0 -4"/></symbol>
+  <symbol id="i-food" viewBox="-17 -17 34 34"><path d="M-13 -2 H13 L10 10 H-10 Z M-8 -2 Q-8 -12 0 -12 Q8 -12 8 -2"/></symbol>
+  <symbol id="i-bed" viewBox="-17 -17 34 34"><path d="M-14 -6 H14 V8 H-14 Z M-14 1 H14 M-9 -6 V8 M9 -6 V8"/></symbol>
+  <symbol id="i-water" viewBox="-17 -17 34 34"><path d="M-3 -14 H3 V-9 Q11 -4 9 6 Q7 14 0 14 Q-7 14 -9 6 Q-11 -4 -3 -9 Z"/></symbol>
+  <symbol id="i-fire" viewBox="-17 -17 34 34"><path d="M-11 -8 H11 V10 H-11 Z M-5 -8 V-13 H5 V-8 M-3 4 Q0 -4 3 4"/></symbol>
+  <symbol id="i-holy" viewBox="-17 -17 34 34"><path d="M0 -15 V15 M-9 -6 H9 M0 -15 L-3 -11 M0 -15 L3 -11"/></symbol>
+  <symbol id="i-wand" viewBox="-17 -17 34 34"><path d="M-12 12 L8 -8 M8 -8 L10 -14 M8 -8 L14 -10 M8 -8 L13 -4 M8 -8 L4 -13"/></symbol>
+  <symbol id="i-gem" viewBox="-17 -17 34 34"><path d="M-12 -4 L-6 -12 H6 L12 -4 L0 14 Z M-12 -4 H12 M-6 -12 L-3 -4 L0 14 M6 -12 L3 -4"/></symbol>
+  <symbol id="i-bow" viewBox="-17 -17 34 34"><path d="M-8 -15 Q14 0 -8 15 M-8 -15 V15 M-14 0 H14 M10 -3 L14 0 L10 3"/></symbol>
+  <symbol id="i-tool" viewBox="-17 -17 34 34"><path d="M-12 12 L4 -4 M4 -4 Q2 -12 10 -13 L6 -8 L9 -5 L14 -9 Q13 -1 4 -4"/></symbol>
+  <symbol id="i-paw" viewBox="-17 -17 34 34"><path d="M-7 9 C-7 3 -3 1 0 1 C3 1 7 3 7 9 C7 13 3 13 0 12 C-3 13 -7 13 -7 9 Z M-11 -2 a3 4 0 1 0 0.1 0 Z M11 -2 a3 4 0 1 0 0.1 0 Z M-5 -9 a3 4 0 1 0 0.1 0 Z M5 -9 a3 4 0 1 0 0.1 0 Z"/></symbol>
+  <symbol id="i-up" viewBox="-17 -17 34 34"><path d="M0 14 V-12 M-9 -3 L0 -12 L9 -3"/></symbol>
+</svg>

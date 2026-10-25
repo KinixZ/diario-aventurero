@@ -1,0 +1,8 @@
+node_modules/
+web/dist/
+# Los datos de 5etools no se suben: cada quien genera su paquete desde su copia
+diario-5e.json
+*.paquete.json
+5etools-src/
+.DS_Store
+*.log
