@@ -16,7 +16,7 @@ const icons = read('assets/icons.svg');
 const body = read('body.html');
 const order = ['lib.js', 'render.js', 'rules.js', 'app.js', 'sala.js'];
 const js = order.map(f => `/* ---- ${f} ---- */\n` + read('src/' + f)).join('\n');
-const config = `window.DIARIO_CONFIG = ${JSON.stringify({ salaUrl: process.env.SALA_URL || '', version: process.env.GITHUB_SHA ? process.env.GITHUB_SHA.slice(0, 7) : 'dev' })};`;
+const config = `window.DIARIO_CONFIG = ${JSON.stringify({ salaUrl: process.env.SALA_URL || '', artifact, version: process.env.GITHUB_SHA ? process.env.GITHUB_SHA.slice(0, 7) : 'dev' })};`;
 const fonts = '<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap">';
 
 const inner = `<title>Diario del Aventurero</title>\n${fonts}\n<style>${css}</style>\n${icons}\n${body}\n<script>${config}\n${js}\n</script>\n`;

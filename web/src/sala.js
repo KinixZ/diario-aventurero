@@ -18,6 +18,7 @@ var Sala = (function(){
   function serverUrl(){
     if (st.url) return st.url;
     if (window.DIARIO_CONFIG && DIARIO_CONFIG.salaUrl) return DIARIO_CONFIG.salaUrl;
+    if (window.DIARIO_CONFIG && DIARIO_CONFIG.artifact) return '';
     if (/^https?:$/.test(location.protocol) && !/claude\.ai$|claudeusercontent\.com$|^$/.test(location.hostname)) return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
     return '';
   }
