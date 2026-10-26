@@ -12,7 +12,7 @@ import { createTranslator } from './translate.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const DIST = normalize(join(here, '..', 'web', 'dist'));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon' };
-const MAX_MSG = 512 * 1024; // alcanza para reabrir una mesa con su chat y su pizarra
+const MAX_MSG = 2 * 1024 * 1024; // alcanza para reabrir una mesa con su chat y su pizarra, o subir un mapa grande
 
 export function startServer({ port = Number(process.env.PORT) || 8080, host = process.env.HOST || '0.0.0.0', quiet = false, env = process.env } = {}) {
   const rooms = new Rooms();

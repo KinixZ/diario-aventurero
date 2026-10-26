@@ -12,7 +12,8 @@
     "dev": "node tools/build-web.mjs && node --watch-path=server server/index.mjs",
     "check": "node --check web/dist/all.js",
     "test": "npm run build && node --check web/dist/all.js && node --test tests/server/*.test.mjs && node tests/web/run.mjs",
-    "paquete": "node tools/crear-paquete-diario.mjs"
+    "paquete": "node tools/crear-paquete-diario.mjs",
+    "bestiario": "node tools/crear-bestiario.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"

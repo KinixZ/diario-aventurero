@@ -21,6 +21,8 @@ const CHAT_MAX = 800, BOARD_MAX = 80, STROKES_MAX = 4000, PAGES_MAX = 30, PTS_MA
 export const IMG_MAX_BYTES = 1600 * 1024, ROOM_IMG_BYTES = 30 * 1024 * 1024;
 export const BOARD_CATS = ['mision', 'pnj', 'lugar', 'pista', 'objeto', 'otro'];
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
+export const NPC_HP = ['none', 'state', 'bar', 'pct', 'num']; // lo que ven los jugadores de la vida de los enemigos
+const MAPS_MAX = 30, MAP_STROKES_MAX = 6000, MAP_PTS_MAX = 600, MAP_LAYERS_MAX = 8, MAP_TOOLS = ['pen', 'line', 'rect', 'text'];
 
 const int = (v, lo, hi, def = 0) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def; };
 const str = (v, max) => String(v ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, max);
@@ -61,7 +63,7 @@ export class Rooms {
     // Si el servidor se reinició, el DM puede reabrir la mesa con su copia local y el mismo código
     const want = restore && /^[A-Z]{4}$/.test(String(restore.code || '')) && !this.rooms.has(restore.code) ? restore.code : null;
     const room = { code: want || this.newCode(), created: this.now(), touched: this.now(), members: new Map(), npcs: new Map(), order: [], turn: -1, round: 0, hidePc: false, log: [],
-      chat: [], board: [], strokes: [], pages: [], images: new Map(), imgBytes: 0, session: { title: '', started: this.now(), ended: null } };
+      npcHp: 'state', maps: new Map(), chat: [], board: [], strokes: [], pages: [], images: new Map(), imgBytes: 0, session: { title: '', started: this.now(), ended: null } };
     if (want) this.restore(room, restore);
     this.rooms.set(room.code, room);
     const m = this.addMember(room, name, char, asDm ? 'dm' : 'player');
@@ -76,6 +78,28 @@ export class Rooms {
     room.board = (Array.isArray(r.board) ? r.board : []).slice(0, BOARD_MAX).map((b) => cleanBoard(b)).filter(Boolean);
     room.strokes = (Array.isArray(r.strokes) ? r.strokes : []).slice(-STROKES_MAX).map((k) => cleanStroke(k, k && k.by)).filter(Boolean);
     room.pages = (Array.isArray(r.pages) ? r.pages : []).slice(-PAGES_MAX).map((pg) => ({ at: Number(pg.at) || 0, strokes: (pg.strokes || []).slice(0, STROKES_MAX).map((k) => cleanStroke(k, k && k.by)).filter(Boolean) }));
+    if (NPC_HP.includes(r.npcHp)) room.npcHp = r.npcHp;
+    if (r.combat) this.loadEncounter(room, r.combat);
+  }
+
+  /* Encuentro guardado: enemigos con sus números, ronda y de quién era el turno */
+  loadEncounter(room, e) {
+    room.npcs = new Map();
+    for (const x of (Array.isArray(e.npcs) ? e.npcs : []).slice(0, MAX_NPCS)) {
+      const hpMax = int(x.hpMax, 1, 9999, 10);
+      const n = { id: 'n' + id(4), name: str(x.name, 40) || 'Enemigo', ac: int(x.ac, 0, 40, 12), hp: int(x.hp, 0, hpMax, hpMax), hpMax, temp: int(x.temp, 0, 999, 0),
+        init: x.init == null || x.init === '' ? null : int(x.init, -10, 50, 0), conds: Array.isArray(x.conds) ? x.conds.filter(c => CONDITIONS.includes(c)).slice(0, 16) : [], hidden: !!x.hidden,
+        ref: x.ref ? str(x.ref, 120) : null, initMod: int(x.initMod, -10, 20, 0), formula: x.formula ? str(x.formula, 30) : null };
+      room.npcs.set(n.id, n);
+    }
+    // la iniciativa de los jugadores se recupera por el nombre de su personaje (o se guarda para cuando entren)
+    room.pcInit = {};
+    for (const [nm, v] of Object.entries(e.pcInit && typeof e.pcInit === 'object' ? e.pcInit : {}).slice(0, MAX_MEMBERS)) room.pcInit[str(nm, 40)] = int(v, -10, 50, 0);
+    for (const m of room.members.values()) if (m.char && room.pcInit[m.char.name] != null) m.init = room.pcInit[m.char.name];
+    this.sortOrder(room);
+    room.round = int(e.round, 0, 999, 0);
+    const tn = str(e.turnName, 40), ti = room.order.findIndex((oid) => this.nameOf(room, oid) === tn);
+    room.turn = room.round > 0 && room.order.length ? Math.max(0, ti) : -1;
   }
 
   join(code, name, char, token, asDm) {
@@ -92,7 +116,9 @@ export class Rooms {
 
   addMember(room, name, char, role) {
     const m = { id: 'p' + id(4), token: id(12), role, name: str(name, 40) || 'Jugador', online: true, init: null, char: role === 'dm' ? null : cleanChar(char) };
+    if (m.char && room.pcInit && room.pcInit[m.char.name] != null) m.init = room.pcInit[m.char.name];
     room.members.set(m.id, m); this.touch(room);
+    if (m.init != null) this.sortOrder(room);
     return m;
   }
 
@@ -140,7 +166,8 @@ export class Rooms {
         const count = int(msg.count, 1, 12, 1);
         for (let i = 0; i < count; i++) {
           const hpMax = int(msg.hp, 1, 9999, 10);
-          const n = { id: 'n' + id(4), name: (str(msg.name, 40) || 'Enemigo') + (count > 1 ? ' ' + (i + 1) : ''), ac: int(msg.ac, 0, 40, 12), hp: hpMax, hpMax, temp: 0, init: msg.init == null || msg.init === '' ? null : int(msg.init, -10, 50, 0), conds: [], hidden: !!msg.hidden };
+          const n = { id: 'n' + id(4), name: (str(msg.name, 40) || 'Enemigo') + (count > 1 ? ' ' + (i + 1) : ''), ac: int(msg.ac, 0, 40, 12), hp: hpMax, hpMax, temp: 0, init: msg.init == null || msg.init === '' ? null : int(msg.init, -10, 50, 0), conds: [], hidden: !!msg.hidden,
+            ref: msg.ref ? str(msg.ref, 120) : null, initMod: int(msg.initMod, -10, 20, 0), formula: msg.formula ? str(msg.formula, 30) : null };
           room.npcs.set(n.id, n);
         }
         this.sortOrder(room);
@@ -168,6 +195,59 @@ export class Rooms {
       }
       case 'npc.reveal': { if (!isDm) throw err('dm_only', 'Solo el DM.'); const n = room.npcs.get(msg.id); if (n) n.hidden = !n.hidden; break; }
       case 'hidepc': if (!isDm) throw err('dm_only', 'Solo el DM.'); room.hidePc = !!msg.value; break;
+      case 'npchp': if (!isDm) throw err('dm_only', 'Solo el DM.'); if (!NPC_HP.includes(msg.value)) throw err('bad_msg', 'Opción desconocida.'); room.npcHp = msg.value; break;
+      case 'enc.load': {
+        if (!isDm) throw err('dm_only', 'Solo el DM carga encuentros.');
+        this.loadEncounter(room, msg.enc || {});
+        this.log(room, `El DM cargó el encuentro ${str(msg.enc && msg.enc.name, 60) || 'guardado'}`);
+        break;
+      }
+      /* ---------- Mapas: cada zona es un lienzo grande con cuadrícula y capas; dibujan todos ---------- */
+      case 'map.save': {
+        const mp = cleanMap(msg.map, me.id); if (!mp) throw err('bad_map', 'El mapa no tiene un formato válido.');
+        const old = room.maps.get(mp.id);
+        if (!old && room.maps.size >= MAPS_MAX) throw err('too_many', 'La mesa ya tiene demasiados mapas.');
+        if (old && !isDm && old.by !== me.id) throw err('dm_only', 'Solo el DM o quien lo creó puede reemplazar este mapa.');
+        mp.updated = this.now(); room.maps.set(mp.id, mp);
+        for (const mm of room.members.values()) out.push({ to: mm.id, msg: { t: 'map', map: mp } });
+        break;
+      }
+      case 'map.meta': {
+        const mp = room.maps.get(str(msg.id, 24)); if (!mp) throw err('no_map', 'Ese mapa ya no está.');
+        if (msg.name != null && str(msg.name, 60)) mp.name = str(msg.name, 60);
+        if (['square', 'hex', 'none'].includes(msg.grid)) mp.grid = msg.grid;
+        if (Array.isArray(msg.layers)) { const ls = cleanLayers(msg.layers); if (ls.length) { mp.layers = ls; const ok = new Set(ls.map((l) => l.id)); mp.strokes = mp.strokes.filter((k) => ok.has(k.l)); } }
+        mp.updated = this.now();
+        for (const mm of room.members.values()) out.push({ to: mm.id, msg: { t: 'map.meta', id: mp.id, name: mp.name, grid: mp.grid, layers: mp.layers, updated: mp.updated } });
+        break;
+      }
+      case 'map.del': {
+        const mp = room.maps.get(str(msg.id, 24)); if (!mp) break;
+        if (!isDm && mp.by !== me.id) throw err('dm_only', 'Solo el DM o quien lo creó puede quitarlo de la mesa.');
+        room.maps.delete(mp.id);
+        break;
+      }
+      case 'map.get': { const mp = room.maps.get(str(msg.id, 24)); if (!mp) throw err('no_map', 'Ese mapa ya no está.'); out.push({ to: me.id, msg: { t: 'map', map: mp } }); out.quiet = true; break; }
+      case 'map.add': {
+        const mp = room.maps.get(str(msg.id, 24)); if (!mp) throw err('no_map', 'Ese mapa ya no está.');
+        if (mp.strokes.length >= MAP_STROKES_MAX) throw err('board_full', 'Este mapa está lleno: hagan uno nuevo para la siguiente zona.');
+        const k = cleanMapStroke(msg.stroke, me.id, mp); if (!k) throw err('bad_stroke', 'No se pudo guardar el trazo.');
+        k.id = 'k' + id(5); mp.strokes.push(k); mp.updated = this.now();
+        for (const mm of room.members.values()) out.push({ to: mm.id, msg: { t: 'map.add', id: mp.id, stroke: k, updated: mp.updated } });
+        out.quiet = true;
+        break;
+      }
+      case 'map.rm': case 'map.undo': {
+        const mp = room.maps.get(str(msg.id, 24)); if (!mp) throw err('no_map', 'Ese mapa ya no está.');
+        let ids;
+        if (msg.t === 'map.undo') { const last = [...mp.strokes].reverse().find((k) => k.by === me.id); ids = last ? [last.id] : []; }
+        else ids = (Array.isArray(msg.sids) ? msg.sids : []).slice(0, 200).map((x) => str(x, 20));
+        const set = new Set(ids), before = mp.strokes.length;
+        mp.strokes = mp.strokes.filter((k) => !set.has(k.id));
+        if (mp.strokes.length !== before) { mp.updated = this.now(); for (const mm of room.members.values()) out.push({ to: mm.id, msg: { t: 'map.rm', id: mp.id, sids: ids, updated: mp.updated } }); }
+        out.quiet = true;
+        break;
+      }
       case 'turn': {
         if (!room.order.length) throw err('no_order', 'Primero tiren iniciativa.');
         const cur = room.order[room.turn];
@@ -309,9 +389,45 @@ export class Rooms {
   view(room, forId) {
     const me = room.members.get(forId), dm = me && me.role === 'dm';
     const members = [...room.members.values()].map(m => ({ id: m.id, role: m.role, name: m.name, online: m.online, init: m.init, char: m.char && (dm || m.id === forId || !room.hidePc ? m.char : { ...m.char, hp: null, temp: null }) }));
-    const npcs = [...room.npcs.values()].filter(n => dm || !n.hidden).map(n => dm ? n : { id: n.id, name: n.name, init: n.init, conds: n.conds, state: hpState(n) });
-    return { code: room.code, you: forId, role: me ? me.role : null, members, npcs, board: room.board, session: room.session, pages: room.pages.length, order: room.order.filter(x => dm || !room.npcs.get(x)?.hidden), turnId: room.order[room.turn] || null, round: room.round, hidePc: room.hidePc, log: room.log.slice(-20) };
+    const npcs = [...room.npcs.values()].filter(n => dm || !n.hidden).map(n => dm ? n : npcForPlayers(n, room.npcHp));
+    const maps = [...room.maps.values()].map((mp) => ({ id: mp.id, name: mp.name, cols: mp.cols, rows: mp.rows, grid: mp.grid, layers: mp.layers, n: mp.strokes.length, by: mp.by, updated: mp.updated }));
+    return { code: room.code, you: forId, role: me ? me.role : null, members, npcs, npcHp: room.npcHp, maps, board: room.board, session: room.session, pages: room.pages.length, order: room.order.filter(x => dm || !room.npcs.get(x)?.hidden), turnId: room.order[room.turn] || null, round: room.round, hidePc: room.hidePc, log: room.log.slice(-20) };
   }
+}
+
+/* Lo que ven los jugadores de un enemigo según lo que eligió el DM */
+function npcForPlayers(n, mode) {
+  const o = { id: n.id, name: n.name, init: n.init, conds: n.conds, show: mode };
+  if (mode === 'state') o.state = hpState(n);
+  else if (mode === 'bar' || mode === 'pct') { o.pct = n.hp <= 0 ? 0 : Math.max(1, Math.round(n.hp / n.hpMax * 100)); o.state = n.hp <= 0 ? 'caído' : null; }
+  else if (mode === 'num') { o.hp = n.hp; o.hpMax = n.hpMax; o.temp = n.temp; o.state = n.hp <= 0 ? 'caído' : null; }
+  return o;
+}
+function cleanLayers(ls) {
+  const out = [], seen = new Set();
+  for (const l of ls.slice(0, MAP_LAYERS_MAX)) { const lid = str(l && l.id, 12); if (!/^[\w-]{1,12}$/.test(lid) || seen.has(lid)) continue; seen.add(lid); out.push({ id: lid, name: str(l.name, 30) || 'Capa' }); }
+  return out;
+}
+const r2 = (v) => Math.round(v * 100) / 100;
+function cleanMapStroke(k, by, mp) {
+  if (!k || !MAP_TOOLS.includes(k.k) || !Array.isArray(k.pts)) return null;
+  if (!mp.layers.some((l) => l.id === k.l)) return null;
+  const n = k.pts.length; if (n < 2 || n % 2 || n > MAP_PTS_MAX * 2 || (k.k !== 'pen' && k.k !== 'text' && n !== 4) || (k.k === 'text' && n !== 2)) return null;
+  const pts = [];
+  for (let i = 0; i < n; i += 2) { const x = Number(k.pts[i]), y = Number(k.pts[i + 1]); if (!(x >= -1 && x <= mp.cols + 1 && y >= -1 && y <= mp.rows + 1)) return null; pts.push(r2(x), r2(y)); }
+  const o = { id: k.id ? str(k.id, 20) : undefined, by: str(by, 20), l: k.l, k: k.k, c: COLOR_RE.test(k.c) ? k.c : '#2b1d12', w: Math.min(3, Math.max(0.03, Number(k.w) || 0.12)), pts };
+  if (k.k === 'text') { o.t = str(k.t, 60); if (!o.t) return null; }
+  if (k.k === 'rect' && k.f) o.f = 1;
+  return o;
+}
+function cleanMap(m, by) {
+  if (!m || typeof m !== 'object') return null;
+  const mid = str(m.id, 24); if (!/^[\w-]{4,24}$/.test(mid)) return null;
+  const mp = { id: mid, name: str(m.name, 60) || 'Mapa', cols: int(m.cols, 8, 160, 40), rows: int(m.rows, 8, 160, 30), grid: ['square', 'hex', 'none'].includes(m.grid) ? m.grid : 'square', by: str(m.by, 20) || str(by, 20), created: Number(m.created) || Date.now() };
+  mp.layers = cleanLayers(Array.isArray(m.layers) ? m.layers : []); if (!mp.layers.length) mp.layers = [{ id: 'l1', name: 'Terreno' }];
+  mp.strokes = (Array.isArray(m.strokes) ? m.strokes : []).slice(0, MAP_STROKES_MAX).map((k) => { const c = cleanMapStroke(k, k && k.by || by, mp); if (c && k.id) c.id = str(k.id, 20); return c; }).filter(Boolean);
+  for (const k of mp.strokes) if (!k.id) k.id = 'k' + id(5);
+  return mp;
 }
 
 /* Un susurro solo lo ven quien lo manda y quien lo recibe */

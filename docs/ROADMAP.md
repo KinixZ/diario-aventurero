@@ -9,8 +9,10 @@
 - [ ] **Lanzar un conjuro sobre otros desde el grimorio**: elegir conjuro y nivel, objetivos en la sala; el diario arma la tirada (salvación + CD, o ataque) y cada objetivo ve "Tira salvación de Des CD 15". Al resolver: daño completo o mitad.
 - [ ] Efectos con duración (Bless, Bane, Haste): se ven en la ficha de cada objetivo y se descuentan por ronda.
 - [ ] Concentración compartida: si pierdes la concentración, terminan los efectos que pusiste.
-- [ ] Bestiario para el DM: agregar PNJ desde 5etools con CA, PG y ataques.
-- [ ] Mapa simple o lista de distancias (opcional).
+- [x] Bestiario para el DM: archivo aparte, buscar, ver ficha y agregar a la iniciativa.
+- [x] Encuentros guardados y vida de enemigos visible a elección del DM.
+- [x] Mapas compartidos con cuadrícula, capas, líneas, rectángulos y texto.
+- [ ] Fichas que se mueven sobre el mapa.
 - [ ] Persistencia de salas (Redis o SQLite) si se usan sesiones de varios días.
 
 - [x] Mesa de juego: chat, tiradas compartidas, imágenes, susurros, pizarra, tablero del DM y guardado de la sesión.
@@ -18,7 +20,6 @@
 - [x] Rasgos agrupados, habilidades homebrew con usos y acceso rápido del combate (conjuros, rasgos, pociones, armas guardadas).
 - [x] Iconos de coste estilo Baldur's Gate 3 (opcional).
 - [ ] Dados virtuales opcionales en la mesa (para quien no traiga dados).
-- [ ] Mapa con fichas que se mueven en la pizarra.
 
 ## Diario
 

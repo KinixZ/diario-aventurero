@@ -20,6 +20,27 @@ WebSocket en `/ws`. Todos los mensajes son JSON con un campo `t`.
 | `apply` | `targets[]`, `kind`, `amount?`, `cond?`, `note?` | jugadores; el DM solo sobre enemigos | `kind`: `damage`, `heal`, `temp`, `cond+`, `cond-`. El DM no modifica la hoja de los jugadores. |
 | `leave` | — | cualquiera | Sale de la sala. |
 
+### Enemigos, vida visible y encuentros
+
+| `t` | Campos | Quién | Qué hace |
+|---|---|---|---|
+| `npc.add` | … `ref?`, `initMod?`, `formula?` | DM | `ref` = `Nombre|LIBRO` del bestiario (solo lo ve el DM, para abrir la ficha). |
+| `npchp` | `value`: `none` \| `state` \| `bar` \| `pct` \| `num` | DM | Qué ven los jugadores de la vida de los enemigos. En la vista de un jugador cada PNJ trae `show` y, según eso, `state`, `pct` o `hp/hpMax/temp`. |
+| `enc.load` | `enc: {name, npcs[], round, turnName, pcInit{nombre: init}}` | DM | Carga un encuentro guardado. La iniciativa de los jugadores se busca por el nombre del personaje (también para quien entre después). `create.restore.combat` usa el mismo formato. |
+
+### Mapas
+
+| `t` | Campos | Quién | Qué hace |
+|---|---|---|---|
+| `map.save` | `map: {id, name, cols, rows, grid, layers[{id,name}], strokes[]}` | cualquiera (reemplazar: DM o quien lo creó) | Crea o sube un mapa completo. Todos reciben `map`. |
+| `map.get` | `id` | cualquiera | Pide el mapa completo (`map`). |
+| `map.add` | `id`, `stroke: {k: pen\|line\|rect\|text, l: capa, c, w, pts[x,y…], t?, f?}` | cualquiera | Trazo en casillas del mapa. Todos reciben `map.add`. |
+| `map.rm` / `map.undo` | `id`, `sids[]` | cualquiera | Borrar trazos / deshacer el último propio. Todos reciben `map.rm`. |
+| `map.meta` | `id`, `name?`, `grid?`, `layers?` | cualquiera | Nombre, cuadrícula y capas (quitar una capa borra sus trazos). |
+| `map.del` | `id` | DM o quien lo creó | Lo quita de la mesa (cada teléfono conserva su copia). |
+
+El estado (`state`) trae `maps` con los datos de cada mapa sin los trazos (`n` = cuántos tiene, `updated`). Hasta 30 mapas por mesa, 6000 trazos por mapa, mapas de hasta 160 × 160 casillas.
+
 ### Mesa (chat, pizarra, tablero, sesión)
 
 | `t` | Campos | Quién | Qué hace |
@@ -70,4 +91,4 @@ Para el DM, cada PNJ trae además `ac`, `hp`, `hpMax`, `temp` y `hidden`.
 
 ## Límites
 
-12 personas y 40 PNJ por sala, 500 salas por servidor, mensajes de hasta 16 KB, 30 mensajes cada 5 segundos por conexión.
+12 personas y 40 PNJ por sala, 500 salas por servidor, mensajes de hasta 2 MB, 80 mensajes cada 5 segundos por conexión.

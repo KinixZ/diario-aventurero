@@ -1180,7 +1180,7 @@
     else if (m.kind === 'cond-') r.conds = r.conds.filter(function(k){ return k !== m.cond; });
     save(); render(false);
   }
-  window.Diario = {cur:cur, D:function(){ return D; }, rt:rt, applyToMe:applyToMe,
+  window.Diario = {cur:cur, D:function(){ return D; }, rt:rt, applyToMe:applyToMe, trWrap:function(h, k){ return trWrap(h, k); }, trInit:function(r){ trInit(r); }, openSheet:function(id){ openSheet(id); }, closeSheets:function(){ closeSheets(); },
     addNote:function(text){ var C = cur(); if (!C) return false; var r = rt(C); r.notes = (r.notes ? r.notes.replace(/\s+$/, '') + '\n\n' : '') + text; save(); if ($('#notes')) $('#notes').value = r.notes; return true; },
     newTurn:function(){ var C = cur(); if (!C) return; rt(C).econ = {a:false,b:false,r:false,m:false}; S.cSub = 'turno'; save(); if (!$('#combat').hidden) renderCombat(); },
     combatRefresh:function(){ if (!$('#combat').hidden) combatHead(); },
@@ -1930,7 +1930,7 @@
 
   /* ---------- Hojas ---------- */
   function openSheet(id){ $$('.sheet').forEach(function(s){ s.hidden = s.id !== id; }); var s = $('#' + id); var f = s.querySelector('input,button'); if (f) f.focus({preventScroll:true}); }
-  function openSettings(){ if (window.Sala) Sala.settings(); $('#dirPick').hidden = !wide(); $('#dirPick').parentNode.style.gridTemplateColumns = wide() ? '' : '1fr'; libTable(); renderChars(); trSettings(); openSheet('settingsSheet'); }
+  function openSettings(){ if (window.Sala) Sala.settings(); $('#dirPick').hidden = !wide(); $('#dirPick').parentNode.style.gridTemplateColumns = wide() ? '' : '1fr'; libTable(); renderChars(); trSettings(); if (window.Bestiario) Bestiario.settings(); openSheet('settingsSheet'); }
   function closeSheets(){ $$('.sheet').forEach(function(s){ s.hidden = true; }); }
 
   /* ---------- Libro ---------- */
@@ -2052,6 +2052,7 @@
       case 'quse': quickUse(b.dataset.q, b.dataset.lv); break;
       case 'qequip': sel = b.dataset.id; equip(); sel = null; if (!$('#combat').hidden) renderCombat(); if (invMsg) { if (window.Sala) Sala.toast(invMsg.replace(/<[^>]+>/g, '')); invMsg = ''; } break;
       case 'combat': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('combate'); break;
+      case 'mapsopen': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('mapas'); break;
       case 'mesa': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('chat'); break;
       case 'endcombat': $('#combat').hidden = true; break;
       case 'hp': r.hp = Math.max(0, Math.min(D.hp.max, r.hp + (+b.dataset.v))); save(); renderCombat(); break;

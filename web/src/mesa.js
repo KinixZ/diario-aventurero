@@ -26,7 +26,7 @@ var Mesa = (function(){
   /* ---------- Mensajes de la Sala ---------- */
   Sala.on('joined', function(m){ if (C.code !== m.code) { C = blank(m.code); endedSnap = null; } persist(); });
   Sala.on('mesa.init', function(m){ C.chat = m.chat || []; C.strokes = m.strokes || []; persist(); drawAll(); render(); });
-  Sala.on('state', function(r){ C.board = r.board || []; C.title = r.session ? r.session.title : C.title; if (r.session) C.started = r.session.started; C.members = r.members.map(function(x){ return {id:x.id, name: x.role === 'dm' ? 'DM' : x.char ? x.char.name : x.name, role:x.role}; }); persist(); if (tab !== 'combate') render(); badge(); });
+  Sala.on('state', function(r){ C.board = r.board || []; C.title = r.session ? r.session.title : C.title; if (r.session) C.started = r.session.started; C.members = r.members.map(function(x){ return {id:x.id, name: x.role === 'dm' ? 'DM' : x.char ? x.char.name : x.name, role:x.role}; }); if (r.role === 'dm') { C.combat = Sala.encounter('Combate en curso'); C.npcHp = r.npcHp; C.mapIds = (r.maps || []).map(function(m){ return m.id; }); } persist(); if (tab !== 'combate' && tab !== 'mapas') render(); badge(); });
   Sala.on('chat', function(m){ C.chat.push(m.msg); if (C.chat.length > 800) C.chat.shift(); persist(); if (tab === 'chat' && visibleNow()) renderChat(true); else { unread++; badge(); } });
   Sala.on('draw', function(m){ C.strokes.push(m.stroke); persist(); strokeOn(ctx(), m.stroke); });
   Sala.on('draw.undo', function(m){ C.strokes = C.strokes.filter(function(k){ return k.id !== m.id; }); persist(); drawAll(); });
@@ -36,7 +36,8 @@ var Mesa = (function(){
   function visibleNow(){ var c = document.getElementById('combat'); return c && !c.hidden; }
 
   /* Copia para reabrir la mesa si el servidor la perdió (solo el DM la usa) */
-  function restoreSnapshot(code){ if (C.code !== code || endedSnap) return null; return {code: code, title: C.title, started: C.started, chat: C.chat, board: C.board, strokes: C.strokes, pages: C.pages}; }
+  function restoreSnapshot(code){ if (C.code !== code || endedSnap) return null; return {code: code, title: C.title, started: C.started, chat: C.chat, board: C.board, strokes: C.strokes, pages: C.pages, combat: C.combat || null, npcHp: C.npcHp || null}; }
+  function restoreMapIds(){ return (C.mapIds || []).slice(); }
 
   /* ---------- Pestañas ---------- */
   function show(t){ tab = t || tab; var cb = document.getElementById('combat'); if (!cb) return; cb.setAttribute('data-tab', tab); $$('#mesaTabs button').forEach(function(b){ b.setAttribute('aria-selected', String(b.dataset.v === tab)); }); if (tab === 'chat') { unread = 0; } badge(); render(); }
@@ -45,6 +46,7 @@ var Mesa = (function(){
     if (tab === 'chat') renderChat(false);
     else if (tab === 'pizarra') renderDraw();
     else if (tab === 'tablero') renderBoard();
+    else if (tab === 'mapas' && window.Mapas) Mapas.render();
   }
   function lobby(where){ return '<div class="mesa-lobby">' + (endedSnap ? endedBanner() : '') + '<p class="note">' + (where || 'Entra a una mesa para usar esto.') + '</p><div id="salaBoxM"></div></div>'; }
   function mountLobby(){ var b = document.getElementById('salaBoxM'); if (b && window.Sala) Sala.mount(b); }
@@ -257,5 +259,5 @@ var Mesa = (function(){
   function closeViewer(){ var v = document.getElementById('mesaViewer'); if (v) v.hidden = true; }
 
   setTimeout(renderSessions, 0);
-  return {show:show, render:render, restoreSnapshot:restoreSnapshot, renderSessions:renderSessions, tab:function(){ return tab; }};
+  return {restoreMapIds:restoreMapIds, show:show, render:render, restoreSnapshot:restoreSnapshot, renderSessions:renderSessions, tab:function(){ return tab; }};
 })();

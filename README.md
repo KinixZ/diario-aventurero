@@ -33,6 +33,20 @@ El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abra
 - **Sala de combate**: código de 4 letras, iniciativa ordenada, turnos y rondas (aparecen cuando el DM empieza el combate), daño, curación, PG temporales y condiciones entre jugadores.
 - **Mesa de juego**: el DM abre la mesa y todos entran con el código. Pestañas de **Chat** (notas de la sesión, tiradas compartidas, imágenes del DM y susurros), **Pizarra** (dibujo con el dedo, colores, borrador, hojas), **Tablero** (misión, PNJ, lugares y pistas fijados por el DM) y **Combate**. Al terminar, la sesión se guarda en las Notas de cada quien y como archivo descargable con el chat y los dibujos.
 - **Vista del DM**: sin hoja propia; crea enemigos y lleva su vida, CA, iniciativa y estados (ocultos o visibles para el grupo). Sus acciones las maneja fuera de la app.
+- **Bestiario del DM** (archivo aparte, ver abajo): busca entre los monstruos de tu 5etools por nombre, VD, tipo y libro; ve su ficha con los ataques listos para tirar («Tira 1d20 + 6 · 2d8 + 4 contundente») y agrégalos a la iniciativa con su CA, PG y modificador.
+- **Vida de los enemigos a elección del DM**: los jugadores ven nada, cómo se ve («herido»), solo la barra, la barra con porcentaje o los números.
+- **Encuentros guardados**: el DM guarda el combate a la mitad (enemigos con vida y estados, iniciativa de todos, ronda y turno) y lo carga en otra sesión. Si el servidor se reinicia, la mesa vuelve con el combate.
+- **Mapas de las zonas**: lienzos grandes con cuadrícula cuadrada o hexagonal, capas (terreno, paredes, notas…), lápiz, líneas, rectángulos, texto y borrador; zoom con dos dedos. En la mesa dibujan todos a la vez y cada teléfono guarda los mapas para revisarlos después; se pueden bajar como imagen.
+
+## Bestiario del DM
+
+El DM carga un segundo archivo con los enemigos; los jugadores no lo necesitan. Se crea desde la misma copia de 5etools:
+
+```bash
+npm run bestiario -- ./5etools-src/data ./bestiario-5e.json
+```
+
+Luego, en el teléfono o laptop del DM: **Ajustes → Bestiario del DM → Elegir archivo**. Pesa unos 8 MB y queda guardado en ese dispositivo.
 
 ## Traducción en el teléfono
 

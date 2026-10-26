@@ -49,6 +49,7 @@
       <div class="panel" data-panel="notas" hidden>
         <label for="notes" class="label">diario de sesión</label>
         <textarea id="notes" class="notes" placeholder="Escribe aquí lo que pasó en la sesión: nombres, pistas y promesas rotas…"></textarea>
+        <button class="btn notes-maps" type="button" data-act="mapsopen"><svg class="ic"><use href="#i-map"/></svg>Mapas de las zonas</button>
         <div class="card ses-list" id="sesList"></div>
       </div>
       <div class="panel" data-panel="grimorio" id="grim" hidden></div>
@@ -167,6 +168,10 @@
       <div class="sheet-h"><h2 id="quickTitle">Acceso rápido del combate</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="scroll"><p class="note" style="margin-top:0">Marca lo que quieres tener a mano en «Mi turno». Al usarlo se gasta el espacio, la carga o el objeto, y se marca tu acción.</p><div id="quickList" class="q-picks"></div></div>
     </div>
+    <div class="sheet" id="bestSheet" hidden role="dialog" aria-labelledby="bestTitle">
+      <div class="sheet-h"><h2 id="bestTitle">Bestiario</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll"><div id="bestBody"></div></div>
+    </div>
     <div class="sheet" id="settingsSheet" hidden role="dialog" aria-labelledby="setTitle">
       <div class="sheet-h"><h2 id="setTitle">Ajustes del diario</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar ajustes"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="scroll" style="display:flex;flex-direction:column;gap:22px">
@@ -199,6 +204,12 @@
           <label class="toggle" style="margin-top:10px"><input type="checkbox" id="hudBg3"> Iconos estilo Baldur's Gate 3 <small class="muted">(acción en círculo verde, adicional en triángulo naranja, reacción en morado y espacios de conjuro en cuadros azules)</small></label>
         </section>
         <section>
+          <span class="label">bestiario del dm</span>
+          <p style="margin:6px 0 0;font-size:15px">Solo para el DM: el archivo <b>bestiario-5e.json</b> con los enemigos de tu 5etools. Se crea en la laptop con <code>npm run bestiario</code>.</p>
+          <div class="picks"><label class="btn pickbtn">Elegir archivo<input type="file" id="bestFile"></label><button class="btn" type="button" data-act="bestdel" id="bestDel" hidden>Quitar bestiario</button></div>
+          <p class="note" id="bestStatus" style="margin:6px 0 0"></p>
+        </section>
+        <section>
           <span class="label">biblioteca de 5etools</span>
           <p style="margin:6px 0 0;font-size:15px">Carga los datos de tu copia de 5etools. Se guardan solo en este dispositivo y funcionan sin internet.</p>
           <div class="picks">
@@ -227,6 +238,7 @@
     <nav class="mesa-tabs" id="mesaTabs" role="tablist" aria-label="Secciones de la mesa">
       <button type="button" role="tab" data-act="mesatab" data-v="chat" aria-selected="false"><svg class="ic"><use href="#i-chat"/></svg><span>Chat</span><i class="badge" hidden></i></button>
       <button type="button" role="tab" data-act="mesatab" data-v="pizarra" aria-selected="false"><svg class="ic"><use href="#i-brush"/></svg><span>Pizarra</span></button>
+      <button type="button" role="tab" data-act="mesatab" data-v="mapas" aria-selected="false"><svg class="ic"><use href="#i-map"/></svg><span>Mapas</span></button>
       <button type="button" role="tab" data-act="mesatab" data-v="tablero" aria-selected="false"><svg class="ic"><use href="#i-pin"/></svg><span>Tablero</span></button>
       <button type="button" role="tab" data-act="mesatab" data-v="combate" aria-selected="true"><svg class="ic"><use href="#i-swords"/></svg><span>Combate</span></button>
     </nav>
@@ -234,6 +246,7 @@
     <div class="mesa-p" id="mesaChat"></div>
     <div class="mesa-p" id="mesaDraw"></div>
     <div class="mesa-p" id="mesaBoard"></div>
+    <div class="mesa-p" id="mesaMaps"></div>
     <div class="combat-b">
       <div class="c-top">
         <div class="c-vitals" id="cVitals"></div>

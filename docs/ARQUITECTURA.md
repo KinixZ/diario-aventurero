@@ -14,6 +14,8 @@ Los scripts se cargan en este orden y cada uno expone un objeto global:
 | `app.js` | `Diario` | los anteriores | El libro: hoja, conjuros, mochila, rasgos, notas, grimorio, creador, compañeros, traducción, modo combate. |
 | `sala.js` | `Sala` | `Diario` | Cliente WebSocket de la sala (conexión, reconexión, combate). Expone `Sala.on/send` para otros módulos. |
 | `mesa.js` | `Mesa` | `Sala` | Pestañas de la mesa: chat, tiradas, imágenes, susurros, pizarra, tablero y guardado de la sesión (Notas + archivo en IndexedDB). |
+| `bestiario.js` | `Bestiario` | `Sala`, `Render5e` | Bestiario del DM (`bestiario-5e.json`, IndexedDB `bestiary`): buscador, ficha y agregar a la iniciativa. |
+| `mapas.js` | `Mapas` | `Sala` | Mapas de las zonas: lienzo con zoom, cuadrícula, capas y trazos; copia en IndexedDB `map:<id>` e índice `localStorage['diario-mapas']`. |
 
 ## El personaje
 
