@@ -15,6 +15,8 @@
 
 - [x] Mesa de juego: chat, tiradas compartidas, imágenes, susurros, pizarra, tablero del DM y guardado de la sesión.
 - [x] Hojas propias de compañeros.
+- [x] Rasgos agrupados, habilidades homebrew con usos y acceso rápido del combate (conjuros, rasgos, pociones, armas guardadas).
+- [x] Iconos de coste estilo Baldur's Gate 3 (opcional).
 - [ ] Dados virtuales opcionales en la mesa (para quien no traiga dados).
 - [ ] Mapa con fichas que se mueven en la pizarra.
 

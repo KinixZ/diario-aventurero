@@ -77,6 +77,8 @@
 
   /* ---------- Estilos ---------- */
   function applySkin(){
+    if (S.hud === 'bg3') document.documentElement.setAttribute('data-hud', 'bg3'); else document.documentElement.removeAttribute('data-hud');
+    var hb3 = $('#hudBg3'); if (hb3) hb3.checked = S.hud === 'bg3';
     if (!SKINS.some(function(k){ return k[0] === S.skin; })) S.skin = 'carmesi';
     if (S.skin === 'carmesi') document.documentElement.removeAttribute('data-skin');
     else document.documentElement.setAttribute('data-skin', S.skin);
@@ -236,7 +238,7 @@
   document.addEventListener('input', function(ev){ if (ev.target.id === 'spQ') { spQ = ev.target.value; spFocus = true; renderConjuros(cur()); spFocus = false; } });
   function pipsHTML(total, used, key){
     var out = '', avail = total - used;
-    for (var i = 0; i < total; i++) { var spent = i >= avail; out += '<button type="button" class="pip" data-act="pip" data-key="' + key + '" data-i="' + i + '" data-max="' + total + '" aria-pressed="' + spent + '" aria-label="' + (spent ? 'Gastado' : 'Disponible') + ' ' + (i + 1) + '"><span></span></button>'; }
+    for (var i = 0; i < total; i++) { var spent = i >= avail; out += '<button type="button" class="pip' + (/^(slot:|pact)/.test(key) ? ' slotpip' + (key === 'pact' ? ' pactpip' : '') : '') + '" data-act="pip" data-key="' + key + '" data-i="' + i + '" data-max="' + total + '" aria-pressed="' + spent + '" aria-label="' + (spent ? 'Gastado' : 'Disponible') + ' ' + (i + 1) + '"><span></span></button>'; }
     return out;
   }
   function slotsCard(r){
@@ -244,27 +246,244 @@
     D.slots.forEach(function(n, i){ if (n > 0) rows += '<div class="line"><span class="num">Nivel ' + (i + 1) + '</span><div class="pips">' + pipsHTML(n, Math.min(n, r.slotsUsed[i] || 0), 'slot:' + i) + '</div></div>'; });
     if (D.pact) rows += '<div class="line"><span class="num">Pacto · nivel ' + D.pact.level + '</span><div class="pips">' + pipsHTML(D.pact.count, Math.min(D.pact.count, r.pactUsed || 0), 'pact') + '</div></div>';
     if (!rows) return '';
-    return '<div class="card"><span class="label">espacios de conjuro</span>' + rows + '<p class="note" style="margin-top:6px">' + (D.mcCasterLevel ? 'Multiclase: espacios de un lanzador de nivel ' + D.mcCasterLevel + '. Cada clase prepara conjuros solo hasta el nivel que ella sola alcanzaría. ' : '') + 'Toca un rombo para gastarlo o recuperarlo.</p></div>';
+    return '<div class="card"><span class="label">espacios de conjuro</span>' + rows + '<p class="note" style="margin-top:6px">' + (D.mcCasterLevel ? 'Multiclase: espacios de un lanzador de nivel ' + D.mcCasterLevel + '. Cada clase prepara conjuros solo hasta el nivel que ella sola alcanzaría. ' : '') + 'Toca uno para gastarlo o recuperarlo.</p></div>';
   }
 
   /* ---------- Rasgos ---------- */
   var featCache = [];
+  /* ---------- Coste de acción (círculo, triángulo…) ---------- */
+  var COST = {a:'Acción', b:'Adicional', r:'Reacción', free:'Gratis', long:'Más de un turno'};
+  function costBadge(k, compact){ return k && COST[k] ? '<span class="cost cost-' + k + '" title="' + COST[k] + '"><i aria-hidden="true"></i>' + (compact ? '<span class="sr">' + COST[k] + '</span>' : '<b>' + COST[k] + '</b>') + '</span>' : ''; }
+  function plainText(en, max){
+    var out = [];
+    (function walk(x){ if (out.join(' ').length > (max || 400)) return; if (typeof x === 'string') out.push(x); else if (Array.isArray(x)) x.forEach(walk); else if (x && typeof x === 'object') { if (x.entries) walk(x.entries); else if (x.items) walk(x.items); } })(en);
+    return out.join(' ').replace(/\{@\w+ ([^|}]*)[^}]*\}/g, '$1').replace(/\s+/g, ' ').trim();
+  }
+  function firstSentence(t){ var m = /^(.{20,160}?[.!?])(\s|$)/.exec(t); var s = m ? m[1] : t.slice(0, 140); return s.length < t.length && !m ? s + '…' : s; }
+  function featCost(f){ return f.hb ? (f.hb.cost === 'none' ? '' : f.hb.cost) : R.costOf(plainText(f.e.entries, 900)); }
+  function featRes(f){ var k = f.hb ? 'hb:' + f.hb.id : N(f.name); return D.resources.filter(function(x){ return x.key === k; })[0]; }
+  var RG_SKIP = /^(ability score improvement|epic boon|.*\bsubclass( feature)?|subclass feature|.*\b(oath|domain|college|circle|patron|tradition|archetype|path|school) feature)$/i;
+  var REST_ES = {short:'se recupera con descanso corto', long:'se recupera con descanso largo', none:'no se recupera'};
+  function resUse(x, r){
+    if (!x) return '';
+    if (x.max) return '<div class="rg-use"><div class="pips">' + pipsHTML(x.max, Math.min(x.max, r.res[x.key] || 0), 'res:' + x.key) + '</div><small>' + (REST_ES[x.rest] || REST_ES.long) + '</small></div>';
+    if (x.pool) return '<div class="rg-use"><span class="num">' + (x.pool - (r.res[x.key] || 0)) + ' <small class="muted">/ ' + x.pool + '</small></span><small>' + REST_ES.long + '</small></div>';
+    return '';
+  }
+  function rgRow(f, i, r){
+    var cost = featCost(f), x = featRes(f), txt = f.hb ? f.hb.text : plainText(f.e.entries, 400), qk = f.hb ? 'hb:' + f.hb.id : 'f:' + f.name, pinned = quickKeys(r).indexOf(qk) >= 0;
+    var line = f.hb ? hbLine(f.hb) : '';
+    return '<div class="rg-f' + (cost ? ' act' : x ? ' pinable' : '') + '"><details class="feat-d" data-feat="' + i + '"><summary><span class="rg-t">' + costBadge(cost, true) + '<b>' + esc(f.name) + '</b>' + (f.level ? '<small>nv ' + (D.multi && f.clv ? f.clv : f.level) + '</small>' : '') + '</span>'
+      + (line ? '<span class="rg-line">' + line + '</span>' : '') + (txt ? '<span class="rg-s">' + esc(firstSentence(txt)) + '</span>' : '') + '</summary><div class="gtext"></div>'
+      + (f.hb ? '<div class="row rg-hbact"><button class="btn sm" type="button" data-act="abedit" data-id="' + attr(f.hb.id) + '">Editar</button><button class="btn sm" type="button" data-act="abdel" data-id="' + attr(f.hb.id) + '">Borrar</button></div>' : '') + '</details>'
+      + resUse(x, r)
+      + (cost || x ? '<button type="button" class="rg-pin" data-act="qtoggle" data-q="' + attr(qk) + '" aria-pressed="' + pinned + '" aria-label="' + (pinned ? 'Quitar del acceso rápido del combate' : 'Poner en el acceso rápido del combate') + '"><svg class="ic"><use href="#i-pin"/></svg></button>' : '')
+      + '</div>';
+  }
+  var rgQ = '', rgFocus = false;
   function renderRasgos(C){
     featCache = D.features;
-    var groups = [], used = {};
-    D.classes.forEach(function(E){ groups.push(['Clase', E.cls.name + (D.multi ? ' ' + E.lv : ''), E.cls.name]); if (E.sub) groups.push(['Subclase', E.sub.name, E.cls.name]); });
-    groups.push(['Especie', D.race ? D.race.name : '']); groups.push(['Dote', 'Dotes']);
-    var h = pendingBanner() + mcBanner() + '<div class="row"><span class="label">rasgos de ' + esc(C.name || 'tu personaje') + '</span><button class="btn main sm" type="button" data-act="levelup">Subir de nivel o editar</button></div>';
-    groups.forEach(function(g){
-      var list = D.features.map(function(f, i){ return {f:f, i:i}; }).filter(function(x){ return x.f.from === g[0] && (!g[2] || x.f.cn === g[2]); });
-      if (!list.length) return;
-      h += '<div class="group-h">' + esc(g[1]) + '</div>' + list.map(function(x){ used[x.i] = 1; return featD(x.f, x.i); }).join('');
+    var r = rt(C), filt = S.rgF || 'all', q = N(rgQ.trim()), groups = [], used = {};
+    D.classes.forEach(function(E){
+      groups.push({k:'c:' + E.cls.name, title:E.cls.name + ' ' + E.lv, sub:'clase', test:function(f){ return f.from === 'Clase' && f.cn === E.cls.name; }});
+      if (E.sub) groups.push({k:'s:' + E.cls.name, title:E.sub.name, sub:'subclase de ' + E.cls.name, test:function(f){ return f.from === 'Subclase' && f.cn === E.cls.name; }, intro:E.sub.name});
     });
-    var rest = D.features.map(function(f, i){ return {f:f, i:i}; }).filter(function(x){ return !used[x.i]; });
-    if (rest.length) h += '<div class="group-h">Otras opciones</div>' + rest.map(function(x){ return featD(x.f, x.i); }).join('');
+    groups.push({k:'race', title:D.race ? D.race.name : 'Especie', sub:'especie', test:function(f){ return f.from === 'Especie'; }});
+    groups.push({k:'feat', title:'Dotes', sub:'', test:function(f){ return f.from === 'Dote'; }});
+    groups.push({k:'hb', title:'Homebrew', sub:'habilidades propias', test:function(f){ return f.from === 'Homebrew'; }, hb:true});
+    var all = D.features.map(function(f, i){ return {f:f, i:i}; });
+    var nAct = all.filter(function(x){ return featCost(x.f) || featRes(x.f); }).length;
+    var h = pendingBanner() + mcBanner()
+      + '<div class="rg-bar"><input class="field" id="rgQ" type="search" placeholder="Buscar entre ' + all.length + ' rasgos" aria-label="Buscar rasgo" autocomplete="off" value="' + attr(rgQ) + '">'
+      + '<div class="viewseg" role="group" aria-label="Filtrar rasgos">' + [['all','Todos'],['act','En combate · ' + nAct],['pas','Pasivos']].map(function(x){ return '<button type="button" data-act="rgf" data-v="' + x[0] + '" aria-pressed="' + (filt === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>'
+      + '<div class="row rg-tools"><button class="btn sm" type="button" data-act="abnew">Nueva habilidad homebrew</button><button class="btn main sm" type="button" data-act="levelup">Subir de nivel o editar</button></div></div>'
+      + '<div class="rg-legend">' + costBadge('a') + costBadge('b') + costBadge('r') + '<span class="muted">· lo demás es pasivo</span></div>';
+    function keep(x){
+      var c = featCost(x.f), res = featRes(x.f);
+      if (filt === 'act' && !c && !res) return false;
+      if (filt === 'pas' && (c || res)) return false;
+      if (q && N(x.f.name).indexOf(q) < 0 && N(plainText(x.f.e.entries, 300)).indexOf(q) < 0) return false;
+      return true;
+    }
+    function groupHtml(g, list){
+      var skip = list.filter(function(x){ return RG_SKIP.test(x.f.name) || (g.intro && x.f.name === g.intro); });
+      var main = list.filter(function(x){ return skip.indexOf(x) < 0; }).filter(keep);
+      list.forEach(function(x){ used[x.i] = 1; });
+      if (!main.length && !(g.hb && !q && filt !== 'pas')) return '';
+      var closed = (S.rgClosed || {})[g.k] && !q, introX = g.intro && list.filter(function(x){ return x.f.name === g.intro; })[0];
+      var extra = skip.filter(function(x){ return !introX || x !== introX; });
+      return '<section class="rg-g' + (closed ? ' closed' : '') + '"><button type="button" class="rg-gh" data-act="rgg" data-k="' + attr(g.k) + '" aria-expanded="' + !closed + '"><span><b>' + esc(g.title) + '</b>' + (g.sub ? '<small>' + esc(g.sub) + '</small>' : '') + '</span><em>' + main.length + '</em><i class="chev" aria-hidden="true"></i></button>'
+        + (closed ? '' : '<div class="rg-list">'
+          + (introX ? '<details class="feat-d rg-intro" data-feat="' + introX.i + '"><summary><small>Sobre ' + esc(g.title) + '</small></summary><div class="gtext"></div></details>' : '')
+          + main.filter(function(x){ return featCost(x.f) || featRes(x.f); }).map(function(x){ return rgRow(x.f, x.i, r); }).join('')
+          + main.filter(function(x){ return !featCost(x.f) && !featRes(x.f); }).map(function(x){ return rgRow(x.f, x.i, r); }).join('')
+          + (g.hb && !main.length ? '<p class="note">Crea habilidades que no vienen en los libros: un rayo con 3 cargas, un don de tu deidad, un truco de tu raza homebrew. Aparecen aquí, en Recursos y en el acceso rápido del combate.</p>' : '')
+          + (extra.length ? '<p class="rg-also">También: ' + extra.map(function(x){ return esc(x.f.name) + (x.f.level ? ' (nv ' + (D.multi && x.f.clv ? x.f.clv : x.f.level) + ')' : ''); }).join(', ') + '</p>' : '') + '</div>')
+        + '</section>';
+    }
+    groups.forEach(function(g){ h += groupHtml(g, all.filter(function(x){ return g.test(x.f); })); });
+    var rest = all.filter(function(x){ return !used[x.i]; }), froms = [];
+    rest.forEach(function(x){ if (froms.indexOf(x.f.from) < 0) froms.push(x.f.from); });
+    froms.forEach(function(fr){ h += groupHtml({k:'o:' + fr, title:fr || 'Otras opciones', sub:'opciones elegidas', test:null}, rest.filter(function(x){ return x.f.from === fr; })); });
+    if (q && h.indexOf('rg-f') < 0) h += '<p class="empty-state">Ningún rasgo coincide con «' + esc(rgQ) + '».</p>';
     $('#pRasgos').innerHTML = h;
+    var qi = $('#rgQ'); if (qi && rgFocus) { qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
   }
+  document.addEventListener('change', function(ev){ if (ev.target.id === 'hudBg3') { S.hud = ev.target.checked ? 'bg3' : ''; applySkin(); save(); } });
+  document.addEventListener('input', function(ev){ if (ev.target.id === 'rgQ') { rgQ = ev.target.value; rgFocus = true; renderRasgos(cur()); rgFocus = false; } });
   function featD(f, i){ return '<details class="feat-d" data-feat="' + i + '"><summary><b>' + esc(f.name) + '</b><small>' + (f.level ? 'nivel ' + (D && D.multi && f.clv ? f.clv + ' de ' + f.cn : f.level) + ' · ' : '') + esc(f.e.source || '') + '</small></summary><div class="gtext"></div></details>'; }
+
+  /* ---------- Habilidades homebrew ---------- */
+  var DT_OPTS = [['O','fuerza'],['F','fuego'],['C','frío'],['L','relámpago'],['T','trueno'],['A','ácido'],['I','veneno'],['N','necrótico'],['R','radiante'],['Y','psíquico'],['S','cortante'],['P','perforante'],['B','contundente']];
+  function hbLine(A){
+    var p = [];
+    if (A.kind === 'atk') p.push('Tira 1d20 ' + sgn(A.atk).replace('+', '+ ').replace('−', '− '));
+    if (A.kind === 'save') p.push('Salvación de ' + R.AB[A.saveAb] + ' CD ' + A.dc);
+    if (A.dmg) p.push((A.kind === 'heal' ? 'Cura ' : '') + A.dmg + (A.kind === 'heal' ? '' : ' ' + esc(A.dtype)));
+    if (A.range) p.push(esc(A.range));
+    if (A.max) p.push(A.max + ' ' + (A.max === 1 ? 'uso' : 'usos') + (A.rest === 'short' ? ' por descanso corto' : A.rest === 'none' ? '' : ' por descanso largo'));
+    return p.join(' · ');
+  }
+  var AB_EDIT = null;
+  function abById(id){ var C = cur(); return ((C && C.hbAb) || []).filter(function(a){ return a.id === id; })[0]; }
+  function openAbEdit(id){
+    var a = id ? JSON.parse(JSON.stringify(abById(id))) : {name:'', cost:'a', uses:'3', rest:'long', kind:'atk', ab:D.spellAbility || 'cha', saveAb:'dex', dice:'', addMod:false, dtype:'O', range:'', text:''};
+    AB_EDIT = id || null;
+    var fixed = /^\d+$/.test(String(a.uses || '')), opt = function(v, l, cur0){ return '<option value="' + v + '"' + (String(cur0) === String(v) ? ' selected' : '') + '>' + l + '</option>'; };
+    var h = '<label class="fl">Nombre<input class="field" name="name" value="' + attr(a.name) + '" placeholder="Rayo de fuerza" autocomplete="off" required></label>'
+      + '<label class="fl">De dónde viene <small class="muted">(opcional)</small><input class="field" name="src" value="' + attr(a.src || '') + '" placeholder="Don de Kord, regla de la mesa…" autocomplete="off"></label>'
+      + '<fieldset class="fl"><legend>Qué gasta en tu turno</legend><div class="ab-cost">' + [['a','Acción'],['b','Adicional'],['r','Reacción'],['free','Gratis'],['none','Pasiva']].map(function(x){ return '<label><input type="radio" name="cost" value="' + x[0] + '"' + (a.cost === x[0] ? ' checked' : '') + '>' + (x[0] !== 'none' ? costBadge(x[0], true) : '') + x[1] + '</label>'; }).join('') + '</div></fieldset>'
+      + '<div class="two"><label class="fl">Usos<select class="field" name="usesK">' + opt('none', 'Sin límite', fixed ? 'n' : a.uses || 'none') + opt('n', 'Un número fijo', fixed ? 'n' : '') + opt('pb', 'Tu competencia (' + D.pb + ')', a.uses) + opt('mod', 'Tu modificador', a.uses) + opt('lvl', 'Tu nivel (' + D.level + ')', a.uses) + opt('half', 'Mitad de tu nivel', a.uses) + '</select></label>'
+      + '<label class="fl">Cuántos<input class="field" name="usesN" inputmode="numeric" value="' + attr(fixed ? a.uses : '3') + '"></label></div>'
+      + '<label class="fl">Se recupera con<select class="field" name="rest">' + opt('long', 'Descanso largo', a.rest) + opt('short', 'Descanso corto o largo', a.rest) + opt('none', 'No se recupera sola', a.rest) + '</select></label>'
+      + '<fieldset class="fl"><legend>Qué hace</legend><div class="ab-cost">' + [['atk','Tirada de ataque'],['save','Salvación'],['heal','Curación'],['none','Otra cosa']].map(function(x){ return '<label><input type="radio" name="kind" value="' + x[0] + '"' + (a.kind === x[0] ? ' checked' : '') + '>' + x[1] + '</label>'; }).join('') + '</div></fieldset>'
+      + '<div class="two"><label class="fl">Característica<select class="field" name="ab">' + R.ABS.map(function(k){ return opt(k, R.ABL[k] + ' (' + sgn(D.mod[k]) + ')', a.ab); }).join('') + '</select></label>'
+      + '<label class="fl" data-show="save">Salvación de<select class="field" name="saveAb">' + R.ABS.map(function(k){ return opt(k, R.ABL[k], a.saveAb); }).join('') + '</select></label></div>'
+      + '<div class="two"><label class="fl">Dados<input class="field" name="dice" value="' + attr(a.dice) + '" placeholder="3d6" autocomplete="off"></label>'
+      + '<label class="fl" data-show="dmg">Tipo de daño<select class="field" name="dtype">' + DT_OPTS.map(function(x){ return opt(x[0], x[1], a.dtype); }).join('') + '</select></label></div>'
+      + '<label class="toggle"><input type="checkbox" name="addMod"' + (a.addMod ? ' checked' : '') + '> Sumar el modificador de la característica a los dados</label>'
+      + '<label class="fl">Alcance o área <small class="muted">(opcional)</small><input class="field" name="range" value="' + attr(a.range) + '" placeholder="36 m · línea de 9 m" autocomplete="off"></label>'
+      + '<label class="fl">Descripción<textarea class="field" name="text" rows="4" placeholder="Disparas un rayo de energía. Si impacta, el objetivo es empujado 3 m.">' + esc(a.text) + '</textarea></label>'
+      + '<div class="ab-prev" id="abPrev"></div><p class="err" id="abErr" hidden></p>'
+      + '<div class="row" style="gap:8px"><button class="btn" type="button" data-act="closesheet" style="flex:1">Cancelar</button><button class="btn main" type="submit" style="flex:1">' + (id ? 'Guardar' : 'Crear habilidad') + '</button></div>';
+    $('#abTitle').textContent = id ? 'Editar ' + a.name : 'Nueva habilidad homebrew';
+    $('#abForm').innerHTML = h; abSync(); openSheet('abSheet');
+  }
+  function abRead(){
+    var f = $('#abForm'), v = function(n){ var el = f.elements[n]; return el ? String(el.value).trim() : ''; }, radio = function(n){ var el = f.querySelector('input[name="' + n + '"]:checked'); return el ? el.value : ''; };
+    var uk = v('usesK');
+    return {id:AB_EDIT || 'ab' + Date.now().toString(36), name:v('name'), src:v('src'), cost:radio('cost') || 'a', uses:uk === 'n' ? String(Math.max(1, parseInt(v('usesN'), 10) || 1)) : uk === 'none' ? '' : uk, rest:v('rest'), kind:radio('kind') || 'none', ab:v('ab'), saveAb:v('saveAb'), dice:v('dice').replace(/\s+/g, ''), addMod:f.elements.addMod.checked, dtype:v('dtype'), range:v('range'), text:f.elements.text.value.trim()};
+  }
+  function abSync(){
+    var f = $('#abForm'); if (!f || !f.elements.name) return;
+    var a = abRead(), A = R.hbAbility(a, D);
+    f.elements.usesN.closest('label').hidden = f.elements.usesK.value !== 'n';
+    f.querySelector('[data-show="save"]').hidden = a.kind !== 'save';
+    f.querySelector('[data-show="dmg"]').hidden = a.kind === 'heal';
+    $('#abPrev').innerHTML = '<span class="label">así se verá</span><div class="rg-t">' + costBadge(a.cost === 'none' ? '' : a.cost) + '<b>' + esc(a.name || 'Tu habilidad') + '</b></div><div>' + (hbLine(A) || '<span class="muted">Sin tiradas: solo la descripción.</span>') + '</div>';
+  }
+  document.addEventListener('input', function(ev){ if (ev.target.closest && ev.target.closest('#abForm')) abSync(); });
+  document.addEventListener('change', function(ev){ if (ev.target.closest && ev.target.closest('#abForm')) abSync(); });
+  document.addEventListener('submit', function(ev){
+    if (ev.target.id !== 'abForm') return; ev.preventDefault();
+    var a = abRead(), C = cur(); if (!C) return;
+    if (!a.name) { $('#abErr').textContent = 'Ponle un nombre.'; $('#abErr').hidden = false; return; }
+    if (a.dice && !/^\d+d\d+([+-]\d+)?$/i.test(a.dice)) { $('#abErr').textContent = 'Los dados van como 3d6 o 2d8+2.'; $('#abErr').hidden = false; return; }
+    C.hbAb = (C.hbAb || []).filter(function(x){ return x.id !== a.id; }); C.hbAb.push(a);
+    if (!AB_EDIT) { var r = rt(C); if (r.quick) r.quick.push('hb:' + a.id); }
+    closeSheets(); save(); render(false);
+  });
+
+  /* ---------- Acceso rápido del combate ---------- */
+  function isPotion(it){ return /potion|poción|pocion|elixir|philter|filtro/i.test((it.n || '') + ' ' + (it.ref || '')); }
+  function isWeapon(it){ if (it.hb) return (it.hb.kind || 'weapon') === 'weapon'; if (!it.ref || it.k !== 'wpn') return false; var p = it.ref.split('|'), f = Lib5e.find(p[0], p[1], p[2]); return !!(f && f.e && f.e.dmg1); }
+  function itemCost(it){ return isPotion(it) ? 'b' : 'a'; }
+  function quickKeys(r){
+    if (r.quick) return r.quick;
+    var out = [];
+    (D.hbAbilities || []).forEach(function(A){ if (A.cost !== 'none') out.push('hb:' + A.id); });
+    D.features.forEach(function(f){ if (!f.hb && featCost(f) && featRes(f) && out.indexOf('f:' + f.name) < 0) out.push('f:' + f.name); });
+    items().forEach(function(it){ if (!it.eq && it.use && isPotion(it)) out.push('it:' + it.id); });
+    return out;
+  }
+  function spellInfo(e){
+    var p = [], K = (D.casters || [])[0], atk = K ? K.atk : D.spellAtk, dc = K ? K.dc : D.spellDc;
+    if (e.spellAttack && e.spellAttack.length) p.push('Tira 1d20 ' + sgn(atk).replace('+', '+ ').replace('−', '− '));
+    if (e.savingThrow && e.savingThrow.length) p.push('Salvación de ' + (R.AB[{strength:'str',dexterity:'dex',constitution:'con',intelligence:'int',wisdom:'wis',charisma:'cha'}[e.savingThrow[0]]] || e.savingThrow[0]) + ' CD ' + dc);
+    var dm = /\{@(?:damage|dice) ([^}|]+)/.exec(JSON.stringify(e.entries || [])); if (dm) p.push(dm[1].replace(/\s+/g, '') + (e.damageInflict ? ' ' + (({acid:'ácido',cold:'frío',fire:'fuego',force:'fuerza',lightning:'relámpago',necrotic:'necrótico',poison:'veneno',psychic:'psíquico',radiant:'radiante',thunder:'trueno',bludgeoning:'contundente',piercing:'perforante',slashing:'cortante'})[e.damageInflict[0]] || e.damageInflict[0]) : ''));
+    if (e.range && e.range.distance) { var ds = e.range.distance; p.push(ds.type === 'self' ? 'tú' : ds.type === 'touch' ? 'toque' : ds.amount ? String(Math.round(ds.amount * 0.3 * 10) / 10).replace('.', ',') + ' m' : ''); }
+    if ((e.duration || []).some(function(d){ return d.concentration; })) p.push('concentración');
+    return p.filter(Boolean).join(' · ');
+  }
+  function quickRow(key, r){
+    var t = key.slice(0, key.indexOf(':')), v = key.slice(key.indexOf(':') + 1), cost = '', name = '', info = '', btns = '', sub = '';
+    if (t === 'sp') {
+      var e = R.findSpell(v); if (!e) return '';
+      cost = R.spellCost(e); name = spellLink(e); info = spellInfo(e); sub = e.level ? 'nivel ' + e.level : 'truco';
+      if (!e.level) btns = '<button class="btn sm" type="button" data-act="quse" data-q="' + attr(key) + '">Lanzar</button>';
+      else {
+        D.slots.forEach(function(n, i){ var lv = i + 1, left = n - (r.slotsUsed[i] || 0); if (n > 0 && lv >= e.level) btns += '<button class="slotbtn" type="button" data-act="quse" data-q="' + attr(key) + '" data-lv="' + lv + '"' + (left > 0 ? '' : ' disabled') + ' title="' + left + ' de ' + n + ' libres"><b>' + lv + '</b><i>' + left + '</i></button>'; });
+        if (D.pact && D.pact.level >= e.level) { var pl = D.pact.count - (r.pactUsed || 0); btns += '<button class="slotbtn pact" type="button" data-act="quse" data-q="' + attr(key) + '" data-lv="pact"' + (pl > 0 ? '' : ' disabled') + ' title="Pacto"><b>P' + D.pact.level + '</b><i>' + pl + '</i></button>'; }
+        if (!btns) btns = '<span class="muted">Sin espacios de este nivel</span>';
+      }
+    } else if (t === 'f' || t === 'hb') {
+      var f = D.features.filter(function(x){ return t === 'hb' ? x.hb && x.hb.id === v : !x.hb && x.name === v; })[0]; if (!f) return '';
+      cost = featCost(f); name = esc(f.name); info = f.hb ? hbLine(f.hb) : esc(firstSentence(plainText(f.e.entries, 300)));
+      var x = featRes(f);
+      if (x && x.max) { var lf = x.max - Math.min(x.max, r.res[x.key] || 0); btns = '<button class="btn sm" type="button" data-act="quse" data-q="' + attr(key) + '"' + (lf > 0 ? '' : ' disabled') + '>Usar</button><span class="q-left">' + lf + ' / ' + x.max + '</span>'; }
+      else if (x && x.pool) btns = '<span class="q-left">' + (x.pool - (r.res[x.key] || 0)) + ' / ' + x.pool + '</span><button class="btn sm" type="button" data-act="pool" data-key="' + attr(x.key) + '" data-v="1">−1</button><button class="btn sm" type="button" data-act="pool" data-key="' + attr(x.key) + '" data-v="5">−5</button>';
+      else btns = '<button class="btn sm" type="button" data-act="quse" data-q="' + attr(key) + '">Usar</button>';
+    } else if (t === 'it') {
+      var it = itemById(v); if (!it) return '';
+      cost = itemCost(it); name = it.ref ? '<a class="ref" data-ref="' + attr(it.ref) + '">' + esc(it.n) + '</a>' : esc(it.n); info = esc(it.use || it.d || '');
+      btns = '<button class="btn sm" type="button" data-act="quse" data-q="' + attr(key) + '">Usar</button><span class="q-left">×' + (it.q || 1) + '</span>';
+    } else return '';
+    var spent = cost && r.econ[cost];
+    return '<div class="q-row' + (spent ? ' spent' : '') + '">' + '<div class="q-h">' + costBadge(cost, true) + '<h4>' + name + '</h4>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>' + (info ? '<p class="q-i">' + info + '</p>' : '') + '<div class="q-b">' + btns + '</div></div>';
+  }
+  function quickCard(r){
+    var keys = quickKeys(r), rows = keys.map(function(k){ return quickRow(k, r); }).filter(Boolean);
+    var wp = items().filter(function(it){ return !it.eq && isWeapon(it); });
+    var h = '';
+    if (wp.length) h += '<div class="card q-card"><span class="label">otras armas</span>' + wp.map(function(it){ return '<div class="q-row"><div class="q-h"><svg class="ic"><use href="#' + (it.ic || 'i-sword') + '"/></svg><h4>' + (it.ref ? '<a class="ref" data-ref="' + attr(it.ref) + '">' + esc(it.n) + '</a>' : esc(it.n)) + '</h4><small>guardada</small></div><div class="q-b"><button class="btn sm" type="button" data-act="qequip" data-id="' + attr(it.id) + '">Equipar</button></div></div>'; }).join('') + '<p class="note">Sacar o guardar un arma es parte de tu acción o movimiento (una gratis por turno).</p></div>';
+    h += '<div class="card q-card"><div class="row"><span class="label">acceso rápido</span><button class="pill" type="button" data-act="qedit">Elegir</button></div>'
+      + (rows.length ? rows.join('') : '<p class="note">Pon aquí los conjuros, rasgos, habilidades y pociones que usas en combate. Toca «Elegir».</p>') + '</div>';
+    return h;
+  }
+  function renderQuickPick(){
+    var r = rt(cur()), keys = quickKeys(r), on = function(k){ return keys.indexOf(k) >= 0; };
+    function row(k, label, cost, sub){ return '<button type="button" class="q-pick" data-act="qtoggle" data-q="' + attr(k) + '" aria-pressed="' + on(k) + '">' + costBadge(cost, true) + '<b>' + esc(label) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '<i class="chk" aria-hidden="true"></i></button>'; }
+    var sp = allSpells().slice().sort(function(a, b){ return a.e.level - b.e.level || a.e.name.localeCompare(b.e.name); });
+    var feats = D.features.filter(function(f){ return featCost(f) || featRes(f); });
+    var its = items().filter(function(it){ return !it.eq && (it.use || it.k === 'con' || isPotion(it)) && !/ration|torch|raci|antorch/i.test(it.n + ' ' + (it.ref || '')); });
+    var h = '';
+    if (feats.length) h += '<div class="group-h">Rasgos y habilidades</div>' + feats.map(function(f){ return row(f.hb ? 'hb:' + f.hb.id : 'f:' + f.name, f.name, featCost(f), f.hb ? 'homebrew' : f.from); }).join('');
+    if (sp.length) h += '<div class="group-h">Conjuros</div>' + sp.map(function(x){ return row('sp:' + x.e.name + '|' + x.e.source, x.e.name, R.spellCost(x.e), x.e.level ? 'nivel ' + x.e.level : 'truco'); }).join('');
+    if (its.length) h += '<div class="group-h">Objetos</div>' + its.map(function(it){ return row('it:' + it.id, it.n + (it.q > 1 ? ' ×' + it.q : ''), itemCost(it), ''); }).join('');
+    $('#quickList').innerHTML = h || '<p class="note">Todavía no tienes conjuros, rasgos con acción ni consumibles.</p>';
+  }
+  function quickUse(key, lv){
+    var C = cur(), r = rt(C), t = key.slice(0, key.indexOf(':')), v = key.slice(key.indexOf(':') + 1), cost = '', msg = '';
+    if (t === 'sp') {
+      var e = R.findSpell(v); if (!e) return; cost = R.spellCost(e);
+      if (lv === 'pact') { if ((r.pactUsed || 0) >= D.pact.count) return; r.pactUsed = (r.pactUsed || 0) + 1; }
+      else if (lv) { var i = +lv - 1; if ((r.slotsUsed[i] || 0) >= D.slots[i]) return; r.slotsUsed[i] = (r.slotsUsed[i] || 0) + 1; }
+      if ((e.duration || []).some(function(d){ return d.concentration; })) { r.conc = e.name + '|' + e.source; r.concDc = 10; }
+      msg = 'Lanzaste ' + e.name + (lv ? (lv === 'pact' ? ' con tu Pacto' : ' a nivel ' + lv) : '') + '. ' + spellInfo(e);
+    } else if (t === 'f' || t === 'hb') {
+      var f = D.features.filter(function(x){ return t === 'hb' ? x.hb && x.hb.id === v : !x.hb && x.name === v; })[0]; if (!f) return;
+      cost = featCost(f); var x = featRes(f);
+      if (x && x.max) { if ((r.res[x.key] || 0) >= x.max) return; r.res[x.key] = (r.res[x.key] || 0) + 1; }
+      msg = 'Usaste ' + f.name + '.' + (f.hb && hbLine(f.hb) ? ' ' + hbLine(f.hb).replace(/<[^>]+>/g, '') : '');
+    } else if (t === 'it') {
+      var it = itemById(v); if (!it) return; cost = itemCost(it);
+      msg = it.use || 'Usaste ' + it.n + '.';
+      if (it.q > 1) it.q -= 1; else { setItems(items().filter(function(o){ return o.id !== it.id; })); if (r.quick) r.quick = r.quick.filter(function(k){ return k !== key; }); }
+    }
+    if (cost && r.econ[cost] !== undefined) r.econ[cost] = true;
+    save(); render(false);
+    if (window.Sala) Sala.toast(msg);
+  }
   document.addEventListener('toggle', function(ev){
     var d = ev.target; if (!d.matches || !d.open) return;
     var box = d.querySelector('.gtext'); if (!box || box.dataset.done) return;
@@ -1016,8 +1235,9 @@
     if (!combatHead()) { $('#cTurno').innerHTML = noCharHtml(); $('#cRec').innerHTML = ''; $('#cOrden').innerHTML = '<div id="salaBox"></div>'; if (window.Sala) Sala.mount($('#salaBox')); return; }
     var r = rt(C);
     /* Mi turno */
-    var T = '<div class="card econ-card"><div class="econ">' + [['a','Acción','i-swords'],['b','Adicional','i-star'],['r','Reacción','i-shield'],['m','Movimiento','i-boot']].map(function(e){ return '<button type="button" data-act="econ" data-k="' + e[0] + '" aria-pressed="' + !!r.econ[e[0]] + '"><svg class="ic"><use href="#' + e[2] + '"/></svg>' + e[1] + '</button>'; }).join('') + '</div><div class="econ-foot"><span class="muted">Toca lo que ya usaste</span><button class="pill" type="button" data-act="crit" aria-pressed="' + !!r.crit + '">Crítico' + (r.crit ? ': dados ×2' : '') + '</button><button class="pill" type="button" data-act="newturn">Nuevo turno</button></div></div>';
+    var T = '<div class="card econ-card"><div class="econ">' + [['a','Acción','i-swords'],['b','Adicional','i-star'],['r','Reacción','i-shield'],['m','Movimiento','i-boot']].map(function(e){ return '<button type="button" data-act="econ" data-k="' + e[0] + '" aria-pressed="' + !!r.econ[e[0]] + '"><svg class="ic"><use href="#' + e[2] + '"/></svg><i class="shape" aria-hidden="true"></i>' + e[1] + '</button>'; }).join('') + '</div><div class="econ-foot"><span class="muted">Toca lo que ya usaste</span><button class="pill" type="button" data-act="crit" aria-pressed="' + !!r.crit + '">Crítico' + (r.crit ? ': dados ×2' : '') + '</button><button class="pill" type="button" data-act="newturn">Nuevo turno</button></div></div>';
     T += D.attacks.length ? D.attacks.map(function(a){ return weaponHtml(a, r); }).join('') : '<div class="card"><p class="note">Equipa un arma en la pestaña Equipo para ver aquí tu tirada de ataque y de daño.</p></div>';
+    T += quickCard(r);
     T += '<div class="card"><span class="label">otras acciones</span><div class="chips">' + [['Dash','Correr'],['Disengage','Retirarse'],['Dodge','Esquivar'],['Help','Ayudar'],['Ready','Preparar'],['Opportunity Attack','Ataque de oportunidad'],['Grapple','Agarrar']].map(function(a){ return '<a class="ref chip" data-ref="action|' + a[0] + '|XPHB">' + a[1] + '</a>'; }).join('') + '</div></div>';
     $('#cTurno').innerHTML = T;
     /* Recursos */
@@ -1822,6 +2042,15 @@
       case 'csub': S.cSub = b.dataset.v; save(); renderCombat(); var cbb = $('#combat .combat-b'); if (cbb) cbb.scrollTop = 0; break;
       case 'hpopen': S.hpOpen = !S.hpOpen; renderCombat(); if (S.hpOpen) { var hi = $('#hpIn'); if (hi) hi.focus(); } break;
       case 'wmore': S.wOpen = S.wOpen || {}; S.wOpen[b.dataset.id] = !S.wOpen[b.dataset.id]; renderCombat(); break;
+      case 'rgf': S.rgF = b.dataset.v; save(); renderRasgos(C); break;
+      case 'rgg': S.rgClosed = S.rgClosed || {}; S.rgClosed[b.dataset.k] = !S.rgClosed[b.dataset.k]; save(); renderRasgos(C); break;
+      case 'abnew': openAbEdit(null); break;
+      case 'abedit': openAbEdit(b.dataset.id); break;
+      case 'abdel': if (b.dataset.sure) { C.hbAb = (C.hbAb || []).filter(function(x){ return x.id !== b.dataset.id; }); delete r.res['hb:' + b.dataset.id]; if (r.quick) r.quick = r.quick.filter(function(k){ return k !== 'hb:' + b.dataset.id; }); save(); render(false); } else { b.dataset.sure = 1; b.textContent = '¿Seguro? Toca otra vez'; } break;
+      case 'qedit': renderQuickPick(); openSheet('quickSheet'); break;
+      case 'qtoggle': var qk = b.dataset.q, ql = quickKeys(r).slice(), qi = ql.indexOf(qk); if (qi >= 0) ql.splice(qi, 1); else ql.push(qk); r.quick = ql; save(); if (!$('#quickSheet').hidden) renderQuickPick(); render(false); break;
+      case 'quse': quickUse(b.dataset.q, b.dataset.lv); break;
+      case 'qequip': sel = b.dataset.id; equip(); sel = null; if (!$('#combat').hidden) renderCombat(); if (invMsg) { if (window.Sala) Sala.toast(invMsg.replace(/<[^>]+>/g, '')); invMsg = ''; } break;
       case 'combat': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('combate'); break;
       case 'mesa': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('chat'); break;
       case 'endcombat': $('#combat').hidden = true; break;
@@ -1834,8 +2063,8 @@
       case 'condoff': r.conds = (r.conds || []).filter(function(k){ return k !== b.dataset.v; }); save(); renderCombat(); break;
       case 'pool': r.res[b.dataset.key] = Math.min((D.resources.filter(function(x){ return x.key === b.dataset.key; })[0] || {pool:0}).pool, (r.res[b.dataset.key] || 0) + (+b.dataset.v)); save(); renderCombat(); break;
       case 'pip': var max = +b.dataset.max, i = +b.dataset.i, k = b.dataset.key, used0 = k === 'pact' ? r.pactUsed || 0 : k.indexOf('slot:') === 0 ? r.slotsUsed[+k.slice(5)] || 0 : r.res[k.slice(4)] || 0, avail = max - used0, next = i < avail ? i : i + 1; setUsed(k, max - next); save(); render(false); break;
-      case 'short': r.pactUsed = 0; ['channel divinity','second wind','focus points','ki points','superiority dice','wild shape'].forEach(function(kk){ if (r.res[kk]) r.res[kk] = kk === 'channel divinity' || kk === 'second wind' || kk === 'wild shape' ? Math.max(0, r.res[kk] - 1) : 0; }); save(); render(false); break;
-      case 'long': r.hp = D.hp.max; r.temp = 0; r.slotsUsed = []; r.pactUsed = 0; r.res = {}; r.conc = null; r.econ = {a:false,b:false,r:false,m:false}; r.round = 1; save(); render(false); break;
+      case 'short': r.pactUsed = 0; ['channel divinity','second wind','focus points','ki points','superiority dice','wild shape'].forEach(function(kk){ if (r.res[kk]) r.res[kk] = kk === 'channel divinity' || kk === 'second wind' || kk === 'wild shape' ? Math.max(0, r.res[kk] - 1) : 0; }); D.resources.forEach(function(x){ if (x.hb && x.rest === 'short') delete r.res[x.key]; }); save(); render(false); break;
+      case 'long': var keepRes = {}; D.resources.forEach(function(x){ if (x.rest === 'none' && r.res[x.key]) keepRes[x.key] = r.res[x.key]; }); r.hp = D.hp.max; r.temp = 0; r.slotsUsed = []; r.pactUsed = 0; r.res = keepRes; r.conc = null; r.econ = {a:false,b:false,r:false,m:false}; r.round = 1; save(); render(false); break;
       /* creador */
       case 'crclose': closeCreator(); break;
       case 'crstep': CR.step = b.dataset.v; renderCreator(); $('#crBody').scrollTop = 0; break;

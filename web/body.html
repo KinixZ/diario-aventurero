@@ -159,6 +159,14 @@
         <div id="compList" class="pklist" style="margin-top:10px"></div>
       </div>
     </div>
+    <div class="sheet" id="abSheet" hidden role="dialog" aria-labelledby="abTitle">
+      <div class="sheet-h"><h2 id="abTitle">Nueva habilidad homebrew</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll"><form id="abForm" class="hbform" novalidate></form></div>
+    </div>
+    <div class="sheet" id="quickSheet" hidden role="dialog" aria-labelledby="quickTitle">
+      <div class="sheet-h"><h2 id="quickTitle">Acceso rápido del combate</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll"><p class="note" style="margin-top:0">Marca lo que quieres tener a mano en «Mi turno». Al usarlo se gasta el espacio, la carga o el objeto, y se marca tu acción.</p><div id="quickList" class="q-picks"></div></div>
+    </div>
     <div class="sheet" id="settingsSheet" hidden role="dialog" aria-labelledby="setTitle">
       <div class="sheet-h"><h2 id="setTitle">Ajustes del diario</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar ajustes"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="scroll" style="display:flex;flex-direction:column;gap:22px">
@@ -188,6 +196,7 @@
         <section>
           <span class="label">estilo del diario</span>
           <div class="skins" id="skins"></div>
+          <label class="toggle" style="margin-top:10px"><input type="checkbox" id="hudBg3"> Iconos estilo Baldur's Gate 3 <small class="muted">(acción en círculo verde, adicional en triángulo naranja, reacción en morado y espacios de conjuro en cuadros azules)</small></label>
         </section>
         <section>
           <span class="label">biblioteca de 5etools</span>

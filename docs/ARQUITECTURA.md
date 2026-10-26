@@ -24,8 +24,9 @@ C = {
   id, name, level, method, base: {str, dex, con, int, wis, cha},
   cl: ['Paladin|XPHB', …],   // clase tomada en cada nivel (multiclase); sin cl, todo es la clase principal
   house: { allSpells },       // reglas de la mesa
+  hbAb: [ { id, name, cost, uses, rest, kind, ab, saveAb, dice, addMod, dtype, range, text } ],  // habilidades homebrew
   ch: { cls, sub, race, bg, 'feat:asi4', 'gsp:…', 'opt:…', 'hp:5', … },  // elecciones por id
-  rt: { hp, temp, slotsUsed, pactUsed, res, items, coins, conds, comp, notes, … }  // estado de juego
+  rt: { hp, temp, slotsUsed, pactUsed, res, items, coins, conds, comp, notes, quick, … }  // estado de juego; quick = acceso rápido ('sp:Nombre|Libro', 'f:Rasgo', 'hb:id', 'it:id')
 }
 ```
 
@@ -35,6 +36,8 @@ Las elecciones de una clase de multiclase llevan sufijo `@clase` (`sub@warlock`,
 
 - `D.classes`: una entrada por clase con su nivel, subclase y en qué niveles del personaje se tomó.
 - `D.choices`: cada elección con `id`, `step` (paso del creador), `lv` (nivel del personaje en que aparece), `kind` (`one`, `many`, `spells`, `abil`, …), opciones y si está completa. El creador y el gating de nivel salen de aquí.
+- `D.hbAbilities`: habilidades homebrew con sus números ya calculados (usos, ataque, CD, daño); también entran a `D.features` (origen `Homebrew`) y a `D.resources` (`hb:id`, con `rest`).
+- `Rules5e.costOf(texto)` y `spellCost(conjuro)` dicen si algo cuesta acción, adicional o reacción.
 - `D.features`, `D.feats`, `D.extraSpells`, `D.casters` (uno por clase que lanza), `D.slots`, `D.pact`, `D.hp`, `D.ac`, `D.attacks`, `D.resources`…
 
 ## La sala de combate

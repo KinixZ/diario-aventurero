@@ -556,6 +556,13 @@ var Rules5e = (function(){
     D.prepared = [].concat.apply([], D.casters.map(function(k){ return k.prepared; }));
     D.cantrips = D.cantrips || []; D.prepared = D.prepared || [];
 
+    /* ---------- Habilidades homebrew del personaje ---------- */
+    D.hbAbilities = (C.hbAb || []).map(function(a){ return hbAbility(a, D); });
+    D.hbAbilities.forEach(function(A){
+      D.features.push({name:A.name, from:'Homebrew', e:{name:A.name, source:A.src || 'Homebrew', entries:A.text ? A.text.split(/\n{2,}/) : []}, hb:A});
+      if (A.max) D.resources.push({key:'hb:' + A.id, label:A.name, max:A.max, rest:A.rest, hb:true});
+    });
+
     /* ---------- Recursos de clase ---------- */
     CLS.forEach(function(E){ tableGroups(E.cls, E.sub).forEach(function(g){
       if (g.rowsSpellProgression || !g.rows || !g.rows[E.lv - 1]) return;
@@ -563,7 +570,7 @@ var Rules5e = (function(){
         var name = strip(lab); if (SKIP_COL.test(name)) return;
         var v = cellVal(g.rows[E.lv - 1][i]); if (v == null || v === 0 || v === '—' || v === '-') return;
         if (D.resources.some(function(x){ return x.key === N(name); })) return;
-        D.resources.push({key:N(name), label:RES_ES[N(name)] || name, max: typeof v === 'number' ? v : null, text: typeof v === 'number' ? null : String(v)});
+        D.resources.push({key:N(name), label:RES_ES[N(name)] || name, max: typeof v === 'number' ? v : null, text: typeof v === 'number' ? null : String(v), rest: SHORT_REST.test(N(name)) ? 'short' : 'long'});
       });
     }); });
     if (featNames.indexOf('lay on hands') >= 0) D.resources.push({key:'lay on hands', label:'Imponer manos', pool:5 * (D.clsLv.paladin || lvl)});
@@ -643,6 +650,27 @@ var Rules5e = (function(){
     return D;
   }
 
+
+  /* ---------- Coste de acción a partir del texto (inglés de 5etools) ---------- */
+  var SHORT_REST = /^(channel divinity|second wind|focus points|ki points|superiority dice|wild shape|action surge|warlock slots|bardic inspiration)$/;
+  function costOf(txt){
+    var t = String(txt || '').replace(/\{@\w+ ([^|}]*)[^}]*\}/g, '$1');
+    var m = /\b(?:as|use|uses|using|take|takes) (?:a|an|your|one) (bonus action|reaction|(?:magic |utilize )?action)\b|\b(?:as|use) (?:a|an|your) (Bonus Action|Reaction|(?:Magic |Utilize )?Action)\b|\b(?:as|use) (?:a|an|your) (bonus action|reaction)\b/i.exec(t);
+    if (!m) return /\bno action required\b/i.test(t) ? 'free' : '';
+    var k = (m[1] || m[2] || m[3]).toLowerCase();
+    return /bonus/.test(k) ? 'b' : /reaction/.test(k) ? 'r' : 'a';
+  }
+  function spellCost(e){ var t = e && e.time && e.time[0]; if (!t) return ''; return t.unit === 'action' ? 'a' : t.unit === 'bonus' ? 'b' : t.unit === 'reaction' ? 'r' : 'long'; }
+  /* Habilidad homebrew: { id, name, cost, uses ('3' | 'pb' | 'mod' | 'lvl' | 'half'), rest, kind ('atk'|'save'|'heal'|'none'), ab, saveAb, dice, addMod, dtype, range, text } */
+  function hbAbility(a, D){
+    var ab = a.ab || (D.spellAbility || 'str'), m = D.mod[ab] || 0, pb = D.pb, lvl = D.level || 1;
+    var u = String(a.uses == null ? '' : a.uses).trim(), max = 0;
+    if (u === 'pb') max = pb; else if (u === 'mod') max = Math.max(1, m); else if (u === 'lvl') max = lvl; else if (u === 'half') max = Math.max(1, Math.floor(lvl / 2)); else max = parseInt(u, 10) || 0;
+    var dice = String(a.dice || '').trim(), dmg = dice ? dice + (a.addMod && m ? ' ' + sgn(m).replace('+', '+ ').replace('−', '− ') : '') : '';
+    return {id:a.id, name:a.name || 'Habilidad', src:a.src || '', cost:a.cost || 'a', max:max, rest:a.rest || 'long', kind:a.kind || 'none', ab:ab,
+      atk:m + pb, dc:8 + pb + m, saveAb:a.saveAb || 'dex', dmg:dmg, dtype:DT[a.dtype] || a.dtype || '', range:a.range || '', text:a.text || '', usesSpec:u};
+  }
+
   /* ---------- Armas homebrew ---------- */
   var DT = {S:'cortante', P:'perforante', B:'contundente', A:'ácido', C:'frío', F:'fuego', O:'fuerza', L:'relámpago', N:'necrótico', I:'veneno', Y:'psíquico', R:'radiante', T:'trueno'};
   function hbData(h){
@@ -672,5 +700,5 @@ var Rules5e = (function(){
     return {items:out, gold:gold};
   }
 
-  return {mcReq:mcReq, MC_SLOTS:MC_SLOTS, srcName:srcName, srcLabel:srcLabel, spellHasClass:spellHasClass, DT:DT, hbData:hbData, ABS:ABS, AB:AB, ABL:ABL, SK:SK, SKES:SKES, STEPS:STEPS, mod:mod, sgn:sgn, strip:strip, derive:derive, classes:classes, subclassesOf:subclassesOf, featRefs:featRefs, spellsMatching:spellsMatching, filterLabel:filterLabel, spellGrants:spellGrants, findSpell:findSpell, featPrereq:featPrereq, startingItems:startingItems, abilitySpec:abilitySpec, altLabel:altLabel, edition:edition, byRef:byRef, subclassLevel:subclassLevel, eqItems:eqItems};
+  return {costOf:costOf, spellCost:spellCost, hbAbility:hbAbility, mcReq:mcReq, MC_SLOTS:MC_SLOTS, srcName:srcName, srcLabel:srcLabel, spellHasClass:spellHasClass, DT:DT, hbData:hbData, ABS:ABS, AB:AB, ABL:ABL, SK:SK, SKES:SKES, STEPS:STEPS, mod:mod, sgn:sgn, strip:strip, derive:derive, classes:classes, subclassesOf:subclassesOf, featRefs:featRefs, spellsMatching:spellsMatching, filterLabel:filterLabel, spellGrants:spellGrants, findSpell:findSpell, featPrereq:featPrereq, startingItems:startingItems, abilitySpec:abilitySpec, altLabel:altLabel, edition:edition, byRef:byRef, subclassLevel:subclassLevel, eqItems:eqItems};
 })();

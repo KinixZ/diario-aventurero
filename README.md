@@ -23,6 +23,10 @@ El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abra
 - **Grimorio enlazado**: reglas, acciones, condiciones, conjuros, objetos y dotes con hipervínculos; filtros por clase, nivel, escuela, concentración y ritual; vista de tabla.
 - **Mochila tipo Resident Evil 4** con contenedores (mochila, Bag of Holding, sacos, carcajes…) y equipo por ranura.
 - **Homebrew**: armas, armaduras, escudos, objetos mágicos (bonos a CA, salvaciones, conjuros y armas; características fijas o sumadas; resistencias; cargas), consumibles y objetos sueltos. Los objetos mágicos de 5etools también suman sus bonos.
+- **Rasgos ordenados**: agrupados por clase, subclase, especie, dotes y homebrew, con buscador y filtro «En combate / Pasivos». Cada rasgo muestra si cuesta acción, adicional o reacción, sus usos y una línea de resumen; los que usas en combate van primero.
+- **Habilidades homebrew**: nombre, coste (acción, adicional, reacción, gratis o pasiva), usos (fijos, tu competencia, tu modificador o tu nivel) con recarga en descanso corto o largo, tirada de ataque o salvación con su CD, dados y tipo de daño, alcance y descripción. Cuentan como recursos y van al acceso rápido.
+- **Acceso rápido en combate**: conjuros (con botones por nivel de espacio), rasgos, habilidades y pociones a un toque; al usarlos se gasta el espacio, la carga o el objeto y se marca tu acción. Las armas guardadas se equipan desde ahí.
+- **Iconos estilo Baldur's Gate 3** (opcional, en Ajustes): acción en círculo verde, adicional en triángulo naranja, reacción en morado y espacios de conjuro en cuadros azules.
 - **12 estilos** de color (claros y de páginas oscuras); el modo combate toma los colores del estilo.
 - **Compañeros**: homúnculo, defensor de acero, compañeros de Beast Master y Drakewarden, familiares e invocaciones con sus números calculados (formas, nivel del conjuro, tu competencia y tus modificadores). También **hojas propias** para mascotas y compañeros homebrew, o para convertir uno de la biblioteca en hoja editable.
 - **Traducción automática** de textos (traductor del navegador o Claude cuando corre como artefacto).
