@@ -30,7 +30,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   $('#hbForm').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true })); await wait(50);
   console.log('hb err hidden:', $('#hbErr').hidden, '| sheet hidden:', $('#hbSheet').hidden, '| main slot:', [...d.querySelectorAll('#bodySlots .slot .v')].map(e => e.textContent).join(', '));
   act('combat'); await wait(30);
-  console.log('combat weapon:', d.querySelector('#cRight .weapon h3').textContent, '|', [...d.querySelectorAll('#cRight .weapon .dmg-out div')].map(e => e.textContent).join(' / '), '|', d.querySelector('#cRight .weapon .roll').textContent);
+  console.log('combat weapon:', d.querySelector('#cTurno .wpn h3').textContent, '|', d.querySelector('#cTurno .wpn .wpn-dmg').textContent, '|', d.querySelector('#cTurno .wpn .wpn-roll').textContent);
   act('endcombat'); act('hbnew'); await wait(20); console.log('saved list:', d.querySelectorAll('#hbSaved .line').length);
   // validacion
   $('#hbName').value = 'X'; $('#hbDice').value = 'mucho'; $('#hbForm').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true })); await wait(20);

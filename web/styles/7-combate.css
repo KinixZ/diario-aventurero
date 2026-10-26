@@ -1,0 +1,101 @@
+/* ==================== COMBATE: barra de vida fija + Orden / Mi turno / Recursos ==================== */
+.combat-b{display:block;padding:0 0 28px}
+.c-top{position:sticky;top:0;z-index:5;background:var(--parch);border-bottom:1px solid var(--rule);box-shadow:0 6px 14px -10px rgba(0,0,0,.55)}
+.c-vitals{padding:10px 16px 8px}
+.c-vitals:empty{display:none}
+.vt-main{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:12px;align-items:center}
+.vt-ac{position:relative;width:52px;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.vt-ac svg{position:absolute;inset:4px 6px 6px}
+.vt-ac svg path{fill:var(--parch-2);stroke:var(--gold);stroke-width:2}
+.vt-ac b{position:relative;font-family:var(--display);font-size:21px;line-height:1;margin-top:-4px}
+.vt-ac small{position:relative;font-size:10px;letter-spacing:.12em;color:var(--ink-2)}
+.vt-hp{display:flex;flex-direction:column;gap:5px;min-width:0;text-align:left;background:none;border:0;padding:4px 0;color:inherit;cursor:pointer}
+.vt-hpn{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.vt-hpn b{font-family:var(--display);font-size:32px;line-height:1;font-variant-numeric:tabular-nums}
+.vt-hpn small{font-family:var(--display);font-size:16px;color:var(--ink-2)}
+.vt-hpn em{font-style:normal;font-size:13px;font-weight:600;color:var(--link);border:1px solid currentColor;border-radius:9px;padding:0 7px}
+.vt-hp .bar{height:8px}
+.vt-hint{font-size:12px;color:var(--ink-2);letter-spacing:.04em}
+.vt-hp[aria-expanded="true"] .vt-hint{color:var(--gold)}
+.vt-mini{display:flex;gap:6px}
+.vt-mini div{min-width:48px;padding:5px 6px;border:1px solid var(--rule);border-radius:8px;background:var(--parch-2);display:flex;flex-direction:column;align-items:center}
+.vt-mini b{font-family:var(--display);font-size:18px;line-height:1.1}
+.vt-mini b i{font-style:normal;font-size:12px}
+.vt-mini small{font-size:11px;color:var(--ink-2)}
+.vt-form{margin-top:10px;display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:6px;align-items:stretch}
+.vt-form .field{min-width:0;font-size:17px}
+.vt-form .btn{padding:0 12px}
+.vt-quick{margin-top:6px}
+.vt-quick button{height:34px}
+.vt-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.vt-chip{display:inline-flex;align-items:center;gap:5px;min-height:30px;padding:2px 10px;border-radius:15px;border:1px solid var(--rule);background:var(--parch-2);font-size:14px;color:var(--ink)}
+.vt-chip .ic{width:14px;height:14px;color:var(--gold)}
+.vt-chip small{color:var(--ink-2);font-size:12px}
+.vt-chip.conc{border-color:var(--gold)}
+.vt-chip.conc button{border:0;background:none;color:var(--ink-2);font-size:18px;line-height:1;padding:0 0 0 4px}
+.vt-chip.cond{border-color:var(--oath);color:var(--oath-ink);background:var(--oath-tint)}
+.vt-turn{display:inline-flex;align-items:center;min-height:30px;padding:2px 12px;border-radius:15px;background:var(--gold);color:var(--on-accent,#1a120d);font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.05em;animation:glow 2.4s ease-in-out infinite}
+
+/* Pestañas internas */
+.c-sub{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:0 10px}
+.c-sub button{position:relative;height:42px;border:0;border-bottom:3px solid transparent;background:none;color:var(--ink-2);font-family:var(--display);font-size:14px;font-weight:600;letter-spacing:.05em}
+.c-sub button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--gold)}
+.c-sub small{margin-left:6px;font-size:11px;padding:1px 5px;border:1px solid var(--rule);border-radius:6px;color:var(--ink-2);font-family:var(--body,inherit);letter-spacing:.08em}
+.c-sub .dot{display:inline-block;width:8px;height:8px;margin-left:6px;border-radius:50%;background:var(--gold);vertical-align:middle;animation:glow 1.6s ease-in-out infinite}
+
+.c-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:14px 16px 0}
+.combat[data-sub="orden"] .c-turno,.combat[data-sub="orden"] .c-rec,
+.combat[data-sub="turno"] .c-orden,.combat[data-sub="turno"] .c-rec,
+.combat[data-sub="rec"] .c-orden,.combat[data-sub="rec"] .c-turno{display:none}
+
+/* Mi turno */
+.econ-card .econ{margin-top:0;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.econ-card .econ button{height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;padding:0 2px}
+.econ-card .econ .ic{width:18px;height:18px}
+.econ-foot{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.econ-foot .muted{flex:1;font-size:13px;min-width:120px}
+.econ-foot .pill{height:32px;font-size:14px}
+.econ-foot .pill[aria-pressed="true"]{background:var(--oath);border-color:var(--oath);color:var(--on-accent)}
+.wpn{background:var(--parch-3);border:1px solid var(--gold);border-radius:8px;overflow:hidden}
+.wpn.is-crit{box-shadow:0 0 0 2px var(--oath)}
+.wpn-h{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--leather-2);color:var(--on-dark)}
+.wpn-h .ic{color:var(--gold-hi);flex:none}
+.wpn-h h3{flex:1;min-width:0;margin:0;font-family:var(--display);font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wpn-roll{flex:none;font-family:var(--display);font-size:17px;font-weight:700;color:var(--gold-hi);font-variant-numeric:tabular-nums}
+.wpn-dmg{padding:10px 12px 4px;font-size:16px;line-height:1.45}
+.wpn-dmg b{font-family:var(--display);font-size:18px}
+.wpn-dmg .rad{color:var(--radiant);white-space:nowrap}
+.wpn-smite{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 12px 2px;font-size:14px}
+.wpn-smite .ref{margin-right:2px}
+.wpn-smite button{height:30px;min-width:40px;padding:0 8px;border-radius:15px;border:1px solid var(--rule);background:var(--parch);font-size:13px;color:var(--ink)}
+.wpn-smite button[aria-pressed="true"]{background:var(--radiant);border-color:var(--radiant);color:#2a1d08;font-weight:700}
+.wpn-more{display:block;width:100%;text-align:left;border:0;background:none;padding:6px 12px 10px;font-size:13px;color:var(--ink-2);text-decoration:underline;text-underline-offset:3px}
+.wpn-det{padding:0 12px 10px;font-size:14px}
+.wpn-det p{margin:0 0 6px}
+.c-turno .chips .chip{font-size:14px;padding:4px 10px}
+
+/* Recursos */
+.rest-row{gap:8px}
+.rest-row .btn{flex:1}
+
+/* Laptop: las tres partes a la vista */
+@media (min-width:900px){
+  .c-sub{display:none}
+  .c-vitals{padding:12px 24px 12px}
+  .vt-main{grid-template-columns:56px minmax(0,1fr) auto;max-width:900px}
+  .c-grid{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr) minmax(0,.95fr);padding:18px 24px 0;align-items:start}
+  .combat[data-sub] .c-orden,.combat[data-sub] .c-turno,.combat[data-sub] .c-rec{display:flex}
+  .c-orden::before,.c-turno::before,.c-rec::before{font-family:var(--display);font-size:12px;letter-spacing:.2em;color:var(--ink-2);text-transform:uppercase;border-bottom:1px solid var(--rule);padding-bottom:6px}
+  .c-orden::before{content:"Orden de combate"}
+  .c-turno::before{content:"Mi turno"}
+  .c-rec::before{content:"Recursos"}
+  .econ-foot .muted{flex-basis:100%}
+  .econ-foot .pill{flex:1}
+}
+
+/* DM: solo el orden, a todo lo ancho */
+.combat.dm-mode .c-top{display:none}
+.combat.dm-mode .c-turno,.combat.dm-mode .c-rec{display:none!important}
+.combat.dm-mode .c-orden{display:flex!important}
+.combat.dm-mode .c-grid{grid-template-columns:1fr}
+.combat.dm-mode .c-orden::before{content:none}

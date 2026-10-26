@@ -963,49 +963,79 @@
   }
   window.Diario = {cur:cur, D:function(){ return D; }, rt:rt, applyToMe:applyToMe,
     addNote:function(text){ var C = cur(); if (!C) return false; var r = rt(C); r.notes = (r.notes ? r.notes.replace(/\s+$/, '') + '\n\n' : '') + text; save(); if ($('#notes')) $('#notes').value = r.notes; return true; },
-    newTurn:function(){ var C = cur(); if (!C) return; rt(C).econ = {a:false,b:false,r:false,m:false}; save(); if (!$('#combat').hidden) renderCombat(); },
+    newTurn:function(){ var C = cur(); if (!C) return; rt(C).econ = {a:false,b:false,r:false,m:false}; S.cSub = 'turno'; save(); if (!$('#combat').hidden) renderCombat(); },
+    combatRefresh:function(){ if (!$('#combat').hidden) combatHead(); },
     compSummaries:function(){ var C = cur(); if (!C || !D || !D.ok) return []; return (rt(C).comp || []).map(function(c){ var st = compStats(c); return st ? {name:c.n || st.m.name, ac:st.ac, hp:c.hp == null ? st.hpMax : c.hp, hpMax:st.hpMax} : null; }).filter(Boolean); }};
 
   /* ==================== COMBATE ==================== */
+  /* Arriba, fija: tu vida y tus defensas. Abajo, tres partes: Orden (la sala), Mi turno (acciones y armas) y Recursos.
+     En el teléfono se ve una a la vez con pestañas; en la laptop, las tres en columnas. */
+  var CSUB = [['orden','Orden'],['turno','Mi turno'],['rec','Recursos']];
+  function inRoom(){ return window.Sala && Sala.status() === 'on' && !!Sala.room(); }
+  function myTurnNow(){ var rm = inRoom() && Sala.room(); return !!rm && rm.turnId === rm.you; }
+  function combatSub(){ if (!S.cSub) S.cSub = inRoom() ? 'orden' : 'turno'; return S.cSub; }
+  function vitalsHtml(C, r){
+    var pct = Math.max(0, Math.round(r.hp / D.hp.max * 100)), barc = pct <= 33 ? 'var(--bad)' : pct <= 66 ? 'var(--warn)' : 'var(--ok)';
+    var h = '<div class="vt-main"><div class="vt-ac" title="' + attr(D.acNote) + '"><svg width="40" height="46" viewBox="0 0 44 50" aria-hidden="true"><path d="M22 2 L41 9 Q41 33 22 48 Q3 33 3 9 Z"/></svg><b>' + D.ac + '</b><small>CA</small></div>'
+      + '<button type="button" class="vt-hp" data-act="hpopen" aria-expanded="' + !!S.hpOpen + '" aria-label="Puntos de golpe: ' + r.hp + ' de ' + D.hp.max + '. Toca para daño o curación"><span class="vt-hpn"><b>' + r.hp + '</b><small>/ ' + D.hp.max + '</small>' + (r.temp ? '<em>+' + r.temp + ' temp</em>' : '') + '</span><span class="bar"><i style="width:' + pct + '%;background:' + barc + '"></i></span><small class="vt-hint">' + (S.hpOpen ? 'Cerrar' : 'Daño o curación') + '</small></button>'
+      + '<div class="vt-mini"><div><b>' + sgn(D.init) + '</b><small>inic.</small></div><div><b>' + D.speed.replace(' m', '') + '<i> m</i></b><small>vel.</small></div></div></div>';
+    if (S.hpOpen) h += '<form class="hp-form vt-form" id="hpForm"><input id="hpIn" class="field" inputmode="numeric" autocomplete="off" placeholder="Lo que sacaste" aria-label="Resultado de tus dados"><button class="btn dmg" type="submit" data-sign="-1">Daño</button><button class="btn heal" type="submit" data-sign="1">Curar</button><button class="btn" type="submit" data-sign="0">Temp.</button></form><p class="err" id="hpErr" hidden>Escribe un número primero.</p><div class="quick vt-quick"><button type="button" class="m" data-act="hp" data-v="-5">−5</button><button type="button" class="m" data-act="hp" data-v="-1">−1</button><button type="button" class="p" data-act="hp" data-v="1">+1</button><button type="button" class="p" data-act="hp" data-v="5">+5</button></div>';
+    var chips = [];
+    if (myTurnNow()) chips.push('<span class="vt-turn">Tu turno · ronda ' + Sala.room().round + '</span>');
+    if (r.conc) { var cs = R.findSpell(r.conc); chips.push('<span class="vt-chip conc"><svg class="ic"><use href="#i-star"/></svg>' + (cs ? spellLink(cs).replace('class="ref"', 'class="ref" style="color:inherit"') : esc(r.conc)) + ' <small>CD ' + (r.concDc || 10) + ' si te dañan</small><button type="button" data-act="endconc" aria-label="Terminar concentración">×</button></span>'); }
+    (r.conds || []).forEach(function(k){ chips.push('<button type="button" class="vt-chip cond" data-act="condoff" data-v="' + attr(k) + '" aria-label="Quitar ' + attr(COND_ES[k] || k) + '">' + esc(COND_ES[k] || k) + ' ×</button>'); });
+    if (chips.length) h += '<div class="vt-chips">' + chips.join('') + '</div>';
+    return h;
+  }
+  function weaponHtml(a, r){
+    var m = r.crit ? 2 : 1, dice = a.dice.replace(/^(\d+)d/, function(_, n){ return (n * m) + 'd'; });
+    var extra = {}; a.extra.forEach(function(x){ var mm = /^(\d+)d(\d+)/.exec(x.dice); if (!mm) return; var key = x.type + '|' + mm[2]; extra[key] = (extra[key] || 0) + mm[1] * m; });
+    var smiteOk = D.smite && !a.ranged;
+    if (smiteOk && r.smite) extra['radiante|8'] = (extra['radiante|8'] || 0) + (r.smite + 1) * m;
+    var dmg = '<b>' + dice + ' ' + sgn(a.mod).replace('+', '+ ').replace('−', '− ') + '</b> ' + esc(a.type) + Object.keys(extra).map(function(k){ var p = k.split('|'); return ' <span class="rad">+ ' + extra[k] + 'd' + p[1] + ' ' + esc(p[0]) + '</span>'; }).join('');
+    var open = S.wOpen && S.wOpen[a.id];
+    return '<div class="wpn' + (r.crit ? ' is-crit' : '') + '"><div class="wpn-h"><svg class="ic"><use href="#' + (a.ranged ? 'i-bow' : 'i-sword') + '"/></svg><h3>' + (a.ref ? '<a class="ref" data-ref="' + attr(a.ref) + '" style="color:inherit">' + esc(a.name) + '</a>' : esc(a.name) + '<span class="hb-tag">homebrew</span>') + '</h3><span class="wpn-roll">1d20 ' + sgn(a.atk).replace('+', '+ ').replace('−', '− ') + '</span></div>'
+      + '<div class="wpn-dmg">' + dmg + '</div>'
+      + (smiteOk ? '<div class="wpn-smite"><a class="ref" data-ref="spell|Divine Smite|XPHB">Castigo</a>' + [0].concat(D.slots.map(function(n, i){ return n > 0 ? i + 1 : null; }).filter(Boolean)).slice(0, 5).map(function(v){ return '<button type="button" data-act="smite" data-v="' + v + '" aria-pressed="' + (r.smite === v) + '">' + (v ? 'Nv ' + v : 'No') + '</button>'; }).join('') + '</div>' : '')
+      + '<button type="button" class="wpn-more" data-act="wmore" data-id="' + attr(a.id) + '" aria-expanded="' + !!open + '">' + (open ? 'Menos' : 'Detalles' + (a.mastery.length ? ' · ' + esc(a.mastery.join(', ')) : '')) + '</button>'
+      + (open ? '<div class="wpn-det"><p class="muted">' + esc(a.notes) + (a.extra.length ? ' · ' + a.extra.map(function(x){ return esc(x.note); }).join(', ') : '') + '</p>' + (a.mastery.length ? '<p><b>Maestría:</b> ' + a.mastery.map(function(mm){ return '<a class="ref" data-ref="itemMastery|' + attr(mm) + '|XPHB">' + esc(mm) + '</a>'; }).join(', ') + '</p>' : '') + (a.hbNotes ? '<p style="white-space:pre-line">' + esc(a.hbNotes) + '</p>' : '') + '</div>' : '')
+      + '</div>';
+  }
+  /* Lo de arriba (vida, pestañas, aviso de turno): se repinta solo, sin tocar la sala, cuando cambia el estado de la sala */
+  function combatHead(){
+    var ir = inRoom(); if (ir && !combatHead.was) S.cSub = 'orden'; combatHead.was = ir;
+    var C = cur(), sub = combatSub(), cb = $('#combat'), mine = myTurnNow();
+    cb.setAttribute('data-sub', sub); cb.classList.toggle('my-turn', mine);
+    $('#cSub').innerHTML = CSUB.map(function(x){ return '<button type="button" role="tab" data-act="csub" data-v="' + x[0] + '" aria-selected="' + (sub === x[0]) + '">' + x[1] + (x[0] === 'turno' && mine ? '<i class="dot" aria-label="Es tu turno"></i>' : '') + (x[0] === 'orden' && inRoom() ? '<small>' + esc(Sala.room().code) + '</small>' : '') + '</button>'; }).join('');
+    var typing = document.activeElement && document.activeElement.id === 'hpIn';
+    if (!typing) $('#cVitals').innerHTML = C && D && D.ok ? vitalsHtml(C, rt(C)) : '';
+    return C && D && D.ok;
+  }
   function renderCombat(){
-    var C = cur(); if (!C || !D || !D.ok) { $('#cLeft').innerHTML = noCharHtml(); $('#cRight').innerHTML = '<div id="salaBox"></div>'; if (window.Sala) Sala.mount($('#salaBox')); return; }
-    var r = rt(C), L = '', Rr = '<div id="salaBox"></div>';
-    L += '<div class="stats"><div class="stat"><div class="shield"><svg width="44" height="50" viewBox="0 0 44 50" aria-hidden="true"><path d="M22 2 L41 9 Q41 33 22 48 Q3 33 3 9 Z"/></svg><span>' + D.ac + '</span></div><span class="label">clase de armadura</span></div><div class="stat"><span class="big">' + sgn(D.init) + '</span><span class="label">iniciativa</span></div><div class="stat"><span class="big">' + D.speed + '</span><span class="label">velocidad</span></div></div>';
-    var pct = Math.round(r.hp / D.hp.max * 100), barc = pct <= 33 ? 'var(--bad)' : pct <= 66 ? 'var(--warn)' : 'var(--ok)';
-    L += '<div class="card"><div class="row"><span class="label">puntos de golpe</span><span class="muted" style="font-size:15px">Temporales ' + (r.temp || 0) + '</span></div><div class="hp-top"><b>' + r.hp + '</b><span>/ ' + D.hp.max + '</span></div><div class="bar"><i style="width:' + pct + '%;background:' + barc + '"></i></div>'
-      + '<form class="hp-form" id="hpForm"><label for="hpIn">Resultado de tus dados<input id="hpIn" class="field" inputmode="numeric" autocomplete="off" placeholder="0"></label><button class="btn dmg" type="submit" data-sign="-1">Daño</button><button class="btn heal" type="submit" data-sign="1">Curar</button><button class="btn" type="submit" data-sign="0">Temp.</button></form><p class="err" id="hpErr" hidden>Escribe un número primero.</p>'
-      + '<div class="quick"><button type="button" class="m" data-act="hp" data-v="-5">−5</button><button type="button" class="m" data-act="hp" data-v="-1">−1</button><button type="button" class="p" data-act="hp" data-v="1">+1</button><button type="button" class="p" data-act="hp" data-v="5">+5</button></div></div>';
-    var concSp = allSpells().filter(function(x){ return (x.e.duration || []).some(function(d){ return d.concentration; }); });
-    if (r.conc) { var cs = R.findSpell(r.conc); L += '<div class="conc"><div class="halo"><svg class="ic"><use href="#i-star"/></svg></div><div style="flex:1"><b>Concentración · ' + (cs ? spellLink(cs).replace('class="ref"', 'class="ref" style="color:inherit"') : esc(r.conc)) + '</b><small>Si recibes daño: salvación de Con, CD <span id="concDc">' + (r.concDc || 10) + '</span> o la mitad del daño.</small></div><button class="btn" type="button" data-act="endconc">Terminar</button></div>'; }
-    else if (concSp.length) L += '<div class="card"><label class="label" for="concSel">concentración</label><select class="field" id="concSel" style="margin-top:6px"><option value="">No me estoy concentrando</option>' + concSp.map(function(x){ return '<option value="' + attr(x.e.name + '|' + x.e.source) + '">' + esc(x.e.name) + '</option>'; }).join('') + '</select></div>';
+    var C = cur();
+    if (!combatHead()) { $('#cTurno').innerHTML = noCharHtml(); $('#cRec').innerHTML = ''; $('#cOrden').innerHTML = '<div id="salaBox"></div>'; if (window.Sala) Sala.mount($('#salaBox')); return; }
+    var r = rt(C);
+    /* Mi turno */
+    var T = '<div class="card econ-card"><div class="econ">' + [['a','Acción','i-swords'],['b','Adicional','i-star'],['r','Reacción','i-shield'],['m','Movimiento','i-boot']].map(function(e){ return '<button type="button" data-act="econ" data-k="' + e[0] + '" aria-pressed="' + !!r.econ[e[0]] + '"><svg class="ic"><use href="#' + e[2] + '"/></svg>' + e[1] + '</button>'; }).join('') + '</div><div class="econ-foot"><span class="muted">Toca lo que ya usaste</span><button class="pill" type="button" data-act="crit" aria-pressed="' + !!r.crit + '">Crítico' + (r.crit ? ': dados ×2' : '') + '</button><button class="pill" type="button" data-act="newturn">Nuevo turno</button></div></div>';
+    T += D.attacks.length ? D.attacks.map(function(a){ return weaponHtml(a, r); }).join('') : '<div class="card"><p class="note">Equipa un arma en la pestaña Equipo para ver aquí tu tirada de ataque y de daño.</p></div>';
+    T += '<div class="card"><span class="label">otras acciones</span><div class="chips">' + [['Dash','Correr'],['Disengage','Retirarse'],['Dodge','Esquivar'],['Help','Ayudar'],['Ready','Preparar'],['Opportunity Attack','Ataque de oportunidad'],['Grapple','Agarrar']].map(function(a){ return '<a class="ref chip" data-ref="action|' + a[0] + '|XPHB">' + a[1] + '</a>'; }).join('') + '</div></div>';
+    $('#cTurno').innerHTML = T;
+    /* Recursos */
     var res = '';
     D.resources.forEach(function(x){
       if (x.max) res += '<div class="line"><span>' + esc(x.label) + '</span><div class="pips">' + pipsHTML(x.max, Math.min(x.max, r.res[x.key] || 0), 'res:' + x.key) + '</div></div>';
       else if (x.pool) { var left = x.pool - (r.res[x.key] || 0); res += '<div class="line"><span>' + esc(x.label) + '</span><div class="row"><span class="num">' + left + ' <small class="muted">/ ' + x.pool + '</small></span><button class="btn sm" type="button" data-act="pool" data-key="' + attr(x.key) + '" data-v="1">−1</button><button class="btn sm" type="button" data-act="pool" data-key="' + attr(x.key) + '" data-v="5">−5</button></div></div>'; }
       else if (x.text) res += '<div class="line"><span>' + esc(x.label) + '</span><span class="num">' + esc(x.text) + '</span></div>';
     });
-    L += '<div class="card"><span class="label">recursos</span>' + (res || '<p class="note">Sin recursos con usos limitados.</p>') + '<div class="row" style="margin-top:10px;gap:8px"><button class="btn" type="button" data-act="short" style="flex:1">Descanso corto</button><button class="btn" type="button" data-act="long" style="flex:1">Descanso largo</button></div></div>';
-    if ((r.conds || []).length) L += '<div class="card"><span class="label">condiciones</span><div class="chips">' + r.conds.map(function(k){ return '<button type="button" class="chip big" data-act="condoff" data-v="' + attr(k) + '" aria-label="Quitar ' + attr(COND_ES[k] || k) + '">' + esc(COND_ES[k] || k) + ' ×</button>'; }).join('') + '</div></div>';
-    L += slotsCard(r);
-    L += compSection(true);
-    Rr += '<div class="card"><div class="row"><span class="label">tu turno</span><button class="pill" type="button" data-act="newturn">Reiniciar turno</button></div><div class="econ">' + [['a','Acción'],['b','Acción adicional'],['r','Reacción'],['m','Movimiento']].map(function(e){ return '<button type="button" data-act="econ" data-k="' + e[0] + '" aria-pressed="' + !!r.econ[e[0]] + '">' + e[1] + '</button>'; }).join('') + '</div></div>';
-    if (!D.attacks.length) Rr += '<div class="card"><p class="note">Equipa un arma en la pestaña Equipo para ver aquí tu tirada de ataque y de daño.</p></div>';
-    D.attacks.forEach(function(a){
-      var m = r.crit ? 2 : 1, dice = a.dice.replace(/^(\d+)d/, function(_, n){ return (n * m) + 'd'; });
-      var extra = {}; a.extra.forEach(function(x){ var mm = /^(\d+)d(\d+)/.exec(x.dice); if (!mm) return; var key = x.type + '|' + mm[2]; extra[key] = (extra[key] || 0) + mm[1] * m; });
-      var smiteOk = D.smite && !a.ranged;
-      if (smiteOk && r.smite) extra['radiante|8'] = (extra['radiante|8'] || 0) + (r.smite + 1) * m;
-      var lines = '<div>' + dice + ' ' + sgn(a.mod).replace('+', '+ ').replace('−', '− ') + ' ' + esc(a.type) + '</div>' + Object.keys(extra).map(function(k){ var p = k.split('|'); return '<div class="rad">' + extra[k] + 'd' + p[1] + ' ' + esc(p[0]) + '</div>'; }).join('');
-      Rr += '<div class="weapon"><div class="weapon-h"><svg class="ic"><use href="#' + (a.ranged ? 'i-bow' : 'i-sword') + '"/></svg><h3>' + (a.ref ? '<a class="ref" data-ref="' + attr(a.ref) + '" style="color:inherit">' + esc(a.name) + '</a>' : esc(a.name) + '<span class="hb-tag">homebrew</span>') + '</h3><button class="crit" type="button" data-act="crit" aria-pressed="' + !!r.crit + '">Crítico</button></div><div class="weapon-b">'
-        + '<div class="row"><span class="label">ataque</span><span class="roll">Tira 1d20 ' + sgn(a.atk).replace('+', '+ ').replace('−', '− ') + '</span></div><div style="height:1px;background:var(--rule-2)"></div>'
-        + '<div class="row" style="align-items:flex-start"><span class="label" style="padding-top:4px">daño</span><div class="dmg-out">' + lines + '</div></div><div class="muted" style="font-size:14px">' + esc(a.notes) + (a.extra.length ? ' · ' + a.extra.map(function(x){ return esc(x.note); }).join(', ') : '') + '</div>'
-        + (smiteOk ? '<div><span class="label"><a class="ref" data-ref="spell|Divine Smite|XPHB">castigo divino</a></span><div class="smite">' + [0].concat(D.slots.map(function(n, i){ return n > 0 ? i + 1 : null; }).filter(Boolean)).slice(0, 5).map(function(v){ return '<button type="button" data-act="smite" data-v="' + v + '" aria-pressed="' + (r.smite === v) + '">' + (v ? 'Nv ' + v : 'No') + '</button>'; }).join('') + '</div></div>' : '')
-        + (a.hbNotes ? '<div class="mastery" style="white-space:pre-line">' + esc(a.hbNotes) + '</div>' : '')
-        + (a.mastery.length ? '<div class="mastery"><b>Maestría · ' + a.mastery.map(function(mm){ return '<a class="ref" data-ref="itemMastery|' + attr(mm) + '|XPHB" style="color:inherit">' + esc(mm) + '</a>'; }).join(', ') + '</b></div>' : '')
-        + '</div></div>';
-    });
-    Rr += '<div class="card"><span class="label">acciones rápidas</span><div class="chips">' + [['Dash','Correr'],['Disengage','Retirarse'],['Dodge','Esquivar'],['Help','Ayudar'],['Ready','Preparar'],['Opportunity Attack','Ataque de oportunidad'],['Grapple','Agarrar']].map(function(a){ return '<a class="ref chip big" data-ref="action|' + a[0] + '|XPHB">' + a[1] + '</a>'; }).join('') + '</div><p class="note">Toca una acción para ver la regla.</p></div>';
-    $('#cLeft').innerHTML = L; $('#cRight').innerHTML = Rr;
+    var Rc = '<div class="card"><span class="label">recursos de clase</span>' + (res || '<p class="note">Sin recursos con usos limitados.</p>') + '</div>';
+    Rc += slotsCard(r);
+    var concSp = allSpells().filter(function(x){ return (x.e.duration || []).some(function(d){ return d.concentration; }); });
+    if (!r.conc && concSp.length) Rc += '<div class="card"><label class="label" for="concSel">¿te concentras en un conjuro?</label><select class="field" id="concSel" style="margin-top:6px"><option value="">No me estoy concentrando</option>' + concSp.map(function(x){ return '<option value="' + attr(x.e.name + '|' + x.e.source) + '">' + esc(x.e.name) + '</option>'; }).join('') + '</select></div>';
+    Rc += compSection(true);
+    Rc += '<div class="row rest-row"><button class="btn" type="button" data-act="short">Descanso corto</button><button class="btn" type="button" data-act="long">Descanso largo</button></div>';
+    $('#cRec').innerHTML = Rc;
+    /* Orden: la sala */
+    $('#cOrden').innerHTML = '<div id="salaBox"></div>';
     if (window.Sala) Sala.mount($('#salaBox'));
   }
   document.addEventListener('submit', function(ev){
@@ -1789,6 +1819,9 @@
       case 'moveto': moveTo(b.dataset.id); break;
       case 'dropno': pendingDrop = null; renderInfo(); break;
       case 'itemrule': var ci = itemById(sel); if (ci && ci.ref) openRef(ci.ref); break;
+      case 'csub': S.cSub = b.dataset.v; save(); renderCombat(); var cbb = $('#combat .combat-b'); if (cbb) cbb.scrollTop = 0; break;
+      case 'hpopen': S.hpOpen = !S.hpOpen; renderCombat(); if (S.hpOpen) { var hi = $('#hpIn'); if (hi) hi.focus(); } break;
+      case 'wmore': S.wOpen = S.wOpen || {}; S.wOpen[b.dataset.id] = !S.wOpen[b.dataset.id]; renderCombat(); break;
       case 'combat': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('combate'); break;
       case 'mesa': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('chat'); break;
       case 'endcombat': $('#combat').hidden = true; break;

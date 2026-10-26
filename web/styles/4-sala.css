@@ -3,7 +3,7 @@
 .sala-join{display:flex;gap:8px;margin-top:10px}
 .sala-join .field{flex:1;min-width:0;text-transform:uppercase;letter-spacing:.3em;font-family:var(--display);font-size:20px;text-align:center}
 .sala-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.sala-h>div:first-child{flex:1;min-width:0}
+.sala-h>div:first-child{flex:1 0 auto;min-width:0}
 .sala-code{display:block;font-family:var(--display);font-size:26px;letter-spacing:.25em;color:var(--gold-hi);line-height:1}
 .sala-round{font-size:15px;color:var(--on-dark-2)}
 .sala-round b{font-family:var(--display);font-size:20px;color:var(--on-dark)}
@@ -50,9 +50,7 @@
 .combat-h .round small{font-family:var(--body);font-size:14px;color:var(--on-dark-2);margin-left:4px}
 .combat-h .round [hidden]{display:none}
 /* Vista del DM: sin hoja propia, la sala ocupa todo */
-.combat.dm-mode #cLeft{display:none}
-.combat.dm-mode #cRight>:not(#salaBox){display:none}
-.combat.dm-mode .combat-b{grid-template-columns:1fr}
+/* El DM no tiene hoja: solo ve el orden (ver 7-combate.css) */
 @media (min-width:900px){ .combat.dm-mode .sala-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px} .combat.dm-mode .sala-sep{grid-column:1/-1} }
 .sala-pick[aria-disabled="true"]{cursor:default}
 .sala-npcedit{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--rule)}

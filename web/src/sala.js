@@ -94,6 +94,7 @@ var Sala = (function(){
   function header(){
     var on = status === 'on' && room && room.round > 0, t = document.getElementById('roundTxt'), cb = document.getElementById('combat');
     if (cb) cb.classList.toggle('dm-mode', status === 'on' && !!room && room.role === 'dm');
+    if (window.Diario && Diario.combatRefresh) Diario.combatRefresh();
     if (!t) return;
     t.hidden = !on;
     if (on) { document.getElementById('round').textContent = room.round; var who = room.turnId ? nameOf(room.turnId) : ''; document.getElementById('turnName').textContent = who ? ' · turno de ' + who : ''; }
