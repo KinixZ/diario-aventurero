@@ -14,8 +14,14 @@
 
 /* ==================== RASGOS ==================== */
 .rg-bar{display:flex;flex-direction:column;gap:8px}
-.rg-bar #rgQ{height:40px}
-.rg-tools{gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.rg-bar{gap:10px}
+.rg-bar #rgQ{height:44px;border-radius:8px}
+.rg-seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--gold);border-radius:8px;overflow:hidden}
+.rg-seg button{height:44px;padding:0 6px;border:0;border-left:1px solid var(--gold);background:var(--parch);color:var(--ink);font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rg-seg button:first-child{border-left:0}
+.rg-seg button[aria-pressed="true"]{background:var(--leather-2);color:var(--on-dark);font-weight:600}
+.rg-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.rg-tools .btn{width:100%;height:44px;border-radius:8px;padding:0 10px;font-size:15px}
 .rg-legend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px}
 .rg-g{border:1px solid var(--rule);border-radius:10px;background:var(--parch-2);overflow:hidden}
 .rg-gh{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:8px 14px;border:0;background:transparent;color:inherit;text-align:left}

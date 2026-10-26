@@ -295,8 +295,8 @@
     var nAct = all.filter(function(x){ return featCost(x.f) || featRes(x.f); }).length;
     var h = pendingBanner() + mcBanner()
       + '<div class="rg-bar"><input class="field" id="rgQ" type="search" placeholder="Buscar entre ' + all.length + ' rasgos" aria-label="Buscar rasgo" autocomplete="off" value="' + attr(rgQ) + '">'
-      + '<div class="viewseg" role="group" aria-label="Filtrar rasgos">' + [['all','Todos'],['act','En combate · ' + nAct],['pas','Pasivos']].map(function(x){ return '<button type="button" data-act="rgf" data-v="' + x[0] + '" aria-pressed="' + (filt === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>'
-      + '<div class="row rg-tools"><button class="btn sm" type="button" data-act="abnew">Nueva habilidad homebrew</button><button class="btn main sm" type="button" data-act="levelup">Subir de nivel o editar</button></div></div>'
+      + '<div class="rg-seg" role="group" aria-label="Filtrar rasgos">' + [['all','Todos'],['act','En combate · ' + nAct],['pas','Pasivos']].map(function(x){ return '<button type="button" data-act="rgf" data-v="' + x[0] + '" aria-pressed="' + (filt === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>'
+      + '<div class="rg-tools"><button class="btn" type="button" data-act="abnew">Nueva habilidad</button><button class="btn main" type="button" data-act="levelup">Subir de nivel</button></div></div>'
       + '<div class="rg-legend">' + costBadge('a') + costBadge('b') + costBadge('r') + '<span class="muted">· lo demás es pasivo</span></div>';
     function keep(x){
       var c = featCost(x.f), res = featRes(x.f);
