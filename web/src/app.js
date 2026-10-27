@@ -73,7 +73,8 @@
   var mq = window.matchMedia('(min-width: 900px)');
   function wide(){ return mq.matches; }
   function sgn(n){ return R.sgn(n); }
-  function spellLink(e){ return '<a class="ref" data-ref="spell|' + attr(e.name) + '|' + attr(e.source) + '">' + esc(e.name) + '</a>'; }
+  function spellLink(e){ return '<a class="ref" data-ref="spell|' + attr(e.name) + '|' + attr(e.source) + '">' + nm(e.name) + '</a>'; }
+  function nm(n){ return esc(Render5e.Tname(n)); }
 
   /* ---------- Estilos ---------- */
   function applySkin(){
@@ -254,13 +255,13 @@
   /* ---------- Coste de acción (círculo, triángulo…) ---------- */
   var COST = {a:'Acción', b:'Adicional', r:'Reacción', free:'Gratis', long:'Más de un turno'};
   function costBadge(k, compact){ return k && COST[k] ? '<span class="cost cost-' + k + '" title="' + COST[k] + '"><i aria-hidden="true"></i>' + (compact ? '<span class="sr">' + COST[k] + '</span>' : '<b>' + COST[k] + '</b>') + '</span>' : ''; }
-  function plainText(en, max){
+  function plainText(en, max, raw){
     var out = [];
-    (function walk(x){ if (out.join(' ').length > (max || 400)) return; if (typeof x === 'string') out.push(x); else if (Array.isArray(x)) x.forEach(walk); else if (x && typeof x === 'object') { if (x.entries) walk(x.entries); else if (x.items) walk(x.items); } })(en);
-    return out.join(' ').replace(/\{@\w+ ([^|}]*)[^}]*\}/g, '$1').replace(/\s+/g, ' ').trim();
+    (function walk(x){ if (out.join(' ').length > (max || 400)) return; if (typeof x === 'string') out.push(raw ? x : Render5e.T(x)); else if (Array.isArray(x)) x.forEach(walk); else if (x && typeof x === 'object') { if (x.entries) walk(x.entries); else if (x.items) walk(x.items); } })(en);
+    return out.join(' ').replace(/\{@\w+ ([^}]*)\}/g, function(_, b){ var p = b.split('|'); return raw ? p[0] : p[2] || Render5e.Tname(p[0]); }).replace(/\s+/g, ' ').trim();
   }
   function firstSentence(t){ var m = /^(.{20,160}?[.!?])(\s|$)/.exec(t); var s = m ? m[1] : t.slice(0, 140); return s.length < t.length && !m ? s + '…' : s; }
-  function featCost(f){ return f.hb ? (f.hb.cost === 'none' ? '' : f.hb.cost) : R.costOf(plainText(f.e.entries, 900)); }
+  function featCost(f){ return f.hb ? (f.hb.cost === 'none' ? '' : f.hb.cost) : R.costOf(plainText(f.e.entries, 900, true)); }
   function featRes(f){ var k = f.hb ? 'hb:' + f.hb.id : N(f.name); return D.resources.filter(function(x){ return x.key === k; })[0]; }
   var RG_SKIP = /^(ability score improvement|epic boon|.*\bsubclass( feature)?|subclass feature|.*\b(oath|domain|college|circle|patron|tradition|archetype|path|school) feature)$/i;
   var REST_ES = {short:'se recupera con descanso corto', long:'se recupera con descanso largo', none:'no se recupera'};
@@ -273,7 +274,7 @@
   function rgRow(f, i, r){
     var cost = featCost(f), x = featRes(f), txt = f.hb ? f.hb.text : plainText(f.e.entries, 400), qk = f.hb ? 'hb:' + f.hb.id : 'f:' + f.name, pinned = quickKeys(r).indexOf(qk) >= 0;
     var line = f.hb ? hbLine(f.hb) : '';
-    return '<div class="rg-f' + (cost ? ' act' : x ? ' pinable' : '') + '"><details class="feat-d" data-feat="' + i + '"><summary><span class="rg-t">' + costBadge(cost, true) + '<b>' + esc(f.name) + '</b>' + (f.level ? '<small>nv ' + (D.multi && f.clv ? f.clv : f.level) + '</small>' : '') + '</span>'
+    return '<div class="rg-f' + (cost ? ' act' : x ? ' pinable' : '') + '"><details class="feat-d" data-feat="' + i + '"><summary><span class="rg-t">' + costBadge(cost, true) + '<b>' + nm(f.name) + '</b>' + (f.level ? '<small>nv ' + (D.multi && f.clv ? f.clv : f.level) + '</small>' : '') + '</span>'
       + (line ? '<span class="rg-line">' + line + '</span>' : '') + (txt ? '<span class="rg-s">' + esc(firstSentence(txt)) + '</span>' : '') + '</summary><div class="gtext"></div>'
       + (f.hb ? '<div class="row rg-hbact"><button class="btn sm" type="button" data-act="abedit" data-id="' + attr(f.hb.id) + '">Editar</button><button class="btn sm" type="button" data-act="abdel" data-id="' + attr(f.hb.id) + '">Borrar</button></div>' : '') + '</details>'
       + resUse(x, r)
@@ -302,7 +303,7 @@
       var c = featCost(x.f), res = featRes(x.f);
       if (filt === 'act' && !c && !res) return false;
       if (filt === 'pas' && (c || res)) return false;
-      if (q && N(x.f.name).indexOf(q) < 0 && N(plainText(x.f.e.entries, 300)).indexOf(q) < 0) return false;
+      if (q && N(x.f.name).indexOf(q) < 0 && N(Render5e.Tname(x.f.name)).indexOf(q) < 0 && N(plainText(x.f.e.entries, 300)).indexOf(q) < 0) return false;
       return true;
     }
     function groupHtml(g, list){
@@ -318,7 +319,7 @@
           + main.filter(function(x){ return featCost(x.f) || featRes(x.f); }).map(function(x){ return rgRow(x.f, x.i, r); }).join('')
           + main.filter(function(x){ return !featCost(x.f) && !featRes(x.f); }).map(function(x){ return rgRow(x.f, x.i, r); }).join('')
           + (g.hb && !main.length ? '<p class="note">Crea habilidades que no vienen en los libros: un rayo con 3 cargas, un don de tu deidad, un truco de tu raza homebrew. Aparecen aquí, en Recursos y en el acceso rápido del combate.</p>' : '')
-          + (extra.length ? '<p class="rg-also">También: ' + extra.map(function(x){ return esc(x.f.name) + (x.f.level ? ' (nv ' + (D.multi && x.f.clv ? x.f.clv : x.f.level) + ')' : ''); }).join(', ') + '</p>' : '') + '</div>')
+          + (extra.length ? '<p class="rg-also">También: ' + extra.map(function(x){ return nm(x.f.name) + (x.f.level ? ' (nv ' + (D.multi && x.f.clv ? x.f.clv : x.f.level) + ')' : ''); }).join(', ') + '</p>' : '') + '</div>')
         + '</section>';
     }
     groups.forEach(function(g){ h += groupHtml(g, all.filter(function(x){ return g.test(x.f); })); });
@@ -331,7 +332,7 @@
   }
   document.addEventListener('change', function(ev){ if (ev.target.id === 'hudBg3') { S.hud = ev.target.checked ? 'bg3' : ''; applySkin(); save(); } });
   document.addEventListener('input', function(ev){ if (ev.target.id === 'rgQ') { rgQ = ev.target.value; rgFocus = true; renderRasgos(cur()); rgFocus = false; } });
-  function featD(f, i){ return '<details class="feat-d" data-feat="' + i + '"><summary><b>' + esc(f.name) + '</b><small>' + (f.level ? 'nivel ' + (D && D.multi && f.clv ? f.clv + ' de ' + f.cn : f.level) + ' · ' : '') + esc(f.e.source || '') + '</small></summary><div class="gtext"></div></details>'; }
+  function featD(f, i){ return '<details class="feat-d" data-feat="' + i + '"><summary><b>' + nm(f.name) + '</b><small>' + (f.level ? 'nivel ' + (D && D.multi && f.clv ? f.clv + ' de ' + f.cn : f.level) + ' · ' : '') + esc(f.e.source || '') + '</small></summary><div class="gtext"></div></details>'; }
 
   /* ---------- Habilidades homebrew ---------- */
   var DT_OPTS = [['O','fuerza'],['F','fuego'],['C','frío'],['L','relámpago'],['T','trueno'],['A','ácido'],['I','veneno'],['N','necrótico'],['R','radiante'],['Y','psíquico'],['S','cortante'],['P','perforante'],['B','contundente']];
@@ -428,7 +429,7 @@
       }
     } else if (t === 'f' || t === 'hb') {
       var f = D.features.filter(function(x){ return t === 'hb' ? x.hb && x.hb.id === v : !x.hb && x.name === v; })[0]; if (!f) return '';
-      cost = featCost(f); name = esc(f.name); info = f.hb ? hbLine(f.hb) : esc(firstSentence(plainText(f.e.entries, 300)));
+      cost = featCost(f); name = nm(f.name); info = f.hb ? hbLine(f.hb) : esc(firstSentence(plainText(f.e.entries, 300)));
       var x = featRes(f);
       if (x && x.max) { var lf = x.max - Math.min(x.max, r.res[x.key] || 0); btns = '<button class="btn sm" type="button" data-act="quse" data-q="' + attr(key) + '"' + (lf > 0 ? '' : ' disabled') + '>Usar</button><span class="q-left">' + lf + ' / ' + x.max + '</span>'; }
       else if (x && x.pool) btns = '<span class="q-left">' + (x.pool - (r.res[x.key] || 0)) + ' / ' + x.pool + '</span><button class="btn sm" type="button" data-act="pool" data-key="' + attr(x.key) + '" data-v="1">−1</button><button class="btn sm" type="button" data-act="pool" data-key="' + attr(x.key) + '" data-v="5">−5</button>';
@@ -827,7 +828,7 @@
     $('#hbWeight').value = h.weight || ''; $('#hbNotes').value = h.notes || '';
     $('#hbEquip').checked = !item; $('#hbKeep').checked = !item || S.homebrew.some(function(x){ return x.name === h.name; });
     $('#hbTitle').textContent = item ? 'Editar ' + h.name : 'Homebrew'; $('#hbSubmit').textContent = item ? 'Guardar cambios' : 'Crear'; $('#hbErr').hidden = true;
-    $('#hbSaved').innerHTML = !item && S.homebrew.length ? '<div class="card" style="margin-bottom:14px"><span class="label">tu homebrew guardado</span>' + S.homebrew.map(function(x, i){ return '<div class="line"><svg class="ic" style="flex:none;width:22px;height:22px"><use href="#' + hbShape(x).ic + '"/></svg><span style="flex:1"><b>' + esc(x.name) + '</b><br><small class="muted">' + esc(hbSummary(x)) + '</small></span><button class="btn sm" type="button" data-act="hbadd" data-i="' + i + '">Añadir</button><button class="icon-btn" type="button" data-act="hbdel" data-i="' + i + '" aria-label="Borrar ' + attr(x.name) + ' de la lista"><svg class="ic"><use href="#i-x"/></svg></button></div>'; }).join('') + '<p class="note" style="margin-top:6px">O crea uno nuevo abajo.</p></div>' : '';
+    $('#hbSaved').innerHTML = !item && S.homebrew.length ? '<div class="card" style="margin-bottom:14px"><span class="label">tu homebrew guardado</span>' + S.homebrew.map(function(x, i){ return '<div class="line"><svg class="ic" style="flex:none;width:22px;height:22px"><use href="#' + hbShape(x).ic + '"/></svg><span style="flex:1"><b>' + nm(x.name) + '</b><br><small class="muted">' + esc(hbSummary(x)) + '</small></span><button class="btn sm" type="button" data-act="hbadd" data-i="' + i + '">Añadir</button><button class="icon-btn" type="button" data-act="hbdel" data-i="' + i + '" aria-label="Borrar ' + attr(x.name) + ' de la lista"><svg class="ic"><use href="#i-x"/></svg></button></div>'; }).join('') + '<p class="note" style="margin-top:6px">O crea uno nuevo abajo.</p></div>' : '';
     hbSetKind(kindOf(h)); openSheet('hbSheet'); $('#hbName').focus({preventScroll:true});
   }
   function hbPlace(h, equipNow){
@@ -1031,7 +1032,7 @@
     h += '<div class="quick comp-q"><button type="button" class="m" data-act="comphp" data-i="' + i + '" data-v="-5">−5</button><button type="button" class="m" data-act="comphp" data-i="' + i + '" data-v="-1">−1</button><button type="button" class="p" data-act="comphp" data-i="' + i + '" data-v="1">+1</button><button type="button" class="p" data-act="comphp" data-i="' + i + '" data-v="5">+5</button><button type="button" data-act="comphp" data-i="' + i + '" data-v="full">Lleno</button></div>';
     if (st.spellSummon) h += '<label class="comp-sl">Nivel del conjuro<select class="field" data-compsl="' + i + '">' + [1,2,3,4,5,6,7,8,9].filter(function(l){ return l >= (m.summonedBySpellLevel || 1) && l <= Math.max(m.summonedBySpellLevel || 1, D.maxSpellLevel || 1); }).map(function(l){ return '<option value="' + l + '"' + ((c.sl || m.summonedBySpellLevel || 1) === l ? ' selected' : '') + '>' + l + '</option>'; }).join('') + '</select></label>';
     var vs = compVariants(m); if (vs.length) h += '<label class="comp-sl">Forma<select class="field" data-compv="' + i + '">' + vs.map(function(v){ return '<option' + (c.v === v ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') + '</select></label>';
-    st.attacks.forEach(function(a){ h += '<div class="comp-atk"><span>' + esc(a.name) + (a.note ? ' <small class="muted">· ' + esc(a.note) + '</small>' : '') + '</span>' + (a.atk == null ? '' : '<span class="roll">Tira 1d20 ' + sgn(a.atk).replace('+', '+ ').replace('−', '− ') + '</span>') + (a.dmg ? '<span class="dmg">' + esc(a.dmg) + ' ' + esc(a.type) + '</span>' : '') + '</div>'; });
+    st.attacks.forEach(function(a){ h += '<div class="comp-atk"><span>' + nm(a.name) + (a.note ? ' <small class="muted">· ' + esc(a.note) + '</small>' : '') + '</span>' + (a.atk == null ? '' : '<span class="roll">Tira 1d20 ' + sgn(a.atk).replace('+', '+ ').replace('−', '− ') + '</span>') + (a.dmg ? '<span class="dmg">' + esc(a.dmg) + ' ' + esc(a.type) + '</span>' : '') + '</div>'; });
     if (c.notes || (m._custom && c.custom.notes)) h += '<p class="note comp-notes">' + esc(c.notes || c.custom.notes) + '</p>';
     if (!compact) h += '<div class="row comp-btns">' + (m._custom ? '<button class="btn sm" type="button" data-act="compedit" data-i="' + i + '">Editar hoja</button>' : '<button class="btn sm" type="button" data-act="compnick" data-i="' + i + '">Apodo y notas</button><button class="btn sm" type="button" data-act="compfork" data-i="' + i + '">Convertir en hoja editable</button>') + '</div>';
     if (m.actionNote) h += '<p class="note">' + esc(/bonus action/i.test(m.actionNote) ? 'Actúa cuando gastas tu acción adicional para ordenárselo.' : /your action/i.test(m.actionNote) ? 'Actúa cuando gastas tu acción para ordenárselo.' : m.actionNote) + '</p>';
@@ -1062,7 +1063,7 @@
     h += '<div class="card comp-card"><div class="row"><span class="label">compañeros</span>' + (compact ? '' : '<button class="btn sm" type="button" data-act="compnew">Añadir</button>') + '</div>';
     if (!list.length) {
       var sug = compSuggest()[0];
-      h += sug ? '<div class="banner"><p>Tienes ' + esc(sug.m.name) + '. Añade su ficha para llevar sus PG y ataques.</p><button class="btn main sm" type="button" data-act="compadd" data-ref="' + attr(sug.ref) + '">Añadir</button></div>' : '<p class="note">Homúnculos, defensores de acero, familiares e invocaciones. Sus números se calculan con tu nivel y tu bonificador.</p>';
+      h += sug ? '<div class="banner"><p>Tienes ' + nm(sug.m.name) + '. Añade su ficha para llevar sus PG y ataques.</p><button class="btn main sm" type="button" data-act="compadd" data-ref="' + attr(sug.ref) + '">Añadir</button></div>' : '<p class="note">Homúnculos, defensores de acero, familiares e invocaciones. Sus números se calculan con tu nivel y tu bonificador.</p>';
     }
     h += list.map(function(c, i){ return compCard(c, i, compact); }).join('');
     return h + '</div>';
@@ -1152,7 +1153,7 @@
   function renderCompList(){
     var q = N(compQ), list = compCandidates().filter(function(x){ return !q || N(x.m.name).indexOf(q) >= 0; }), lib = (Lib5e.get() && Lib5e.get().monster || []).length;
     $('#compList').innerHTML = '<div class="prow comp-blank"><div class="top"><button type="button" class="sel" data-act="compblank"><svg class="ic" style="width:26px;height:26px;flex:none"><use href="#i-quill"/></svg><span class="nm"><b>Hoja en blanco</b><small>Tu propio compañero: mascota, dragoncito, montura o homebrew. Escribes sus números.</small></span></button></div></div>' + (lib ? '' : '<p class="note">Tu biblioteca no trae criaturas todavía: solo aparece la ficha integrada del Homúnculo. Vuelve a crear el paquete con el script nuevo para tener defensores, familiares e invocaciones.</p>')
-      + list.slice(0, 120).map(function(x){ var m = x.m; return '<div class="prow"><div class="top"><button type="button" class="sel" data-act="compadd" data-ref="' + attr(x.ref) + '"><span class="nm"><b>' + esc(m.name) + '</b><small>' + esc(x.why + ' · ' + R.srcName(m.source)) + (x.score === 0 ? ' <span class="flag taken">Sugerido</span>' : '') + '</small></span></button></div></div>'; }).join('')
+      + list.slice(0, 120).map(function(x){ var m = x.m; return '<div class="prow"><div class="top"><button type="button" class="sel" data-act="compadd" data-ref="' + attr(x.ref) + '"><span class="nm"><b>' + nm(m.name) + '</b><small>' + esc(x.why + ' · ' + R.srcName(m.source)) + (x.score === 0 ? ' <span class="flag taken">Sugerido</span>' : '') + '</small></span></button></div></div>'; }).join('')
       + (list.length > 120 ? '<p class="note">Se muestran 120 de ' + list.length + '. Escribe para afinar.</p>' : '') + (!list.length ? '<p class="empty-state">Nada coincide con la búsqueda.</p>' : '');
   }
   document.addEventListener('input', function(ev){ if (ev.target.id === 'compQ') { compQ = ev.target.value; renderCompList(); } });
@@ -1213,7 +1214,7 @@
     if (smiteOk && r.smite) extra['radiante|8'] = (extra['radiante|8'] || 0) + (r.smite + 1) * m;
     var dmg = '<b>' + dice + ' ' + sgn(a.mod).replace('+', '+ ').replace('−', '− ') + '</b> ' + esc(a.type) + Object.keys(extra).map(function(k){ var p = k.split('|'); return ' <span class="rad">+ ' + extra[k] + 'd' + p[1] + ' ' + esc(p[0]) + '</span>'; }).join('');
     var open = S.wOpen && S.wOpen[a.id];
-    return '<div class="wpn' + (r.crit ? ' is-crit' : '') + '"><div class="wpn-h"><svg class="ic"><use href="#' + (a.ranged ? 'i-bow' : 'i-sword') + '"/></svg><h3>' + (a.ref ? '<a class="ref" data-ref="' + attr(a.ref) + '" style="color:inherit">' + esc(a.name) + '</a>' : esc(a.name) + '<span class="hb-tag">homebrew</span>') + '</h3><span class="wpn-roll">1d20 ' + sgn(a.atk).replace('+', '+ ').replace('−', '− ') + '</span></div>'
+    return '<div class="wpn' + (r.crit ? ' is-crit' : '') + '"><div class="wpn-h"><svg class="ic"><use href="#' + (a.ranged ? 'i-bow' : 'i-sword') + '"/></svg><h3>' + (a.ref ? '<a class="ref" data-ref="' + attr(a.ref) + '" style="color:inherit">' + nm(a.name) + '</a>' : nm(a.name) + '<span class="hb-tag">homebrew</span>') + '</h3><span class="wpn-roll">1d20 ' + sgn(a.atk).replace('+', '+ ').replace('−', '− ') + '</span></div>'
       + '<div class="wpn-dmg">' + dmg + '</div>'
       + (smiteOk ? '<div class="wpn-smite"><a class="ref" data-ref="spell|Divine Smite|XPHB">Castigo</a>' + [0].concat(D.slots.map(function(n, i){ return n > 0 ? i + 1 : null; }).filter(Boolean)).slice(0, 5).map(function(v){ return '<button type="button" data-act="smite" data-v="' + v + '" aria-pressed="' + (r.smite === v) + '">' + (v ? 'Nv ' + v : 'No') + '</button>'; }).join('') + '</div>' : '')
       + '<button type="button" class="wpn-more" data-act="wmore" data-id="' + attr(a.id) + '" aria-expanded="' + !!open + '">' + (open ? 'Menos' : 'Detalles' + (a.mastery.length ? ' · ' + esc(a.mastery.join(', ')) : '')) + '</button>'
@@ -1250,7 +1251,7 @@
     var Rc = '<div class="card"><span class="label">recursos de clase</span>' + (res || '<p class="note">Sin recursos con usos limitados.</p>') + '</div>';
     Rc += slotsCard(r);
     var concSp = allSpells().filter(function(x){ return (x.e.duration || []).some(function(d){ return d.concentration; }); });
-    if (!r.conc && concSp.length) Rc += '<div class="card"><label class="label" for="concSel">¿te concentras en un conjuro?</label><select class="field" id="concSel" style="margin-top:6px"><option value="">No me estoy concentrando</option>' + concSp.map(function(x){ return '<option value="' + attr(x.e.name + '|' + x.e.source) + '">' + esc(x.e.name) + '</option>'; }).join('') + '</select></div>';
+    if (!r.conc && concSp.length) Rc += '<div class="card"><label class="label" for="concSel">¿te concentras en un conjuro?</label><select class="field" id="concSel" style="margin-top:6px"><option value="">No me estoy concentrando</option>' + concSp.map(function(x){ return '<option value="' + attr(x.e.name + '|' + x.e.source) + '">' + nm(x.e.name) + '</option>'; }).join('') + '</select></div>';
     Rc += compSection(true);
     Rc += '<div class="row rest-row"><button class="btn" type="button" data-act="short">Descanso corto</button><button class="btn" type="button" data-act="long">Descanso largo</button></div>';
     $('#cRec').innerHTML = Rc;
@@ -1312,7 +1313,7 @@
     rows = rows.map(function(x){ var e = x.e || x, ss = Render5e.spellShort(e); return {e:e, ss:ss, origin:x.tag || '', key:{name:e.name, lv:e.level, time:ss.time, school:ss.school, cr:(ss.conc ? 'C' : '') + (ss.rit ? 'R' : ''), range:ss.range, origin:x.tag || '', src:e.source}}; });
     rows.sort(function(a, b){ var va = a.key[sort.k], vb = b.key[sort.k]; var c = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb)); return (c || a.e.name.localeCompare(b.e.name)) * sort.dir; });
     return '<div class="stable"><table><thead><tr>' + cols.map(function(c){ return '<th scope="col"><button type="button" data-act="' + (opts.act || 'gsort') + '" data-k="' + c[0] + '"' + (sort.k === c[0] ? ' aria-sort="' + (sort.dir > 0 ? 'ascending' : 'descending') + '"' : '') + '>' + c[1] + (sort.k === c[0] ? (sort.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>'; }).join('') + '</tr></thead><tbody>'
-      + rows.map(function(r){ var ref = 'spell|' + r.e.name + '|' + r.e.source; return '<tr data-act="gopen" data-ref="' + attr(ref) + '" tabindex="0"><td>' + esc(r.e.name) + '</td><td class="lv">' + (r.e.level || 'T') + '</td><td>' + esc(r.ss.time) + '</td><td>' + esc(r.ss.school) + '</td><td><span class="flags">' + (r.ss.conc ? '<span class="tag conc">C</span>' : '') + (r.ss.rit ? '<span class="tag cls">R</span>' : '') + '</span></td><td>' + esc(r.ss.range) + '</td><td>' + esc(opts.origin ? r.origin : r.e.source) + '</td></tr>'; }).join('')
+      + rows.map(function(r){ var ref = 'spell|' + r.e.name + '|' + r.e.source; return '<tr data-act="gopen" data-ref="' + attr(ref) + '" tabindex="0"><td>' + nm(r.e.name) + '</td><td class="lv">' + (r.e.level || 'T') + '</td><td>' + esc(r.ss.time) + '</td><td>' + esc(r.ss.school) + '</td><td><span class="flags">' + (r.ss.conc ? '<span class="tag conc">C</span>' : '') + (r.ss.rit ? '<span class="tag cls">R</span>' : '') + '</span></td><td>' + esc(r.ss.range) + '</td><td>' + esc(opts.origin ? r.origin : r.e.source) + '</td></tr>'; }).join('')
       + '</tbody></table></div>';
   }
   function renderGrim(){
@@ -1344,8 +1345,8 @@
     var body;
     if (isSp && G.mode === 'table') body = spellRowsHtml(shown.map(function(r){ return r[1]; }), {sort:G.sort});
     else if (isSp) {
-      var lv = -1; body = '<div class="glist">' + shown.map(function(r){ var e = r[1], h = ''; if (e.level !== lv) { lv = e.level; h += '<div class="group-h" style="margin:12px 0 2px">' + (lv ? 'Nivel ' + lv : 'Trucos') + '</div>'; } var ss = Render5e.spellShort(e); return h + '<button type="button" class="gitem" data-act="gopen" data-ref="' + attr('spell|' + e.name + '|' + e.source) + '"><b>' + esc(e.name) + '</b><small>' + esc(ss.school.toLowerCase()) + (ss.conc ? ' · C' : '') + (ss.rit ? ' · R' : '') + ' · ' + esc(e.source) + '</small></button>'; }).join('') + '</div>';
-    } else body = '<div class="glist">' + shown.map(function(r){ var e = r[1], sub = (r[0] === 'item' || r[0] === 'baseitem') ? Render5e.itemType(e).toLowerCase() + ' · ' : ''; return '<button type="button" class="gitem" data-act="gopen" data-ref="' + attr(r[0] + '|' + e.name + '|' + e.source) + '"><b>' + esc(e.name) + '</b><small>' + esc(sub) + esc(e.source) + '</small></button>'; }).join('') + '</div>';
+      var lv = -1; body = '<div class="glist">' + shown.map(function(r){ var e = r[1], h = ''; if (e.level !== lv) { lv = e.level; h += '<div class="group-h" style="margin:12px 0 2px">' + (lv ? 'Nivel ' + lv : 'Trucos') + '</div>'; } var ss = Render5e.spellShort(e); return h + '<button type="button" class="gitem" data-act="gopen" data-ref="' + attr('spell|' + e.name + '|' + e.source) + '"><b>' + nm(e.name) + '</b><small>' + esc(ss.school.toLowerCase()) + (ss.conc ? ' · C' : '') + (ss.rit ? ' · R' : '') + ' · ' + esc(e.source) + '</small></button>'; }).join('') + '</div>';
+    } else body = '<div class="glist">' + shown.map(function(r){ var e = r[1], sub = (r[0] === 'item' || r[0] === 'baseitem') ? Render5e.itemType(e).toLowerCase() + ' · ' : ''; return '<button type="button" class="gitem" data-act="gopen" data-ref="' + attr(r[0] + '|' + e.name + '|' + e.source) + '"><b>' + nm(e.name) + '</b><small>' + esc(sub) + esc(e.source) + '</small></button>'; }).join('') + '</div>';
     grim.innerHTML = (showSecs ? grimSecs() : '<div class="folio"><span>Grimorio · ' + secName + '</span></div>') + fil
       + '<p class="note" style="margin:10px 0 4px">' + total + ' resultados' + (total > cap ? '; se muestran ' + cap + ', afina con los filtros' : '') + '.</p>' + body;
     var gq = $('#gq'); if (gq) gq.addEventListener('input', function(){ G.q = gq.value; var pos = gq.selectionStart; renderGrim(); var n = $('#gq'); n.focus(); n.setSelectionRange(pos, pos); });
@@ -1441,7 +1442,8 @@
     }
     throw {code:'no_engine'};
   }
-  function trWrap(html, key){ if (S.trMode === 'off' || !key) return html; return '<div class="trwrap" data-trkey="' + attr(key) + '"><div class="trbar"></div><div class="gtext trbody">' + html + '</div></div>'; }
+  var trLastMiss = 0;
+  function trWrap(html, key){ var mi = Render5e.misses(), fresh = mi === trLastMiss; trLastMiss = mi; if (Render5e.hasTr() && fresh) return html; if (S.trMode === 'off' || !key) return html; return '<div class="trwrap" data-trkey="' + attr(key) + '"><div class="trbar"></div><div class="gtext trbody">' + html + '</div></div>'; }
   function trBar(wrap){
     var st = wrap.dataset.st || 'orig', bar = wrap.querySelector('.trbar'), h = '';
     if (st === 'orig') h = '<button class="btn" type="button" data-act="trgo">Traducir al español</button>';
@@ -1485,7 +1487,43 @@
       });
     });
   }
+  /* ---------- Traducción fija (archivos traduccion-*.json): sin IA ni internet ---------- */
+  var TRD = {};
+  function trdLoad(){
+    return idbGet('trd-list').then(function(list){
+      list = list || [];
+      return Promise.all(list.map(function(k){ return idbGet('trd:' + k).then(function(j){ return [k, j]; }); })).then(function(rows){
+        var map = {}; TRD = {};
+        rows.forEach(function(r){ if (r[1] && r[1].s) { var s0 = r[1].s; for (var id in s0) map[id] = s0[id]; TRD[r[0]] = r[1]._traduccion || {}; } });
+        Render5e.setTr(map); Render5e.trOn(!S.trdOff);
+      });
+    });
+  }
+  function trdSettings(){
+    var box = $('#trdList'); if (!box) return;
+    var ks = Object.keys(TRD);
+    box.innerHTML = ks.length ? ks.map(function(k){ var t = TRD[k]; return '<div class="line"><span style="flex:1;min-width:0"><b>' + esc(k) + '</b><br><small class="muted">' + (t.textos || 0).toLocaleString('es-MX') + ' textos' + (t.creado ? ' · ' + new Date(t.creado).toLocaleDateString('es-MX') : '') + '</small></span><button class="btn sm" type="button" data-act="trddel" data-k="' + attr(k) + '">Quitar</button></div>'; }).join('') : '<p class="note" style="margin:4px 0">No hay ninguna cargada.</p>';
+    var on = $('#trdOn'); if (on) { on.checked = !S.trdOff; on.disabled = !ks.length; }
+  }
+  function trdImport(file){
+    var st = $('#trdStatus'); st.textContent = 'Leyendo ' + file.name + '…';
+    var fr = new FileReader();
+    fr.onload = function(){
+      var j; try { j = JSON.parse(fr.result); } catch(e){ st.textContent = 'Ese archivo no es un JSON válido.'; return; }
+      if (!j || !j._traduccion || !j.s) { st.textContent = 'Ese archivo no es una traducción del diario.'; return; }
+      var k = String(j._traduccion.de || file.name.replace(/\.json$/, ''));
+      idbGet('trd-list').then(function(list){ list = (list || []).filter(function(x){ return x !== k; }); list.push(k); return idbSet('trd:' + k, j).then(function(ok){ if (!ok) throw 0; return idbSet('trd-list', list); }); })
+        .then(trdLoad).then(function(){ st.textContent = 'Listo: ' + (j._traduccion.textos || Object.keys(j.s).length).toLocaleString('es-MX') + ' textos en español.'; trdSettings(); render(false); renderGrim(); })
+        .catch(function(){ st.textContent = 'No hubo espacio para guardarla en este dispositivo.'; });
+    };
+    fr.readAsText(file);
+  }
+  document.addEventListener('change', function(ev){
+    if (ev.target.id === 'trdFile' && ev.target.files && ev.target.files[0]) { trdImport(ev.target.files[0]); ev.target.value = ''; }
+    if (ev.target.id === 'trdOn') { S.trdOff = !ev.target.checked; save(); Render5e.trOn(!S.trdOff); render(false); renderGrim(); }
+  });
   function trSettings(){
+    trdSettings();
     var m = S.trMode || 'manual';
     $('#trModes').innerHTML = [['off','Desactivada'],['manual','Con botón'],['auto','Automática']].map(function(x){ return '<button type="button" data-act="trmode" data-v="' + x[0] + '" aria-pressed="' + (m === x[0]) + '">' + x[1] + '</button>'; }).join('');
     $('#trStatus').textContent = 'Revisando qué traductor hay disponible…';
@@ -1503,11 +1541,11 @@
         var sp = c.startingProficiencies || {}, sk = (sp.skills || [])[0], skT = sk && sk.choose ? 'Elige ' + (sk.choose.count || 1) + ' de: ' + sk.choose.from.map(function(s){ return R.SKES[s] || s; }).join(', ') : sk && sk.any ? 'Elige ' + sk.any + ' cualquiera' : '—';
         var feats = R.featRefs(c).filter(function(f){ return !/^Ability Score/.test(f.name); });
         return '<dl class="gmeta"><dt>Dado de golpe</dt><dd>d' + c.hd.faces + '</dd><dt>Salvaciones</dt><dd>' + (c.proficiency || []).map(function(k){ return R.ABL[k]; }).join(', ') + '</dd><dt>Habilidades</dt><dd>' + esc(skT) + '</dd><dt>Armaduras</dt><dd>' + esc((sp.armor || []).map(R.strip).join(', ') || '—') + '</dd><dt>Armas</dt><dd>' + esc((sp.weapons || []).map(R.strip).join(', ') || '—') + '</dd>' + (c.spellcastingAbility ? '<dt>Conjuros</dt><dd>Con ' + R.ABL[c.spellcastingAbility] + '</dd>' : '') + '<dt>Subclase</dt><dd>Nivel ' + R.subclassLevel(c) + '</dd></dl>'
-          + '<p><b>Rasgos por nivel:</b> ' + feats.map(function(f){ return f.level + '. ' + esc(f.name); }).join(' · ') + '</p>';
+          + '<p><b>Rasgos por nivel:</b> ' + feats.map(function(f){ return f.level + '. ' + nm(f.name); }).join(' · ') + '</p>';
       }
       if (det.type === 'subclassSummary') {
         var cls = R.byRef(Lib5e.get().class, det.cls), s = cls && R.subclassesOf(cls).filter(function(x){ return x.name + '|' + x.source === det.ref; })[0]; if (!s) return '';
-        return (s.subclassFeatures || []).map(function(ref){ var f = Lib5e.subclassFeature(ref); return f ? '<h4>Nivel ' + f.level + ': ' + esc(f.name) + '</h4>' + Render5e.entries(f.entries) : ''; }).join('') + (s.additionalSpells ? '<p class="note">Incluye conjuros siempre preparados.</p>' : '');
+        return (s.subclassFeatures || []).map(function(ref){ var f = Lib5e.subclassFeature(ref); return f ? '<h4>Nivel ' + f.level + ': ' + nm(f.name) + '</h4>' + Render5e.entries(f.entries) : ''; }).join('') + (s.additionalSpells ? '<p class="note">Incluye conjuros siempre preparados.</p>' : '');
       }
       if (det.type === 'race') {
         var r = R.byRef(Lib5e.get().race, det.ref); if (!r) return '';
@@ -1530,7 +1568,7 @@
         return '<ul>' + gr.fixed.map(function(s){ var e = R.findSpell(s.ref); return '<li>' + (e ? spellLink(e) : esc(s.ref)) + ' <span class="muted">(' + esc(s.how) + ')</span></li>'; }).join('') + gr.chooses.map(function(c){ return '<li>Eliges ' + c.count + ' ' + esc(c.filter ? R.filterLabel(c.filter) : 'de una lista') + ' <span class="muted">(' + esc(c.how) + ')</span></li>'; }).join('') + '</ul>' + (det.group.ability ? '<p class="note">Característica para lanzar: ' + (typeof det.group.ability === 'string' ? R.ABL[det.group.ability] : 'a elegir entre ' + det.group.ability.choose.map(function(a){ return R.ABL[a]; }).join(', ')) + '</p>' : '');
       }
       if (det.type === 'item') { var p = det.ref.split('|'), it = Lib5e.find(p[0], p[1], p[2]); if (!it) return ''; var dd = Render5e.detail(it.type, it.e); return '<dl class="gmeta">' + dd.meta.map(function(r){ return '<dt>' + esc(r[0]) + '</dt><dd>' + r[1] + '</dd>'; }).join('') + '</dl>' + dd.body; }
-      if (det.type === 'equip') return '<ul>' + det.items.map(function(x){ return '<li>' + (x.ref ? '<a class="ref" data-ref="' + attr(x.ref) + '">' + esc(x.name) + '</a>' : esc(x.name)) + (x.q > 1 ? ' ×' + x.q : '') + '</li>'; }).join('') + '</ul>';
+      if (det.type === 'equip') return '<ul>' + det.items.map(function(x){ return '<li>' + (x.ref ? '<a class="ref" data-ref="' + attr(x.ref) + '">' + nm(x.name) + '</a>' : nm(x.name)) + (x.q > 1 ? ' ×' + x.q : '') + '</li>'; }).join('') + '</ul>';
       if (det.type === 'spell') { var sp2 = R.findSpell(det.ref); if (!sp2) return ''; var ds = Render5e.detail('spell', sp2); return '<dl class="gmeta">' + ds.meta.map(function(r){ return '<dt>' + esc(r[0]) + '</dt><dd>' + r[1] + '</dd>'; }).join('') + '</dl>' + ds.body; }
     } catch(e) { return '<p class="note">No se pudo mostrar el detalle.</p>'; }
     return '';
@@ -1622,7 +1660,7 @@
     var lastE = CD.classes.filter(function(E){ return E.at.indexOf(L) >= 0; })[0] || CD.classes[0];
     h += '<div class="ch"><div class="lvhead"><span class="big">' + L + '</span><div><h3 style="margin:0;font-family:var(--display);font-size:18px">Nivel ' + L + (CD.multi ? ' · ' + esc(lastE.cls.name) + ' ' + (lastE.at.indexOf(L) + 1) : ' de ' + esc(CD.cls.name)) + '</h3><p class="help">' + (CD.multi ? esc(CD.clsLabel) + ' · ' : '') + 'Competencia ' + sgn(CD.pb) + ' · ' + CD.hp.max + ' PG</p></div></div></div>';
     var gained = CD.features.map(function(f, i){ return {f:f, i:i}; }).filter(function(x){ return x.f.level === L && (x.f.from === 'Clase' || x.f.from === 'Subclase') && !/^(ability score improvement|.* subclass|subclass feature)$/i.test(x.f.name); });
-    if (gained.length) h += '<div class="ch"><div class="ch-h"><h3>Lo que ganas en el nivel ' + L + '</h3></div>' + gained.map(function(x){ return '<details class="feat-d" data-crfeat="' + x.i + '"><summary><b>' + esc(x.f.name) + '</b><small>' + esc(x.f.from + (CD.multi ? ' · ' + x.f.cn : '')) + '</small></summary><div class="gtext"></div></details>'; }).join('') + '</div>';
+    if (gained.length) h += '<div class="ch"><div class="ch-h"><h3>Lo que ganas en el nivel ' + L + '</h3></div>' + gained.map(function(x){ return '<details class="feat-d" data-crfeat="' + x.i + '"><summary><b>' + nm(x.f.name) + '</b><small>' + esc(x.f.from + (CD.multi ? ' · ' + x.f.cn : '')) + '</small></summary><div class="gtext"></div></details>'; }).join('') + '</div>';
     if (CD.mcReqs && CD.mcReqs.length) h += '<div class="banner warn"><p>No cumples el requisito de multiclase: ' + esc(CD.mcReqs.join(' · ')) + '. Puedes seguir si tu DM lo permite.</p></div>';
     h += hpLevelUI(L);
     var list = CD.choices.filter(function(c){ return c.kind !== 'scores' && c.kind !== 'hp' && (c.lv === L || !c.done); });
@@ -2001,6 +2039,7 @@
       case 'trorig': S.trPref = 'orig'; save(); trShow(b.closest('.trwrap'), 'orig'); break;
       case 'trshow': S.trPref = 'tr'; save(); trShow(b.closest('.trwrap'), 'tr'); break;
       case 'trmode': S.trMode = b.dataset.v; save(); trSettings(); render(false); renderGrim(); break;
+      case 'trddel': (function(k){ idbDel('trd:' + k); idbGet('trd-list').then(function(list){ return idbSet('trd-list', (list || []).filter(function(x){ return x !== k; })); }).then(trdLoad).then(function(){ trdSettings(); render(false); renderGrim(); }); })(b.dataset.k); break;
       case 'trclear': TRmem = {}; idb().then(function(db){ var t = db.transaction('kv','readwrite'), st = t.objectStore('kv'); st.openCursor().onsuccess = function(ev){ var c = ev.target.result; if (!c) return; if (String(c.key).indexOf('tr:') === 0) c.delete(); c.continue(); }; }).catch(function(){}); b.textContent = 'Traducciones borradas'; break;
       case 'gmode': G.mode = b.dataset.v; renderGrim(); break;
       case 'gsort': G.sort = G.sort && G.sort.k === b.dataset.k ? {k:b.dataset.k, dir:-G.sort.dir} : {k:b.dataset.k, dir:1}; renderGrim(); break;
@@ -2131,5 +2170,5 @@
   applySkin();
   if (mq.addEventListener) mq.addEventListener('change', layout); else mq.addListener(layout);
   layout();
-  idbGet('lib').then(function(lib){ if (lib && lib.spell) Lib5e.set(lib); afterLib(); });
+  idbGet('lib').then(function(lib){ if (lib && lib.spell) Lib5e.set(lib); return trdLoad(); }).then(afterLib, afterLib);
 })();

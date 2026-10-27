@@ -2,6 +2,25 @@
 var Render5e = (function(){
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function attr(s){ return esc(s).replace(/'/g, '&#39;'); }
+  /* ---------- Traducción fija (archivo traduccion-*.json): texto en inglés → español por hash ---------- */
+  var TR = null, TRon = true, missN = 0;
+  function hash(str){
+    var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (var i = 0; i < str.length; i++) { var ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+  function T(s){ if (!TR || !TRon || typeof s !== 'string' || s.length < 3) return s; var v = TR[hash(s)]; if (v != null) return v; if (/[a-z]{3}/i.test(s)) missN++; return s; }
+  /* Nombres en etiquetas: {@spell fireball} → "bola de fuego" (con la mayúscula como venía) */
+  function Tname(n){
+    if (!TR || !TRon || !n) return n; var v = TR[hash(n)]; if (v != null) return v;
+    var cap = n.charAt(0).toUpperCase() + n.slice(1), tc = n.replace(/(^|[\s(-])([a-z])/g, function(_, a, b){ return a + b.toUpperCase(); });
+    v = cap !== n ? TR[hash(cap)] : null; if (v == null && tc !== n) v = TR[hash(tc)];
+    return v == null ? n : (n.charAt(0) === n.charAt(0).toLowerCase() ? v.charAt(0).toLowerCase() + v.slice(1) : v);
+  }
+  function setTr(map){ TR = map && Object.keys(map).length ? map : null; }
+  function trOn(on){ if (on != null) TRon = !!on; return TRon; }
   var DMG = {S:'cortante', P:'perforante', B:'contundente', A:'ácido', C:'frío', F:'fuego', O:'fuerza', L:'relámpago', N:'necrótico', I:'veneno', Y:'psíquico', R:'radiante', T:'trueno'};
   function tag(t, body){
     var p = body.split('|');
@@ -14,14 +33,14 @@ var Render5e = (function(){
     if (t === 'hit') return (/^[-+]/.test(p[0]) ? '' : '+') + p[0];
     if (t === 'recharge') return '(Recarga ' + (p[0] || 6) + ')';
     if (t === 'atk' || t === 'atkr') { var A = {m:'cuerpo a cuerpo', r:'a distancia', mw:'con arma cuerpo a cuerpo', rw:'con arma a distancia', ms:'de conjuro cuerpo a cuerpo', rs:'de conjuro a distancia'}; return '<i>Ataque ' + p[0].split(',').map(function(x){ return A[x.trim()] || x; }).join(' o ') + ':</i>'; }
-    var name = p[0], src = p[1] || '', disp = p[2] || p[0];
-    if (t === 'itemProperty') { var f0 = Lib5e.find('itemProperty', name, src); disp = p[2] || (f0 && f0.e.entries && f0.e.entries[0] && f0.e.entries[0].name) || name; }
+    var name = p[0], src = p[1] || '', disp = p[2] ? T(p[2]) : Tname(p[0]);
+    if (t === 'itemProperty') { var f0 = Lib5e.find('itemProperty', name, src); disp = p[2] ? T(p[2]) : Tname((f0 && f0.e.entries && f0.e.entries[0] && f0.e.entries[0].name) || name); }
     if (t === 'quickref' || t === 'filter' || t === 'book' || t === 'table' || t === 'adventure' || t === 'creature' || t === 'deity' || t === 'subclass' || t === 'classFeature' || t === 'subclassFeature' || !Lib5e.canLink(t)) return '<span class="term">' + (t === 'filter' ? p[0] : disp) + '</span>';
     if (!Lib5e.find(t, name, src)) return '<span class="term">' + disp + '</span>';
     return '<a class="ref" data-ref="' + attr(t + '|' + name + '|' + src) + '">' + disp + '</a>';
   }
   function inline(s){
-    var out = esc(s), prev;
+    var out = esc(T(s)), prev;
     do { prev = out; out = out.replace(/\{@(\w+) ([^{}]*?)\}/g, function(_, t, b){ return tag(t, b); }); } while (out !== prev);
     out = out.replace(/\{@h\}/g, '<i>Impacto:</i> ').replace(/\{@actTrigger\}/g, '<i>Desencadenante:</i> ').replace(/\{@actResponse\}/g, '<i>Respuesta:</i> ');
     return out.replace(/\{@(\w+)\}/g, '');
@@ -120,6 +139,6 @@ var Render5e = (function(){
     var rg = r.type === 'point' ? dist(r.distance) : r.type === 'special' ? 'Especial' : (AREA[r.type] || r.type || '') + (r.distance ? ' ' + dist(r.distance) : '');
     return {time: t.number ? t.number + ' ' + (UNIT_S[t.unit] || t.unit) : '', range: rg, school: SCHOOL[e.school] || e.school || '', conc: (e.duration || []).some(function(d){ return d.concentration; }), rit: !!(e.meta && e.meta.ritual)};
   }
-  return {esc:esc, attr:attr, inline:inline, entries:entries, detail:detail, itemType:itemType, ITYPE:ITYPE, spellShort:spellShort, SCHOOL:SCHOOL};
+  return {T:T, Tname:Tname, setTr:setTr, trOn:trOn, hasTr:function(){ return !!TR && TRon; }, misses:function(){ return missN; }, hash:hash, esc:esc, attr:attr, inline:inline, entries:entries, detail:detail, itemType:itemType, ITYPE:ITYPE, spellShort:spellShort, SCHOOL:SCHOOL};
 })();
 

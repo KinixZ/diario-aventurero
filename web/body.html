@@ -191,6 +191,14 @@
           <div class="seg" id="trModes" style="margin-top:8px"></div>
           <p class="note" id="trStatus" style="margin-top:6px"></p>
           <button class="btn sm" type="button" data-act="trclear" style="margin-top:8px">Borrar traducciones guardadas</button>
+          <div class="trd-box">
+            <b>Traducción fija</b>
+            <p style="margin:4px 0 0;font-size:15px">Archivos <b>traduccion-*.json</b> con los textos ya traducidos: se ven en español al instante, sin internet. Lo que no venga en el archivo usa el traductor de arriba.</p>
+            <div class="picks"><label class="btn pickbtn">Cargar traducción<input type="file" id="trdFile"></label></div>
+            <p class="note" id="trdStatus" style="margin:6px 0 0"></p>
+            <div id="trdList"></div>
+            <label class="toggle"><input type="checkbox" id="trdOn" checked> Mostrar los textos traducidos (desmarca para ver el original en inglés)</label>
+          </div>
         </section>
         <section>
           <span class="label">salas de combate</span>

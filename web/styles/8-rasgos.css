@@ -129,3 +129,4 @@
 :root[data-hud="bg3"] .ab-cost label:has(input:checked) .cost-a{--cost-c:var(--bg3-a)}
 :root[data-hud="bg3"] .ab-cost label:has(input:checked) .cost-b{--cost-c:var(--bg3-b)}
 :root[data-hud="bg3"] .ab-cost label:has(input:checked) .cost-r{--cost-c:var(--bg3-r)}
+.trd-box{margin-top:12px;padding-top:10px;border-top:1px dashed var(--rule);display:flex;flex-direction:column;gap:6px}.trd-box .line{display:flex;gap:6px;align-items:center}
