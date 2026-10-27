@@ -22,6 +22,8 @@ var Render5e = (function(){
   function setTr(map){ TR = map && Object.keys(map).length ? map : null; }
   function trOn(on){ if (on != null) TRon = !!on; return TRon; }
   var DMG = {S:'cortante', P:'perforante', B:'contundente', A:'ácido', C:'frío', F:'fuego', O:'fuerza', L:'relámpago', N:'necrótico', I:'veneno', Y:'psíquico', R:'radiante', T:'trueno'};
+  // en qué parte de la etiqueta va el texto a mostrar (5etools); -1 = el propio nombre
+  var DISP = {quickref:4, classFeature:5, subclassFeature:7, subclass:4, book:-1, adventure:-1, filter:-1};
   function tag(t, body){
     var p = body.split('|');
     if (t === 'dc') return 'CD ' + p[0];
@@ -33,7 +35,8 @@ var Render5e = (function(){
     if (t === 'hit') return (/^[-+]/.test(p[0]) ? '' : '+') + p[0];
     if (t === 'recharge') return '(Recarga ' + (p[0] || 6) + ')';
     if (t === 'atk' || t === 'atkr') { var A = {m:'cuerpo a cuerpo', r:'a distancia', mw:'con arma cuerpo a cuerpo', rw:'con arma a distancia', ms:'de conjuro cuerpo a cuerpo', rs:'de conjuro a distancia'}; return '<i>Ataque ' + p[0].split(',').map(function(x){ return A[x.trim()] || x; }).join(' o ') + ':</i>'; }
-    var name = p[0], src = p[1] || '', disp = p[2] ? T(p[2]) : Tname(p[0]);
+    var name = p[0], src = p[1] || '', di = DISP[t] == null ? 2 : DISP[t];
+    var disp = di < 0 ? T(p[0]) : p[di] ? T(p[di]) : Tname(p[0]);
     if (t === 'itemProperty') { var f0 = Lib5e.find('itemProperty', name, src); disp = p[2] ? T(p[2]) : Tname((f0 && f0.e.entries && f0.e.entries[0] && f0.e.entries[0].name) || name); }
     if (t === 'quickref' || t === 'filter' || t === 'book' || t === 'table' || t === 'adventure' || t === 'creature' || t === 'deity' || t === 'subclass' || t === 'classFeature' || t === 'subclassFeature' || !Lib5e.canLink(t)) return '<span class="term">' + (t === 'filter' ? p[0] : disp) + '</span>';
     if (!Lib5e.find(t, name, src)) return '<span class="term">' + disp + '</span>';
