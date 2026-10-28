@@ -212,12 +212,14 @@ export class Campaigns {
     c.turn = c.round > 0 && c.order.length ? Math.max(0, ti) : -1;
   }
 
-  /* Al aparecer un enemigo visible, se anota en el bestiario del grupo (si no estaba) */
+  /* Al aparecer un monstruo de los manuales (con ref del bestiario) visible, se anota en el bestiario del grupo como encuentro.
+     Los enemigos hechos a mano no se anotan solos: el DM los registra si quiere. */
   autoBeast(c, n) {
-    if (!c.autoBeasts || c.beasts.length >= BEASTS_MAX) return;
+    if (!c.autoBeasts || !n.ref || c.beasts.length >= BEASTS_MAX) return;
     const base = str(n.name, 40).replace(/\s+\d+$/, '');
-    if (!base || c.beasts.some((b) => b.name.toLowerCase() === base.toLowerCase())) return;
-    c.beasts.unshift({ id: 'B' + id(5), name: base, kind: 'enemigo', ref: n.ref || null, img: null, text: '', info: {}, stat: null, hidden: false, auto: true, seen: this.now(), ses: c.session.n, notes: [] });
+    if (!base || c.beasts.some((b) => b.ref === n.ref || b.name.toLowerCase() === base.toLowerCase())) return;
+    const info = {}; if (n.binfo) for (const k of ['type', 'size']) if (n.binfo[k]) info[k] = str(n.binfo[k], 40);
+    c.beasts.unshift({ id: 'B' + id(5), name: base, kind: 'enemigo', ref: n.ref, manual: true, img: null, text: '', info, stat: null, hidden: false, auto: true, seen: this.now(), ses: c.session.n, notes: [] });
     this.log(c, `Nuevo en el bestiario: ${base}`);
   }
 
@@ -280,7 +282,8 @@ export class Campaigns {
         for (let i = 0; i < count; i++) {
           const hpMax = int(msg.hp, 1, 9999, 10);
           const n = { id: 'n' + id(4), name: (str(msg.name, 40) || 'Enemigo') + (count > 1 ? ' ' + (i + 1) : ''), ac: int(msg.ac, 0, 40, 12), hp: hpMax, hpMax, temp: 0, init: msg.init == null || msg.init === '' ? null : int(msg.init, -10, 50, 0), conds: [], hidden: !!msg.hidden,
-            ref: msg.ref ? str(msg.ref, 120) : null, initMod: int(msg.initMod, -10, 20, 0), formula: msg.formula ? str(msg.formula, 30) : null };
+            ref: msg.ref ? str(msg.ref, 120) : null, initMod: int(msg.initMod, -10, 20, 0), formula: msg.formula ? str(msg.formula, 30) : null,
+            binfo: msg.binfo && typeof msg.binfo === 'object' ? { type: str(msg.binfo.type, 40), size: str(msg.binfo.size, 40) } : null };
           c.npcs.set(n.id, n);
           if (!n.hidden && i === 0) this.autoBeast(c, n);
         }
@@ -512,7 +515,7 @@ export class Campaigns {
       case 'beast.auto': dmOnly(); c.autoBeasts = !!msg.value; break;
       case 'beast.get': {
         const b = c.beasts.find((x) => x.id === str(msg.id, 20)); if (!b || (b.hidden && !isDm)) throw err('no_target', 'Esa criatura no está en el bestiario.');
-        out.push({ to: me.id, msg: { t: 'beast', beast: b } }); out.quiet = true;
+        out.push({ to: me.id, msg: { t: 'beast', beast: beastFor(b, isDm) } }); out.quiet = true;
         break;
       }
       case 'beast.note': {
@@ -556,7 +559,7 @@ export class Campaigns {
         const b = cleanBoard({ ...msg.item, img: msg.img || (msg.item && msg.item.img) });
         if (!b) throw err('empty', 'Ponle título a la nota.');
         if (msg.t === 'board.add') { if (c.board.length >= BOARD_MAX) throw err('too_many', 'El tablero está lleno; borra notas viejas.'); b.id = 'b' + id(4); b.at = this.now(); c.board.unshift(b); }
-        else { const i = c.board.findIndex((x) => x.id === msg.id); if (i < 0) throw err('no_target', 'Esa nota ya no está.'); c.board[i] = { ...c.board[i], ...b, id: c.board[i].id, at: c.board[i].at }; }
+        else { const i = c.board.findIndex((x) => x.id === msg.id); if (i < 0) throw err('no_target', 'Esa nota ya no está.'); c.board[i] = { ...c.board[i], ...b, id: c.board[i].id, at: c.board[i].at, done: c.board[i].done }; }
         break;
       }
       case 'board.del': dmOnly('Solo el DM borra notas del tablero.'); c.board = c.board.filter((x) => x.id !== msg.id); break;
@@ -608,7 +611,7 @@ export class Campaigns {
       else if (!wasHidden) out.push({ to: mm.id, msg: { t: 'tok.del', id: mp.id, tid: t.id } });
     }
   }
-  sendBeast(c, b, out) { for (const mm of c.members.values()) if (mm.role === 'dm' || !b.hidden) out.push({ to: mm.id, msg: { t: 'beast', beast: b } }); }
+  sendBeast(c, b, out) { for (const mm of c.members.values()) if (mm.role === 'dm' || !b.hidden) out.push({ to: mm.id, msg: { t: 'beast', beast: beastFor(b, mm.role === 'dm') } }); }
 
   /* Lo que recibe cada quien al entrar: el chat que puede ver y la pizarra */
   mesaInit(c, forId) { return { t: 'mesa.init', chat: c.chat.filter((m) => visible(m, forId)).slice(-500), strokes: c.strokes, pages: c.pages.length }; }
@@ -647,7 +650,7 @@ export class Campaigns {
     const members = [...c.members.values()].map(m => ({ id: m.id, role: m.role, name: m.name, online: m.conns > 0, seen: m.seen, init: m.init, char: m.char && (dm || m.id === forId || !c.hidePc ? m.char : { ...m.char, hp: null, temp: null }) }));
     const npcs = [...c.npcs.values()].filter(n => dm || !n.hidden).map(n => dm ? n : npcForPlayers(n, c.npcHp));
     const maps = [...c.maps.values()].filter((mp) => dm || !mp.hidden).map((mp) => ({ id: mp.id, name: mp.name, cols: mp.cols, rows: mp.rows, grid: mp.grid, n: mp.strokes.length, tokens: mp.tokens.length, by: mp.by, updated: mp.updated, hidden: !!mp.hidden, bg: !!mp.bg }));
-    const beasts = c.beasts.filter((b) => dm || !b.hidden).map((b) => ({ id: b.id, name: b.name, kind: b.kind, img: b.img, info: b.info, hasStat: !!b.stat, ref: dm ? b.ref : undefined, hidden: !!b.hidden, auto: !!b.auto, seen: b.seen, ses: b.ses, notes: b.notes.length }));
+    const beasts = c.beasts.filter((b) => dm || !b.hidden).map((b) => ({ id: b.id, name: b.name, kind: b.kind, img: b.img, info: b.info, hasStat: !!b.stat, ref: dm || b.manual ? b.ref : undefined, manual: !!(b.manual && b.ref), hidden: !!b.hidden, auto: !!b.auto, seen: b.seen, ses: b.ses, notes: b.notes.length }));
     return { code: c.code, name: c.name, you: forId, role: me ? me.role : null, live: c.live, session: c.session, members, npcs, npcHp: c.npcHp, maps, scene: c.scene && (dm || !c.maps.get(c.scene)?.hidden) ? c.scene : null, board: c.board, pages: c.pages.length,
       beasts, autoBeasts: c.autoBeasts, order: c.order.filter(x => dm || !c.npcs.get(x)?.hidden), turnId: c.order[c.turn] || null, round: c.round, hidePc: c.hidePc, log: c.log.slice(-25) };
   }
@@ -713,14 +716,17 @@ function cleanBeast(b, c) {
   for (const k of ['type', 'cr', 'ac', 'hp', 'size', 'speed', 'where']) if (bi[k] != null && str(bi[k], 80)) info[k] = str(bi[k], 80);
   let stat = null;
   if (b.stat && typeof b.stat === 'object') { const s = JSON.stringify(b.stat); if (s.length <= STAT_MAX) stat = JSON.parse(s); else throw err('too_large', 'Esa ficha es demasiado grande para compartirla.'); }
-  return { name, kind: BEAST_KINDS.includes(b.kind) ? b.kind : 'enemigo', ref: b.ref ? str(b.ref, 120) : null, img: b.img && c.images.has(str(b.img, 30)) ? str(b.img, 30) : null, text: txt(b.text, 2000), info, stat, hidden: !!b.hidden };
+  return { name, kind: BEAST_KINDS.includes(b.kind) ? b.kind : 'enemigo', ref: b.ref ? str(b.ref, 120) : null, manual: !!(b.manual && b.ref), img: b.img && c.images.has(str(b.img, 30)) ? str(b.img, 30) : null, text: txt(b.text, 2000), info, stat, hidden: !!b.hidden };
 }
 
+/* La ficha de una criatura para un jugador: sin el vínculo al manual si el DM no lo comparte */
+function beastFor(b, dm) { return dm || b.manual ? b : { ...b, ref: null }; }
 /* Un susurro solo lo ven quien lo manda y quien lo recibe */
 function visible(m, forId) { return !m.to || m.to === forId || m.from === forId; }
 function cleanBoard(b) {
   if (!b) return null; const title = str(b.title, 80); if (!title) return null;
-  return { id: b.id ? str(b.id, 20) : undefined, at: Number(b.at) || undefined, cat: BOARD_CATS.includes(b.cat) ? b.cat : 'otro', title, text: txt(b.text, 1500), img: b.img ? str(b.img, 30) : null, done: !!b.done };
+  return { id: b.id ? str(b.id, 20) : undefined, at: Number(b.at) || undefined, cat: BOARD_CATS.includes(b.cat) ? b.cat : 'otro', title, text: txt(b.text, 1500), img: b.img ? str(b.img, 30) : null, done: !!b.done,
+    prio: b.prio === 'main' ? 'main' : 'side', look: b.look === 'scroll' ? 'scroll' : 'paper' };
 }
 function cleanStroke(k, by) {
   if (!k || !Array.isArray(k.pts) || k.pts.length < 2 || k.pts.length > PTS_MAX * 2) return null;

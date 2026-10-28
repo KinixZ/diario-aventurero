@@ -49,4 +49,20 @@
   <symbol id="i-text" viewBox="-17 -17 34 34"><path d="M-11 -12 H11 M0 -12 V13 M-5 13 H5"/></symbol>
   <symbol id="i-hand" viewBox="-17 -17 34 34"><path d="M0 -15 V15 M-15 0 H15 M0 -15 L-4 -11 M0 -15 L4 -11 M0 15 L-4 11 M0 15 L4 11 M-15 0 L-11 -4 M-15 0 L-11 4 M15 0 L11 -4 M15 0 L11 4"/></symbol>
   <symbol id="i-eraser" viewBox="-17 -17 34 34"><path d="M-12 6 L3 -9 L12 0 L1 11 H-7 Z M-4 -2 L5 7 M-7 11 H13"/></symbol>
+  <symbol id="i-pencil" viewBox="-17 -17 34 34"><path d="M9 -14 L14 -9 L-6 11 L-13 13 L-11 6 Z M5 -10 L10 -5 M-11 6 L-6 11"/></symbol>
+  <symbol id="i-undo" viewBox="-17 -17 34 34"><path d="M-12 -4 L-4 -12 M-12 -4 L-4 4 M-12 -4 H4 Q13 -4 13 5 Q13 13 4 13 H-4"/></symbol>
+  <symbol id="i-trash" viewBox="-17 -17 34 34"><path d="M-12 -9 H12 M-5 -9 V-13 H5 V-9 M-9 -9 L-7 14 H7 L9 -9 M-3 -4 V9 M3 -4 V9"/></symbol>
+  <symbol id="i-crown" viewBox="-17 -17 34 34"><path d="M-13 9 L-14 -8 L-6 0 L0 -12 L6 0 L14 -8 L13 9 Z M-13 13 H13"/></symbol>
+  <symbol id="i-mapdraw" viewBox="-17 -17 34 34"><path d="M-15 -8 L-8 -11 L-2 -9 M-15 -8 V13 L-8 10 L-3 12 M-8 -11 V10 M9 -13 L14 -8 L2 4 L-4 6 L-2 0 Z M6 -10 L11 -5"/></symbol>
+  <symbol id="i-plus" viewBox="-17 -17 34 34"><path d="M0 -12 V12 M-12 0 H12"/></symbol>
+  <symbol id="i-minus" viewBox="-17 -17 34 34"><path d="M-12 0 H12"/></symbol>
+  <symbol id="i-fit" viewBox="-17 -17 34 34"><path d="M-13 -5 V-13 H-5 M5 -13 H13 V-5 M13 5 V13 H5 M-5 13 H-13 V5"/></symbol>
+  <symbol id="i-chev" viewBox="-17 -17 34 34"><path d="M-9 -4 L0 5 L9 -4"/></symbol>
+  <symbol id="i-heart" viewBox="-17 -17 34 34"><path d="M0 13 Q-15 3 -13 -6 Q-11 -13 -4 -12 Q-1 -11 0 -7 Q1 -11 4 -12 Q11 -13 13 -6 Q15 3 0 13 Z"/></symbol>
+  <symbol id="i-next" viewBox="-17 -17 34 34"><path d="M-12 0 H10 M3 -8 L11 0 L3 8 M14 -10 V10"/></symbol>
+  <symbol id="i-screen" viewBox="-17 -17 34 34"><path d="M-15 -10 L-6 -13 V11 L-15 13 Z M-6 -13 L6 -13 V11 L-6 11 M6 -13 L15 -10 V13 L6 11"/></symbol>
+  <symbol id="i-send" viewBox="-17 -17 34 34"><path d="M-14 -2 L14 -13 L6 14 L1 3 Z M1 3 L14 -13"/></symbol>
+  <symbol id="i-play" viewBox="-17 -17 34 34"><path d="M-8 -12 L11 0 L-8 12 Z"/></symbol>
+  <symbol id="i-stop" viewBox="-17 -17 34 34"><path d="M-10 -10 H10 V10 H-10 Z"/></symbol>
+  <symbol id="i-target" viewBox="-17 -17 34 34"><path d="M0 -13 A13 13 0 1 0 0.01 -13 M0 -6 A6 6 0 1 0 0.01 -6 M0 -16 V-9 M0 9 V16 M-16 0 H-9 M9 0 H16"/></symbol>
 </svg>

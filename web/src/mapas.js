@@ -16,7 +16,7 @@ var Mapas = (function(){
   var DRAW_TOOLS = [['pen','Lápiz','i-brush'],['line','Línea','i-line'],['rect','Rectángulo','i-rect'],['text','Texto','i-text'],['erase','Borrar','i-eraser']];
   var TSIZE = [[1,'Mediano (1 casilla)'],[2,'Grande (2 × 2)'],[3,'Enorme (3 × 3)'],[4,'Gargantuesco (4 × 4)']];
   var maps = {}, cur = null, mode = 'jugar', tool = {k:'pen', c:COLORS[0][0], w:0.14, snap:true, fill:false, layer:null, fogV:1}, hidden = {}, views = {}, asked = {};
-  var newOpen = false, layersOpen = false, setOpen = false, addOpen = false, pendingText = null, selTok = null, pings = [], imgs = {}, fogCache = {}, newImg = null, busyUp = false;
+  var newOpen = false, layersOpen = false, pendingText = null, selTok = null, pings = [], imgs = {}, fogCache = {}, newImg = null, busyUp = false;
   var waitOpen = null, canvas = null, ptr = {}, gesture = null, drawing = null, erasing = null, drag = null, fogDrag = null, press = null, raf = 0;
 
   /* ---------- Guardado en el dispositivo ---------- */
@@ -31,7 +31,7 @@ var Mapas = (function(){
   function keep(mp){
     norm(mp); maps[mp.id] = mp;
     var ix = index().filter(function(x){ return x.id !== mp.id; });
-    ix.unshift({id:mp.id, name:mp.name, cols:mp.cols, rows:mp.rows, n:mp.strokes.length, t:mp.tokens.length, updated:mp.updated || Date.now(), room:mp.room || null});
+    ix.unshift({id:mp.id, name:mp.name, cols:mp.cols, rows:mp.rows, n:mp.strokes.length, t:mp.tokens.length, updated:mp.updated || Date.now(), room:mp.room || null, bgi:mp.bg && mp.bg.img || null});
     ix.sort(function(a, b){ return (b.updated || 0) - (a.updated || 0); }); setIndex(ix.slice(0, 120));
     clearTimeout(saveT[mp.id]); saveT[mp.id] = setTimeout(function(){ idbPut('map:' + mp.id, mp); }, 600);
   }
@@ -57,7 +57,7 @@ var Mapas = (function(){
       });
       if (cur && maps[cur] && maps[cur].room && !roomMeta(cur) && maps[cur].room === r.code) { var gone = maps[cur]; cur = null; canvas = null; if (visible()) { render(); Sala.toast('El DM ocultó «' + gone.name + '».'); } }
       if (visible() && !cur) render();
-      if (visible() && cur) { toolbar(); paint(); }
+      if (visible() && cur) { toolbar(); paint(); tokPanel(); }
       badge();
     });
     Sala.on('map', function(m){ var mp = norm(m.map); mp.room = room() && room().code; keep(mp); if (waitOpen === mp.id) { waitOpen = null; openMap(mp.id); return; } if (cur === mp.id) { toolbar(); paint(); } else if (visible() && !cur) render(); });
@@ -150,70 +150,115 @@ var Mapas = (function(){
   function seen(bits, mp, x, y){ var i = y * mp.cols + x; return (bits[i >> 3] >> (i & 7)) & 1; }
 
   /* ---------- Lista de mapas ---------- */
+  function dmId(){ var r = room(); var d = r && r.members.filter(function(m){ return m.role === 'dm'; })[0]; return d ? d.id : null; }
+  function who(id){ var r = room(); var m = r && r.members.filter(function(x){ return x.id === id; })[0]; return m ? (m.role === 'dm' ? 'el DM' : m.char ? m.char.name : m.name) : ''; }
   function render(){
     var box = document.getElementById('mesaMaps'); if (!box) return;
     if (cur) { if (!$('#mapCv', box)) editor(box); else { toolbar(); fit(); paint(); } return; }
-    var r = room(), ix = index(), inRoom = r ? (r.maps || []) : [], ids = {}, dm = isDm();
+    var r = room(), ix = index(), inRoom = r ? (r.maps || []) : [], ids = {}, dm = isDm(), did = dmId();
     // si el DM tiene un mapa en pantalla y acabas de abrir la pestaña, ábrelo
     if (r && r.scene && !dm && !render.sceneOpened) { render.sceneOpened = r.scene; openMap(r.scene); return; }
     inRoom.forEach(function(m){ ids[m.id] = 1; });
-    var h = '<div class="map-head"><div><b>Mapas</b><p class="note">' + (r ? (dm ? 'Prepara mapas ocultos y muéstralos cuando lleguen. Los jugadores mueven sus fichas; tú, todas.' : 'Pon tu ficha y muévela. Lo que dibujen aquí lo ven todos.') : 'Sin campaña, dibujas solo en tu copia.') + '</p></div><button class="btn main" type="button" data-act="mapnew">' + (newOpen ? 'Cerrar' : 'Nuevo mapa') + '</button></div>';
-    if (newOpen) h += '<form class="map-new card" data-form="mapnew"><label class="fl">Nombre<input class="field" name="name" placeholder="Las minas de Phandelver" autocomplete="off"></label>'
-      + '<div class="seg sm map-src" role="group" aria-label="Origen"><button type="button" data-act="mapsrc" data-v="blank" aria-pressed="' + !newImg + '">En blanco</button><button type="button" data-act="mapsrc" data-v="img" aria-pressed="' + !!newImg + '">Desde una imagen</button></div>'
-      + (newImg ? '<div class="map-imgnew"><label class="btn pickbtn">' + (newImg.url ? 'Cambiar imagen' : 'Elegir imagen') + '<input type="file" id="mapNewImg" accept="image/*"></label>' + (newImg.url ? '<img alt="" src="' + attr(newImg.url) + '">' : '') + '<label class="fl">Casillas a lo ancho<input class="field" name="cols" inputmode="numeric" value="' + (newImg.cols || 30) + '" id="mapNewCols"></label><p class="note" id="mapNewRows">' + (newImg.w ? 'Quedará de ' + (newImg.cols || 30) + ' × ' + Math.max(8, Math.round((newImg.cols || 30) * newImg.h / newImg.w)) + ' casillas. Cuenta los cuadros de la imagen para que la cuadrícula coincida.' : 'Sube el mapa (de un libro, de Dungeondraft, una foto…).') + '</p></div>'
-        : '<div class="two"><label class="fl">Tamaño (casillas)<select class="field" name="size">' + SIZES.map(function(x, i){ return '<option value="' + x[0] + '"' + (i === 1 ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label><label class="fl">Cuadrícula<select class="field" name="grid"><option value="square">Cuadrada</option><option value="hex">Hexagonal</option><option value="none">Sin cuadrícula</option></select></label></div>')
-      + (dm ? '<label class="toggle"><input type="checkbox" name="hidden" checked> Oculto para los jugadores hasta que lo muestres</label>' : '')
-      + '<button class="btn main" type="submit"' + (busyUp || (newImg && !newImg.url) ? ' disabled' : '') + '>' + (busyUp ? 'Subiendo…' : r ? 'Crear en la campaña' : 'Crear en mi diario') + '</button></form>';
-    if (r) h += '<div class="group-h">En la campaña</div>' + (inRoom.length ? '<div class="map-grid">' + inRoom.map(function(m){ return card(m, true); }).join('') + '</div>' : '<p class="note">Todavía no hay mapas en esta campaña.</p>');
-    var mine2 = ix.filter(function(x){ return !ids[x.id]; });
-    if (mine2.length || !r) h += '<div class="group-h">' + (r ? 'Guardados en este teléfono' : 'Mis mapas') + '</div>' + (mine2.length ? '<div class="map-grid">' + mine2.map(function(m){ return card(m, false); }).join('') + '</div>' : '<p class="note">Aún no tienes mapas. Crea uno para la zona donde están.</p>');
-    box.innerHTML = h;
+    var ofDm = inRoom.filter(function(m){ return m.by === did; }), ofPj = inRoom.filter(function(m){ return m.by !== did; }), local = ix.filter(function(x){ return !ids[x.id]; });
+    var h = '<div class="maps-home">';
+    if (r) {
+      h += '<section class="maps-sec official"><div class="maps-h"><svg class="ic"><use href="#i-crown"/></svg><div><b>' + (dm ? 'Tus mapas de DM' : 'Mapas del DM') + '</b><small>' + (dm ? 'Prepáralos ocultos y muéstralos cuando lleguen.' : 'Los que el DM les va mostrando.') + '</small></div></div>'
+        + '<div class="map-grid">' + (dm ? newTile('dm') : '') + ofDm.map(function(m, i){ return card(m, true, 'dm', i); }).join('') + (!dm && !ofDm.length ? '<p class="note maps-empty">El DM todavía no les muestra ningún mapa.</p>' : '') + '</div></section>';
+      h += '<section class="maps-sec sketch"><div class="maps-h"><svg class="ic"><use href="#i-pencil"/></svg><div><b>Dibujos del grupo</b><small>' + (dm ? 'Los croquis que dibujan los jugadores.' : 'Croquis de lo que exploran: los ven todos.') + '</small></div></div>'
+        + '<div class="map-grid">' + (dm ? '' : newTile('pj')) + ofPj.map(function(m, i){ return card(m, true, 'pj', i); }).join('') + (dm && !ofPj.length ? '<p class="note maps-empty">Nadie ha dibujado nada todavía.</p>' : '') + '</div></section>';
+    }
+    if (local.length || !r) h += '<section class="maps-sec mine"><div class="maps-h"><svg class="ic"><use href="#i-book"/></svg><div><b>' + (r ? 'Solo en este aparato' : 'Mis mapas') + '</b><small>' + (r ? 'Puedes llevarlos a la campaña.' : 'Sin campaña dibujas en tu copia.') + '</small></div></div>'
+      + '<div class="map-grid">' + (r ? '' : newTile('pj')) + local.map(function(m, i){ return card(m, false, 'mine', i); }).join('') + '</div></section>';
+    box.innerHTML = h + '</div>';
   }
-  function card(m, inRoom){
-    var r = room(), scene = r && r.scene === m.id;
-    return '<div class="map-card card' + (m.hidden ? ' prep' : '') + (scene ? ' scene' : '') + '"><button type="button" class="map-open" data-act="mapopen" data-id="' + attr(m.id) + '"><svg class="ic"><use href="#i-map"/></svg><span><b>' + esc(m.name) + '</b><small>' + m.cols + ' × ' + m.rows + ' casillas' + (m.tokens ? ' · ' + m.tokens + ' ficha' + (m.tokens === 1 ? '' : 's') : m.t ? ' · ' + m.t + ' fichas' : '') + (m.bg ? ' · con imagen' : '') + (m.updated ? ' · ' + new Date(m.updated).toLocaleDateString('es-MX', {day:'numeric', month:'short'}) : '') + (!inRoom && m.room ? ' · de la campaña ' + esc(m.room) : '') + '</small>' + (scene ? '<i class="tag new">en pantalla</i>' : '') + (m.hidden ? '<i class="tag">oculto</i>' : '') + '</span></button>'
-      + '<div class="map-btns">' + (inRoom && isDm() ? '<button class="btn sm' + (scene ? '' : ' main') + '" type="button" data-act="mapscene" data-id="' + attr(m.id) + '">' + (scene ? 'En pantalla' : 'Mostrar a todos') + '</button>' : '') + (!inRoom && r ? '<button class="btn sm" type="button" data-act="mapshare" data-id="' + attr(m.id) + '">Llevar a la campaña</button>' : '') + '<button class="btn sm" type="button" data-act="mappng" data-id="' + attr(m.id) + '">Imagen</button><button class="btn sm" type="button" data-act="mapdel" data-id="' + attr(m.id) + '" data-room="' + (inRoom ? 1 : '') + '">' + (inRoom ? 'Quitar' : 'Borrar') + '</button></div></div>';
+  /* El botón para crear un mapa vive dentro de la cuadrícula, como una ficha más */
+  function newTile(kind){
+    if (newOpen === kind) return newForm(kind);
+    var dm = kind === 'dm';
+    return '<div class="map-newtile' + (dm ? ' dm' : '') + '"><button type="button" class="map-newb" data-act="mapnew" data-v="' + kind + '"><span class="map-newic"><svg class="ic"><use href="#i-mapdraw"/></svg></span><b>' + (dm ? 'Nuevo mapa' : 'Dibujar mapa') + '</b><small>' + (dm ? 'En blanco o desde una imagen' : 'Un croquis de donde están') + '</small></button>'
+      + (dm ? '<button type="button" class="map-newimg" data-act="mapnew" data-v="dm" data-src="img"><svg class="ic"><use href="#i-image"/></svg>Desde una imagen</button>' : '') + '</div>';
+  }
+  function newForm(kind){
+    var dm = kind === 'dm' && isDm(), r = room();
+    return '<form class="map-new card" data-form="mapnew"><div class="row map-new-h"><b><svg class="ic"><use href="#i-mapdraw"/></svg>' + (dm ? 'Nuevo mapa' : 'Dibujar mapa') + '</b><button class="icon-btn sm" type="button" data-act="mapnewx" aria-label="Cancelar"><svg class="ic"><use href="#i-x"/></svg></button></div><label class="fl">Nombre<input class="field" name="name" placeholder="' + (dm ? 'La cripta de Vel' : 'El camino al norte') + '" autocomplete="off"></label>'
+      + '<div class="seg sm map-src" role="group" aria-label="Origen"><button type="button" data-act="mapsrc" data-v="blank" aria-pressed="' + !newImg + '"><svg class="ic"><use href="#i-pencil"/></svg>En blanco</button><button type="button" data-act="mapsrc" data-v="img" aria-pressed="' + !!newImg + '"><svg class="ic"><use href="#i-image"/></svg>Desde una imagen</button></div>'
+      + (newImg ? '<div class="map-imgnew"><label class="btn pickbtn">' + (newImg.url ? 'Cambiar imagen' : 'Elegir imagen') + '<input type="file" id="mapNewImg" accept="image/*"></label>' + (newImg.url ? '<img alt="" src="' + attr(newImg.url) + '">' : '') + '<label class="fl">Casillas a lo ancho<input class="field" name="cols" inputmode="numeric" value="' + (newImg.cols || 30) + '" id="mapNewCols"></label><p class="note" id="mapNewRows">' + (newImg.w ? 'Quedará de ' + (newImg.cols || 30) + ' × ' + Math.max(8, Math.round((newImg.cols || 30) * newImg.h / newImg.w)) + ' casillas. Cuenta los cuadros de la imagen para que la cuadrícula coincida.' : 'Sube el mapa (de un libro, de Dungeondraft, una foto…).') + '</p></div>'
+        : '<div class="two"><label class="fl">Tamaño (casillas)<select class="field" name="size">' + SIZES.map(function(x, i){ return '<option value="' + x[0] + '"' + (i === (dm ? 1 : 0) ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label><label class="fl">Cuadrícula<select class="field" name="grid"><option value="square">Cuadrada</option><option value="hex">Hexagonal</option><option value="none">Sin cuadrícula</option></select></label></div>')
+      + (dm ? '<label class="toggle"><input type="checkbox" name="hidden" checked> Oculto para los jugadores hasta que lo muestres</label>' : '')
+      + '<button class="btn main" type="submit"' + (busyUp || (newImg && !newImg.url) ? ' disabled' : '') + '>' + (busyUp ? 'Subiendo…' : r ? (dm ? 'Crear en la campaña' : 'Empezar a dibujar') : 'Crear en mi diario') + '</button></form>';
+  }
+  function thumbOf(m){ var full = maps[m.id], bi = (full && full.bg && full.bg.img) || m.bgi; return bi ? Mesa.imgUrl(bi) : (full && full.bg && full.bg.data) || ''; }
+  function card(m, inRoom, kind, i){
+    var r = room(), scene = r && r.scene === m.id, dm = isDm(), th = thumbOf(m), nt = m.tokens != null ? m.tokens : m.t || 0;
+    var meta = m.cols + ' × ' + m.rows + (nt ? ' · ' + nt + ' ficha' + (nt === 1 ? '' : 's') : '') + (m.updated ? ' · ' + new Date(m.updated).toLocaleDateString('es-MX', {day:'numeric', month:'short'}) : '');
+    var h = '<div class="map-card ' + kind + (m.hidden ? ' prep' : '') + (scene ? ' scene' : '') + '" style="--d:' + ((i || 0) * 45) + 'ms;--r:' + (kind === 'pj' ? ((((m.id.charCodeAt(m.id.length - 1) || 0) % 5) - 2) * 0.6) : 0) + 'deg"><button type="button" class="map-open" data-act="mapopen" data-id="' + attr(m.id) + '">'
+      + '<span class="map-thumb' + (th ? ' img' : '') + '"' + (th ? ' style="background-image:url(\'' + attr(th) + '\')"' : '') + '>' + (th ? '' : '<svg class="ic"><use href="#' + (kind === 'pj' ? 'i-pencil' : 'i-map') + '"/></svg>') + (scene ? '<i class="map-seal">En pantalla</i>' : '') + (m.hidden ? '<i class="map-seal off">Oculto</i>' : '') + '</span>'
+      + '<span class="map-info"><b>' + esc(m.name) + '</b><small>' + (kind === 'pj' && inRoom ? 'por ' + esc(who(m.by) || 'alguien') + ' · ' : '') + meta + (!inRoom && m.room ? ' · de ' + esc(m.room) : '') + '</small></span></button>'
+      + '<div class="map-btns">' + (inRoom && dm ? '<button class="icon-btn sm' + (scene ? ' on' : '') + '" type="button" data-act="mapscene" data-id="' + attr(m.id) + '" aria-label="' + (scene ? 'Ya está en pantalla' : 'Mostrar a todos') + '" title="' + (scene ? 'En pantalla' : 'Mostrar a todos') + '"><svg class="ic"><use href="#i-screen"/></svg></button>' : '')
+      + (!inRoom && r ? '<button class="icon-btn sm" type="button" data-act="mapshare" data-id="' + attr(m.id) + '" aria-label="Llevar a la campaña" title="Llevar a la campaña"><svg class="ic"><use href="#i-up"/></svg></button>' : '')
+      + '<button class="icon-btn sm" type="button" data-act="mappng" data-id="' + attr(m.id) + '" aria-label="Bajar como imagen" title="Bajar como imagen"><svg class="ic"><use href="#i-image"/></svg></button>'
+      + (!inRoom || dm || m.by === me() ? '<button class="icon-btn sm del" type="button" data-act="mapdel" data-id="' + attr(m.id) + '" data-room="' + (inRoom ? 1 : '') + '" aria-label="' + (inRoom ? 'Quitar de la campaña' : 'Borrar') + '" title="' + (inRoom ? 'Quitar' : 'Borrar') + '"><svg class="ic"><use href="#i-trash"/></svg></button>' : '') + '</div></div>';
+    return h;
   }
 
-  /* ---------- Editor ---------- */
+  /* ---------- Editor: el mapa ocupa todo; las herramientas flotan encima ---------- */
+  var pop = null; // 'set' | 'layers' | 'add' | 'pen' | null
   function editor(box){
-    box.innerHTML = '<div class="map-ed"><div class="map-bar" id="mapBar"></div><div class="map-wrap"><canvas id="mapCv" aria-label="Mapa: arrastra tu ficha, mantén presionado para señalar; con dos dedos mueves y haces zoom"></canvas><div class="map-txt" id="mapTxt" hidden></div><div class="map-tok" id="mapTok" hidden></div></div></div>';
+    box.innerHTML = '<div class="map-ed vtt"><div class="map-bar" id="mapBar"></div><div class="map-wrap" id="mapWrap"><canvas id="mapCv" aria-label="Mapa: arrastra tu ficha, mantén presionado para señalar; con dos dedos mueves y haces zoom"></canvas>'
+      + '<div class="vtt-init" id="vttInit" hidden></div><div class="map-pal" id="mapPal"></div>'
+      + '<div class="map-zoom"><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="1" aria-label="Acercar"><svg class="ic"><use href="#i-plus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="-1" aria-label="Alejar"><svg class="ic"><use href="#i-minus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapfit" aria-label="Encuadrar el mapa" title="Encuadrar"><svg class="ic"><use href="#i-fit"/></svg></button></div>'
+      + '<div class="map-pop" id="mapPop" hidden></div><div class="vtt-hud" id="vttHud"></div><div class="map-txt" id="mapTxt" hidden></div><div class="map-tok" id="mapTok" hidden></div></div></div>';
     canvas = $('#mapCv', box); bind(); toolbar(); fit(); frame(maps[cur]); var mt = !master(maps[cur]) && myTok(maps[cur]); if (mt) focus(maps[cur], mt); paint(); tokPanel(); badge();
   }
+  /* No repinta un bloque mientras escribes en él (el estado llega seguido) */
+  function put(el, html){ var a = document.activeElement; if (a && el.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && el.innerHTML) return; el.innerHTML = html; }
   function myTok(mp){ var id = me(), sh = shared(mp.id); return mp.tokens.filter(function(t){ return t.kind === 'pc' && (sh ? t.ref === id : t.mine) && !t.comp; })[0]; }
   function toolbar(){
     var bar = $('#mapBar'), mp = maps[cur]; if (!bar || !mp) return;
     if (!tool.layer || !mp.layers.some(function(l){ return l.id === tool.layer; })) tool.layer = mp.layers[0].id;
-    var hid = hidden[mp.id] || {}, admin = canAdmin(mp), sh = shared(mp.id), dm = master(mp), r = room(), meta = roomMeta(mp.id), scene = r && r.scene === mp.id;
+    var admin = canAdmin(mp), sh = shared(mp.id), dm = master(mp), r = room(), meta = roomMeta(mp.id), scene = r && r.scene === mp.id;
     if (mode === 'niebla' && !dm) mode = 'jugar';
-    var h = '<div class="map-top"><button class="btn sm" type="button" data-act="mapback">Mapas</button>' + (admin ? '<input class="field map-name" id="mapName" value="' + attr(mp.name) + '" aria-label="Nombre del mapa">' : '<b class="map-name ro">' + esc(mp.name) + '</b>')
-      + '<span class="map-where">' + (scene ? '<i class="tag new">en pantalla</i>' : '') + (meta && meta.hidden ? '<i class="tag">oculto</i>' : '') + (sh ? '' : 'Solo tu copia') + '</span>' + (admin ? '<button class="icon-btn sm" type="button" data-act="mapset" aria-expanded="' + setOpen + '" aria-label="Ajustes del mapa" title="Ajustes del mapa"><svg class="ic"><use href="#i-gear"/></svg></button>' : '') + '</div>';
-    h += '<div class="map-modes"><div class="seg" role="tablist" aria-label="Modo"><button type="button" data-act="mapmode" data-v="jugar" aria-pressed="' + (mode === 'jugar') + '"><svg class="ic"><use href="#i-token"/></svg>Jugar</button><button type="button" data-act="mapmode" data-v="dibujar" aria-pressed="' + (mode === 'dibujar') + '"><svg class="ic"><use href="#i-brush"/></svg>Dibujar</button>' + (dm ? '<button type="button" data-act="mapmode" data-v="niebla" aria-pressed="' + (mode === 'niebla') + '"><svg class="ic"><use href="#i-fog"/></svg>Niebla</button>' : '') + '</div>'
-      + '<span class="map-act"><button class="btn sm" type="button" data-act="mapzoom" data-v="-1" aria-label="Alejar">−</button><button class="btn sm" type="button" data-act="mapzoom" data-v="1" aria-label="Acercar">+</button><button class="btn sm" type="button" data-act="mapfit" aria-label="Encuadrar el mapa" title="Encuadrar">⤢</button></span></div>';
-    if (setOpen && admin) h += setHtml(mp, dm, sh);
-    if (mode === 'jugar') {
-      var mt = myTok(mp), canPut = !(isDm() && sh) && (!!(window.Sala && Sala.summary && Sala.summary()) || !sh);
-      h += '<div class="map-opts">' + (canPut ? '<button class="btn main sm" type="button" data-act="mapputme">' + (mt ? 'Traer mi ficha aquí' : 'Poner mi ficha') + '</button>' + (mt ? '<button class="btn sm" type="button" data-act="mapfindme">Ir a mi ficha</button>' : '') : '') + '<button class="btn sm" type="button" data-act="mapadd" aria-expanded="' + addOpen + '">' + (dm ? 'Agregar ficha' : 'Otra ficha') + '</button>' + (r && isDm() && !scene ? '<button class="btn sm" type="button" data-act="mapscene" data-id="' + attr(mp.id) + '">Mostrar a todos</button>' : '')
-        + '<span class="note map-hint">Arrastra una ficha para moverla · mantén presionado para señalar</span></div>';
-      if (addOpen) h += addHtml(mp, dm);
-    } else if (mode === 'dibujar') {
-      h += '<div class="map-tools" role="group" aria-label="Herramienta"><button type="button" data-act="maptool" data-v="pan" aria-pressed="' + (tool.k === 'pan') + '" title="Mover el mapa"><svg class="ic"><use href="#i-hand"/></svg><span>Mover</span></button>' + DRAW_TOOLS.map(function(t){ return '<button type="button" data-act="maptool" data-v="' + t[0] + '" aria-pressed="' + (tool.k === t[0]) + '" title="' + t[1] + '"><svg class="ic"><use href="#' + t[2] + '"/></svg><span>' + t[1] + '</span></button>'; }).join('') + '</div>';
-      h += '<div class="map-opts"><div class="swatches" role="group" aria-label="Color">' + COLORS.map(function(c){ return '<button type="button" class="sw" data-act="mapcolor" data-v="' + c[0] + '" style="background:' + c[0] + '" aria-pressed="' + (tool.c === c[0]) + '" aria-label="' + c[1] + '"></button>'; }).join('') + '</div>'
-        + '<div class="map-seg" role="group" aria-label="Grosor">' + WIDTHS.map(function(x){ return '<button type="button" data-act="mapw" data-v="' + x[0] + '" aria-pressed="' + (tool.w === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>'
-        + '<label class="toggle"><input type="checkbox" id="mapSnap"' + (tool.snap ? ' checked' : '') + '> Ajustar a la cuadrícula</label>'
-        + '<label class="toggle"><input type="checkbox" id="mapFill"' + (tool.fill ? ' checked' : '') + '> Rellenar rectángulos</label><button class="btn sm" type="button" data-act="mapundo">Deshacer lo mío</button></div>';
-      h += '<div class="map-layers"><button type="button" class="map-lbtn" data-act="maplayers" aria-expanded="' + layersOpen + '"><svg class="ic"><use href="#i-layers"/></svg>Capas</button>' + mp.layers.map(function(l){ return '<span class="map-layer' + (tool.layer === l.id ? ' on' : '') + (hid[l.id] ? ' off' : '') + (l.dm ? ' secret' : '') + '"><button type="button" data-act="maplayer" data-v="' + attr(l.id) + '" aria-pressed="' + (tool.layer === l.id) + '">' + esc(l.name) + (l.dm ? ' <small>solo DM</small>' : '') + '</button><button type="button" class="eye" data-act="mapeye" data-v="' + attr(l.id) + '" aria-pressed="' + !hid[l.id] + '" aria-label="' + (hid[l.id] ? 'Mostrar ' : 'Ocultar ') + attr(l.name) + '"><svg class="ic"><use href="#i-eye"/></svg></button></span>'; }).join('') + '</div>';
-      if (layersOpen) h += '<div class="map-lpanel card">' + mp.layers.map(function(l, i){ return '<div class="line"><input class="field" data-maplname="' + attr(l.id) + '" value="' + attr(l.name) + '" aria-label="Nombre de la capa">' + (dm && sh ? '<label class="toggle"><input type="checkbox" data-maplsecret="' + attr(l.id) + '"' + (l.dm ? ' checked' : '') + '> Solo DM</label>' : '') + (i ? '<button class="btn sm" type="button" data-act="maplup" data-v="' + attr(l.id) + '">Subir</button>' : '') + (admin && mp.layers.length > 1 ? '<button class="btn sm" type="button" data-act="mapldel" data-v="' + attr(l.id) + '">Borrar capa</button>' : '') + '</div>'; }).join('')
-        + (mp.layers.length < 8 ? '<button class="btn sm" type="button" data-act="mapladd">Agregar capa</button>' : '') + '<p class="note">Las capas de abajo se dibujan primero. Ocultar una capa solo cambia lo que ves tú.' + (dm && sh ? ' Las capas «Solo DM» no las ven los jugadores: úsalas para trampas, puertas secretas y notas.' : '') + '</p></div>';
-    } else {
-      var fo = mp.fog && mp.fog.on;
-      h += '<div class="map-opts fog-opts"><label class="toggle big"><input type="checkbox" id="mapFogOn"' + (fo ? ' checked' : '') + '> Niebla activada</label><div class="seg sm" role="group" aria-label="Al arrastrar"><button type="button" data-act="mapfogv" data-v="1" aria-pressed="' + (tool.fogV === 1) + '">Descubrir</button><button type="button" data-act="mapfogv" data-v="0" aria-pressed="' + (tool.fogV === 0) + '">Cubrir</button></div><button class="btn sm" type="button" data-act="mapfogall" data-v="1">Descubrir todo</button><button class="btn sm" type="button" data-act="mapfogall" data-v="0">Cubrir todo</button><span class="note map-hint">' + (fo ? 'Arrastra sobre el mapa para ' + (tool.fogV ? 'descubrir' : 'cubrir') + ' un área. Tú la ves translúcida; los jugadores, negra.' : 'Actívala para que los jugadores solo vean lo descubierto.') + '</span></div>';
-    }
-    bar.innerHTML = h;
+    var modes = [['jugar','Jugar','i-token'],['dibujar','Dibujar','i-pencil']]; if (dm) modes.push(['niebla','Niebla','i-fog']);
+    put(bar, '<button class="icon-btn sm" type="button" data-act="mapback" aria-label="Volver a los mapas" title="Mapas"><svg class="ic"><use href="#i-back"/></svg></button>'
+      + (admin ? '<input class="field map-name" id="mapName" value="' + attr(mp.name) + '" aria-label="Nombre del mapa">' : '<b class="map-name ro">' + esc(mp.name) + '</b>')
+      + '<span class="map-where">' + (scene ? '<i class="tag new">en pantalla</i>' : '') + (meta && meta.hidden ? '<i class="tag">oculto</i>' : '') + (sh ? '' : '<i class="tag">solo tu copia</i>') + '</span>'
+      + '<div class="seg map-modes" role="tablist" aria-label="Modo">' + modes.map(function(x){ return '<button type="button" data-act="mapmode" data-v="' + x[0] + '" aria-pressed="' + (mode === x[0]) + '" title="' + x[1] + '"><svg class="ic"><use href="#' + x[2] + '"/></svg><span>' + x[1] + '</span></button>'; }).join('') + '</div>'
+      + (admin ? '<button class="icon-btn sm" type="button" data-act="mapset" aria-expanded="' + (pop === 'set') + '" aria-label="Ajustes del mapa" title="Ajustes del mapa"><svg class="ic"><use href="#i-gear"/></svg></button>' : ''));
+    palette(mp, dm, sh); popover(mp, dm, sh, admin); hud(mp, dm, sh, scene); initStrip(mp);
+  }
+  /* Paleta flotante de dibujo (a la izquierda, como en los VTT) */
+  function palette(mp, dm, sh){
+    var p = $('#mapPal'); if (!p) return;
+    if (mode !== 'dibujar') { p.innerHTML = ''; p.hidden = true; return; }
+    p.hidden = false;
+    var tb = function(k, label, ic){ return '<button type="button" class="icon-btn" data-act="maptool" data-v="' + k + '" aria-pressed="' + (tool.k === k) + '" aria-label="' + label + '" title="' + label + '"><svg class="ic"><use href="#' + ic + '"/></svg></button>'; };
+    p.innerHTML = tb('pan', 'Mover el mapa', 'i-hand')
+      + '<button type="button" class="icon-btn pen-btn" data-act="mappen" aria-expanded="' + (pop === 'pen') + '" aria-pressed="' + (tool.k === 'pen') + '" aria-label="Lápiz: grosor y color" title="Lápiz"><svg class="ic"><use href="#i-pencil"/></svg><i class="pen-dot" style="background:' + attr(tool.c) + ';--w:' + (tool.w === 0.06 ? 4 : tool.w === 0.14 ? 7 : 11) + 'px"></i></button>'
+      + tb('line', 'Línea', 'i-line') + tb('rect', 'Rectángulo', 'i-rect') + tb('text', 'Texto', 'i-text') + tb('erase', 'Borrar', 'i-eraser')
+      + '<span class="pal-sep"></span><button type="button" class="icon-btn" data-act="maplayers" aria-expanded="' + (pop === 'layers') + '" aria-label="Capas" title="Capas"><svg class="ic"><use href="#i-layers"/></svg></button><button type="button" class="icon-btn" data-act="mapundo" aria-label="Deshacer lo mío" title="Deshacer lo mío"><svg class="ic"><use href="#i-undo"/></svg></button>';
+  }
+  function penHtml(){
+    return '<div class="penpop"><span class="label">trazo</span><div class="pen-ws" role="group" aria-label="Grosor">' + WIDTHS.map(function(x, i){ return '<button type="button" data-act="mapw" data-v="' + x[0] + '" aria-pressed="' + (tool.w === x[0]) + '" aria-label="' + x[1] + '" title="' + x[1] + '"><svg viewBox="0 0 60 20" aria-hidden="true"><path d="M6 14 Q20 2 32 10 T54 6" stroke="' + attr(tool.c) + '" stroke-width="' + [2, 4.5, 8][i] + '" fill="none" stroke-linecap="round"/></svg></button>'; }).join('') + '</div>'
+      + '<span class="label">color</span><div class="swatches" role="group" aria-label="Color">' + COLORS.map(function(c){ return '<button type="button" class="sw" data-act="mapcolor" data-v="' + c[0] + '" style="background:' + c[0] + '" aria-pressed="' + (tool.c === c[0]) + '" aria-label="' + c[1] + '"></button>'; }).join('') + '</div>'
+      + '<label class="toggle"><input type="checkbox" id="mapSnap"' + (tool.snap ? ' checked' : '') + '> Ajustar a la cuadrícula</label><label class="toggle"><input type="checkbox" id="mapFill"' + (tool.fill ? ' checked' : '') + '> Rellenar rectángulos</label></div>';
+  }
+  function layersHtml(mp, dm, sh, admin){
+    var hid = hidden[mp.id] || {};
+    return '<div class="map-layers-p"><span class="label">capas · toca una para dibujar en ella</span>' + mp.layers.map(function(l, i){ return '<div class="map-layer' + (tool.layer === l.id ? ' on' : '') + (hid[l.id] ? ' off' : '') + (l.dm ? ' secret' : '') + '"><button type="button" class="eye" data-act="mapeye" data-v="' + attr(l.id) + '" aria-pressed="' + !hid[l.id] + '" aria-label="' + (hid[l.id] ? 'Mostrar ' : 'Ocultar ') + attr(l.name) + '"><svg class="ic"><use href="#i-eye"/></svg></button><button type="button" class="ln" data-act="maplayer" data-v="' + attr(l.id) + '" aria-pressed="' + (tool.layer === l.id) + '">' + esc(l.name) + (l.dm ? ' <small>solo DM</small>' : '') + '</button></div>'
+      + (layersOpen ? '<div class="line map-lrow"><input class="field" data-maplname="' + attr(l.id) + '" value="' + attr(l.name) + '" aria-label="Nombre de la capa">' + (dm && sh ? '<label class="toggle"><input type="checkbox" data-maplsecret="' + attr(l.id) + '"' + (l.dm ? ' checked' : '') + '> Solo DM</label>' : '') + (i ? '<button class="icon-btn sm" type="button" data-act="maplup" data-v="' + attr(l.id) + '" aria-label="Subir capa"><svg class="ic"><use href="#i-up"/></svg></button>' : '') + (admin && mp.layers.length > 1 ? '<button class="icon-btn sm" type="button" data-act="mapldel" data-v="' + attr(l.id) + '" aria-label="Borrar capa"><svg class="ic"><use href="#i-trash"/></svg></button>' : '') + '</div>' : ''); }).join('')
+      + '<div class="dm-row"><button class="btn sm" type="button" data-act="maplayeredit">' + (layersOpen ? 'Listo' : 'Editar capas') + '</button>' + (mp.layers.length < 8 ? '<button class="btn sm" type="button" data-act="mapladd">Agregar capa</button>' : '') + '</div>'
+      + (dm && sh ? '<p class="note">Las capas «Solo DM» no las ven los jugadores: trampas, puertas secretas y notas.</p>' : '') + '</div>';
+  }
+  function popover(mp, dm, sh, admin){
+    var p = $('#mapPop'); if (!p) return;
+    if (pop === 'pen' && mode !== 'dibujar') pop = null;
+    if (pop === 'layers' && mode !== 'dibujar') pop = null;
+    var h = pop === 'set' && admin ? setHtml(mp, dm, sh) : pop === 'layers' ? layersHtml(mp, dm, sh, admin) : pop === 'pen' ? penHtml() : pop === 'add' ? addHtml(mp, dm) : '';
+    p.className = 'map-pop' + (pop ? ' p-' + pop : ''); put(p, h); p.hidden = !h;
   }
   function setHtml(mp, dm, sh){
     var meta = roomMeta(mp.id), bg = mp.bg;
-    return '<div class="map-set card"><div class="two"><label class="fl">Cuadrícula<select class="field" id="mapGrid">' + [['square','Cuadrada'],['hex','Hexagonal'],['none','Sin cuadrícula']].map(function(x){ return '<option value="' + x[0] + '"' + (mp.grid === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label>'
+    return '<div class="map-set"><div class="row"><b>Ajustes del mapa</b><button class="icon-btn sm" type="button" data-act="mappopx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div><div class="two"><label class="fl">Cuadrícula<select class="field" id="mapGrid">' + [['square','Cuadrada'],['hex','Hexagonal'],['none','Sin cuadrícula']].map(function(x){ return '<option value="' + x[0] + '"' + (mp.grid === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label>'
       + '<div class="fl"><span>Imagen de fondo</span><div class="row" style="gap:6px;flex-wrap:wrap"><label class="btn sm pickbtn">' + (busyUp ? 'Subiendo…' : bg ? 'Cambiar' : 'Subir imagen') + '<input type="file" id="mapBgFile" accept="image/*"></label>' + (bg ? '<button class="btn sm" type="button" data-act="mapbgx">Quitar</button>' : '') + '</div></div></div>'
       + (bg ? '<label class="fl">Opacidad del fondo<input type="range" id="mapBgOp" min="0.2" max="1" step="0.1" value="' + (bg.op || 1) + '"></label>' : '')
       + (dm && sh ? '<label class="toggle"><input type="checkbox" id="mapHide"' + (meta && meta.hidden ? ' checked' : '') + '> Oculto para los jugadores</label>' : '')
@@ -221,7 +266,7 @@ var Mapas = (function(){
   }
   function addHtml(mp, dm){
     var r = room(), onMap = {}; mp.tokens.forEach(function(t){ if (t.ref) onMap[t.ref] = 1; });
-    var h = '<form class="map-add card" data-form="maptok">';
+    var h = '<form class="map-add" data-form="maptok"><div class="row"><b>Poner una ficha</b><button class="icon-btn sm" type="button" data-act="mappopx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>';
     if (dm && r) {
       var pcs = r.members.filter(function(m){ return m.role !== 'dm' && !onMap[m.id]; }), npcs = (r.npcs || []).filter(function(n){ return !onMap[n.id]; });
       h += '<label class="fl">Quién<select class="field" name="who"><option value="obj">Objeto o PNJ nuevo…</option>' + (npcs.length ? '<optgroup label="Del combate">' + npcs.map(function(n){ return '<option value="npc:' + attr(n.id) + '">' + esc(n.name) + (n.hidden ? ' (oculto)' : '') + '</option>'; }).join('') + '</optgroup>' : '') + (pcs.length ? '<optgroup label="Jugadores">' + pcs.map(function(m){ return '<option value="pc:' + attr(m.id) + '">' + esc(m.char ? m.char.name : m.name) + '</option>'; }).join('') + '</optgroup>' : '') + '</select></label>';
@@ -233,16 +278,105 @@ var Mapas = (function(){
       + '<button class="btn main sm" type="submit">Poner en el centro</button></form>';
     return h;
   }
-  /* Panel de la ficha elegida */
+
+  /* ---------- Combate dentro del mapa ---------- */
+  function fight(){ var r = room(); return r && ((r.round > 0) || (r.npcs || []).length || r.order.length) ? r : null; }
+  function combatants(r){
+    var all = {}; r.members.forEach(function(m){ if (m.role !== 'dm') all[m.id] = {id:m.id, pc:true, m:m}; }); (r.npcs || []).forEach(function(n){ all[n.id] = {id:n.id, pc:false, n:n}; });
+    var ord = r.order.map(function(id){ return all[id]; }).filter(Boolean), rest = Object.keys(all).map(function(k){ return all[k]; }).filter(function(x){ return r.order.indexOf(x.id) < 0; });
+    return ord.concat(rest);
+  }
+  function cInfo(x, r){
+    var dm = isDm(), o = {name:'', init:null, pct:null, label:'', down:false};
+    if (x.pc) { var c = x.m.char || {}; o.name = c.name || x.m.name; o.init = x.m.init; if (c.hp != null && c.hpMax) { o.pct = c.hp / c.hpMax; o.label = c.hp + '/' + c.hpMax; o.down = c.hp <= 0; } }
+    else { var n = x.n; o.name = n.name; o.init = n.init; if (n.hp != null && n.hpMax) { o.pct = n.hp / n.hpMax; o.label = dm || n.show === 'num' ? n.hp + '/' + n.hpMax : ''; o.down = n.hp <= 0; } else if (n.pct != null) { o.pct = n.pct / 100; o.down = n.pct <= 0; } if (n.state) { o.label = n.state; o.down = n.state === 'caído'; } }
+    return o;
+  }
+  function initStrip(mp){
+    var el = $('#vttInit'); if (!el) return;
+    var r = fight(); if (!r || mode !== 'jugar') { el.hidden = true; el.innerHTML = ''; return; }
+    var list = combatants(r), onMap = {}; mp.tokens.forEach(function(t){ if (t.ref && !t.comp) onMap[t.ref] = t; });
+    el.hidden = false;
+    el.innerHTML = '<span class="vi-round">' + (r.round ? '<small>ronda</small><b>' + r.round + '</b>' : '<small>combate</small><b>·</b>') + '</span><div class="vi-list">' + list.map(function(x, i){
+      var o = cInfo(x, r), t = onMap[x.id], turn = r.round && r.turnId === x.id, col = t ? t.color : x.pc ? '#2f5d8a' : '#8c2626', p = o.pct == null ? null : Math.max(0, Math.min(1, o.pct));
+      return '<button type="button" class="vi-chip' + (turn ? ' turn' : '') + (x.pc ? ' pc' : ' npc') + (o.down ? ' down' : '') + (x.id === r.you ? ' me' : '') + (x.n && x.n.hidden ? ' hid' : '') + (r.order.indexOf(x.id) < 0 ? ' noinit' : '') + '" data-act="mapchip" data-id="' + attr(x.id) + '" style="--d:' + (i * 35) + 'ms" title="' + attr(o.name + (o.label ? ' · ' + o.label : '')) + '">'
+        + '<span class="vi-av" style="background:' + attr(col) + '">' + (t && t.img ? '<img alt="" src="' + attr(Mesa.imgUrl(t.img)) + '">' : esc(ini(o.name))) + '</span><span class="vi-init">' + (o.init == null ? '–' : o.init) + '</span>'
+        + (p != null ? '<i class="vi-hp"><i style="width:' + Math.round(p * 100) + '%;background:' + (p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a') + '"></i></i>' : '') + '<span class="vi-n">' + esc(String(o.name).split(' ')[0]) + '</span></button>';
+    }).join('') + '</div>';
+    var on = el.querySelector('.vi-chip.turn'), ls = el.querySelector('.vi-list'); if (on && ls) ls.scrollLeft = Math.max(0, on.offsetLeft - (ls.clientWidth - on.offsetWidth) / 2);
+  }
+  function hud(mp, dm, sh, scene){
+    var el = $('#vttHud'); if (!el) return;
+    var r = room(), h = '';
+    if (mode === 'niebla') {
+      var fo = mp.fog && mp.fog.on;
+      h = '<div class="hud-row"><label class="toggle big"><input type="checkbox" id="mapFogOn"' + (fo ? ' checked' : '') + '> Niebla</label><div class="seg sm" role="group" aria-label="Al arrastrar"><button type="button" data-act="mapfogv" data-v="1" aria-pressed="' + (tool.fogV === 1) + '">Descubrir</button><button type="button" data-act="mapfogv" data-v="0" aria-pressed="' + (tool.fogV === 0) + '">Cubrir</button></div><button class="btn sm" type="button" data-act="mapfogall" data-v="1">Todo visible</button><button class="btn sm" type="button" data-act="mapfogall" data-v="0">Todo cubierto</button></div>'
+        + '<p class="hud-hint">' + (fo ? 'Arrastra sobre el mapa para ' + (tool.fogV ? 'descubrir' : 'cubrir') + '. Tú la ves translúcida; los jugadores, negra.' : 'Actívala para que los jugadores solo vean lo descubierto.') + '</p>';
+    } else if (mode === 'jugar') {
+      var f = fight(), mt = myTok(mp), canPut = !(isDm() && sh) && (!!(window.Sala && Sala.summary && Sala.summary()) || !sh);
+      var tokBtns = (canPut ? '<button class="btn main sm" type="button" data-act="mapputme"><svg class="ic"><use href="#i-token"/></svg>' + (mt ? 'Traer mi ficha' : 'Poner mi ficha') + '</button>' + (mt ? '<button class="icon-btn sm" type="button" data-act="mapfindme" aria-label="Ir a mi ficha" title="Ir a mi ficha"><svg class="ic"><use href="#i-target"/></svg></button>' : '') : '')
+        + '<button class="icon-btn sm" type="button" data-act="mapadd" aria-expanded="' + (pop === 'add') + '" aria-label="' + (dm ? 'Agregar ficha' : 'Otra ficha (familiar, montura)') + '" title="' + (dm ? 'Agregar ficha' : 'Otra ficha') + '"><svg class="ic"><use href="#i-plus"/></svg></button>';
+      if (r && isDm() && sh) {
+        var missing = f ? combatants(f).filter(function(x){ return !mp.tokens.some(function(t){ return t.ref === x.id && !t.comp; }); }).length : 0;
+        h = '<div class="hud-row dm">' + tokBtns + (!scene ? '<button class="btn sm" type="button" data-act="mapscene" data-id="' + attr(mp.id) + '"><svg class="ic"><use href="#i-screen"/></svg>Mostrar a todos</button>' : '')
+          + '<span class="hud-sp"></span><button class="btn sm" type="button" data-act="bestopen"><svg class="ic"><use href="#i-paw"/></svg>Enemigo</button>' + (missing ? '<button class="btn sm" type="button" data-act="mapplaceall"><svg class="ic"><use href="#i-token"/></svg>Poner ' + missing + ' en el mapa</button>' : '')
+          + (f ? (f.round ? '<button class="icon-btn sm" type="button" data-act="salaturn" data-v="prev" aria-label="Turno anterior"><svg class="ic"><use href="#i-back"/></svg></button><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Siguiente</button><button class="icon-btn sm" type="button" data-act="salaend" aria-label="Terminar combate" title="Terminar combate"><svg class="ic"><use href="#i-stop"/></svg></button>' : '<button class="btn main sm" type="button" data-act="salaturn" data-v="start"' + (f.order.length ? '' : ' disabled title="Falta iniciativa"') + '><svg class="ic"><use href="#i-swords"/></svg>Empezar combate</button>') : '') + '</div>';
+      } else if (r && sh) {
+        var meM = r.members.filter(function(m){ return m.id === r.you; })[0] || {}, c = meM.char || {}, myTurn = f && f.round && f.turnId === r.you, p = c.hpMax ? Math.max(0, Math.min(1, c.hp / c.hpMax)) : null;
+        h = '<div class="hud-row pj' + (myTurn ? ' myturn' : '') + '">' + (c.name ? '<span class="hud-me"><b>' + esc(c.name) + '</b><span class="hud-hp"><i style="width:' + Math.round((p || 0) * 100) + '%;background:' + (p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a') + '"></i></span><small>PG ' + (c.hp != null ? c.hp + '/' + c.hpMax : '–') + (c.temp ? ' +' + c.temp : '') + ' · CA ' + (c.ac || '–') + '</small></span>' : '')
+          + (myTurn ? '<span class="hud-turn">¡Tu turno!</span><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Terminar turno</button>'
+            : f && meM.init == null ? '<form class="hud-init" data-form="salainit"><input class="field" name="v" inputmode="numeric" autocomplete="off" placeholder="Inic." aria-label="Tu iniciativa"><button class="btn main sm" type="submit">Iniciativa</button></form>' : '')
+          + '<span class="hud-sp"></span>' + tokBtns + '<button class="icon-btn sm" type="button" data-act="mapsheet" aria-label="Mi hoja de combate" title="Mi hoja de combate"><svg class="ic"><use href="#i-swords"/></svg></button></div>'
+          + (c.conds && c.conds.length ? '<div class="hud-conds">' + c.conds.map(function(k){ return '<span class="chip">' + esc((Sala.COND || {})[k] || k) + '</span>'; }).join('') + '</div>' : '');
+      } else h = '<div class="hud-row">' + tokBtns + '</div>';
+    }
+    put(el, h); el.hidden = !h;
+  }
+  /* Pone en el mapa a quien esté en el combate y no tenga ficha, alrededor del centro */
+  function placeAll(mp){
+    var f = fight(); if (!f) return; var c = center(mp), k = 0, used = {}; mp.tokens.forEach(function(t){ used[Math.round(t.x) + ',' + Math.round(t.y)] = 1; });
+    var spot = function(){ for (var ring = 0; ring < 12; ring++) for (var dy = -ring; dy <= ring; dy++) for (var dx = -ring; dx <= ring; dx++) { if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue; var x = c[0] + dx, y = c[1] + dy; if (x < 0 || y < 0 || x >= mp.cols || y >= mp.rows || used[x + ',' + y]) continue; used[x + ',' + y] = 1; return [x, y]; } return c; };
+    combatants(f).forEach(function(x){
+      if (mp.tokens.some(function(t){ return t.ref === x.id && !t.comp; })) return;
+      var p = spot(); k++;
+      if (x.pc) tokAdd(mp, {kind:'pc', ref:x.id, name:(x.m.char && x.m.char.name) || x.m.name, x:p[0], y:p[1], s:1, color:TOKCOL[(k % (TOKCOL.length - 1)) + 1]});
+      else tokAdd(mp, {kind:'npc', ref:x.id, name:x.n.name, x:p[0], y:p[1], s:1, color:'#8c2626', hidden:!!x.n.hidden});
+    });
+    if (k) Sala.toast(k + ' ficha' + (k === 1 ? '' : 's') + ' en el mapa.');
+  }
+  /* Panel de la ficha elegida: datos y, si está en el combate, daño, curación y estados */
   function tokPanel(){
     var p = $('#mapTok'), mp = maps[cur]; if (!p) return;
     var t = mp && selTok && mp.tokens.filter(function(x){ return x.id === selTok; })[0];
     if (!t) { p.hidden = true; return; }
-    var can = mine(t), dm = master(mp), info = tokInfo(t), h = '<div class="row map-tok-h">' + avatar(t) + '<span style="flex:1;min-width:0"><b>' + esc(info.name) + '</b><small>' + esc(info.sub) + '</small></span><button class="icon-btn sm" type="button" data-act="maptokx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>';
-    if (can) h += '<div class="map-tok-b"><label>Tamaño<select class="field" data-tokset="s">' + TSIZE.map(function(x){ return '<option value="' + x[0] + '"' + (t.s === x[0] ? ' selected' : '') + '>' + x[1].split(' (')[0] + '</option>'; }).join('') + '</select></label>'
+    var can = mine(t), dm = master(mp), info = tokInfo(t), r = room(), cb = r && t.ref && !t.comp ? combatant(r, t.ref) : null;
+    var h = '<div class="row map-tok-h">' + avatar(t) + '<span style="flex:1;min-width:0"><b>' + esc(info.name) + '</b><small>' + esc(info.sub) + (cb && cb.init != null ? ' · inic. ' + cb.init : '') + '</small></span><button class="icon-btn sm" type="button" data-act="maptokx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>';
+    if (cb) h += combatHtml(t, cb, r);
+    if (can) h += '<details class="map-tok-more"' + (cb ? '' : ' open') + '><summary>Ficha en el mapa</summary><div class="map-tok-b"><label>Tamaño<select class="field" data-tokset="s">' + TSIZE.map(function(x){ return '<option value="' + x[0] + '"' + (t.s === x[0] ? ' selected' : '') + '>' + x[1].split(' (')[0] + '</option>'; }).join('') + '</select></label>'
       + '<div class="swatches" role="group" aria-label="Color">' + TOKCOL.map(function(c){ return '<button type="button" class="sw" data-act="maptokcol" data-v="' + c + '" style="background:' + c + '" aria-pressed="' + (t.color === c) + '" aria-label="Color ' + c + '"></button>'; }).join('') + '</div>'
-      + '<div class="row" style="gap:6px;flex-wrap:wrap">' + (room() ? '<label class="btn sm pickbtn">' + (busyUp ? 'Subiendo…' : t.img ? 'Cambiar retrato' : 'Retrato') + '<input type="file" id="mapTokImg" accept="image/*"></label>' + (t.img ? '<button class="btn sm" type="button" data-act="maptoknoimg">Sin retrato</button>' : '') : '') + (dm && room() ? '<button class="btn sm" type="button" data-act="maptokhide">' + (t.hidden ? 'Mostrar a los jugadores' : 'Ocultar a los jugadores') + '</button>' : '') + '<button class="btn sm" type="button" data-act="maptokdel">Quitar del mapa</button></div></div>';
-    p.innerHTML = h; p.hidden = false;
+      + '<div class="row" style="gap:6px;flex-wrap:wrap">' + (room() ? '<label class="btn sm pickbtn">' + (busyUp ? 'Subiendo…' : t.img ? 'Cambiar retrato' : 'Retrato') + '<input type="file" id="mapTokImg" accept="image/*"></label>' + (t.img ? '<button class="btn sm" type="button" data-act="maptoknoimg">Sin retrato</button>' : '') : '') + (dm && room() ? '<button class="btn sm" type="button" data-act="maptokhide">' + (t.hidden ? 'Mostrar a los jugadores' : 'Ocultar a los jugadores') + '</button>' : '') + '<button class="btn sm" type="button" data-act="maptokdel">Quitar del mapa</button></div></div></details>';
+    put(p, h); p.hidden = false;
+  }
+  function combatant(r, id){
+    var m = r.members.filter(function(x){ return x.id === id && x.role !== 'dm'; })[0]; if (m) return {pc:true, id:id, init:m.init, m:m};
+    var n = (r.npcs || []).filter(function(x){ return x.id === id; })[0]; return n ? {pc:false, id:id, init:n.init, n:n} : null;
+  }
+  function combatHtml(t, cb, r){
+    var dm = isDm(), C2 = Sala.COND || {}, h = '<div class="tok-fight">';
+    if (dm && !cb.pc) {
+      var n = cb.n;
+      h += '<div class="tok-hp"><b>' + n.hp + '</b><small>/ ' + n.hpMax + ' PG' + (n.temp ? ' · +' + n.temp : '') + ' · CA ' + n.ac + '</small></div>'
+        + '<div class="quick">' + [-10, -5, -1, 1, 5].map(function(d){ return '<button type="button" class="' + (d < 0 ? 'm' : 'p') + '" data-act="salanpchp" data-id="' + attr(n.id) + '" data-v="' + d + '">' + (d > 0 ? '+' : '−') + Math.abs(d) + '</button>'; }).join('') + '</div>'
+        + '<div class="tok-row"><label>Inic.<input class="field" data-salainit="' + attr(n.id) + '" inputmode="numeric" value="' + (n.init == null ? '' : n.init) + '" aria-label="Iniciativa de ' + attr(n.name) + '"></label><select class="field" data-npccond="' + attr(n.id) + '" aria-label="Agregar estado"><option value="">+ Estado…</option>' + Object.keys(C2).filter(function(k){ return (n.conds || []).indexOf(k) < 0; }).map(function(k){ return '<option value="' + k + '">' + C2[k] + '</option>'; }).join('') + '</select></div>'
+        + ((n.conds || []).length ? '<div class="sala-conds">' + n.conds.map(function(k){ return '<button type="button" class="chip" data-act="salacondoff" data-id="' + attr(n.id) + '" data-v="' + k + '">' + esc(C2[k] || k) + ' ×</button>'; }).join('') + '</div>' : '')
+        + '<div class="tok-row">' + (n.ref ? '<button class="btn sm" type="button" data-act="bestref" data-ref="' + attr(n.ref) + '">Ficha</button>' : '') + '<button class="btn sm" type="button" data-act="salareveal" data-id="' + attr(n.id) + '">' + (n.hidden ? 'Mostrar en el combate' : 'Ocultar del combate') + '</button></div>';
+    } else if (dm && cb.pc) {
+      h += '<div class="tok-row"><label>Inic.<input class="field" data-salainit="' + attr(cb.id) + '" inputmode="numeric" value="' + (cb.init == null ? '' : cb.init) + '" aria-label="Iniciativa"></label></div>';
+    } else {
+      h += '<form class="tok-apply" data-form="mapapply" data-id="' + attr(cb.id) + '"><input class="field" name="amount" inputmode="numeric" autocomplete="off" placeholder="Total" aria-label="Cantidad"><button class="btn dmg sm" type="submit" data-kind="damage">Daño</button><button class="btn heal sm" type="submit" data-kind="heal">Curar</button></form>'
+        + '<div class="tok-row"><select class="field" name="cond" form="" data-mapcond="' + attr(cb.id) + '" aria-label="Aplicar condición"><option value="">Condición…</option>' + Object.keys(C2).map(function(k){ return '<option value="' + k + '">' + C2[k] + '</option>'; }).join('') + '</select></div>';
+    }
+    return h + '</div>';
   }
   function avatar(t){ var c = t.color || '#8c2626'; return '<span class="tok-av" style="background:' + attr(c) + '">' + (t.img ? '<img alt="" src="' + attr(Mesa.imgUrl(t.img)) + '">' : esc(ini(t.name))) + '</span>'; }
   function ini(n){ return String(n || '?').split(/\s+/).slice(0, 2).map(function(w){ return w.charAt(0); }).join('').toUpperCase(); }
@@ -262,7 +396,7 @@ var Mapas = (function(){
   function V(){ return views[cur] || (views[cur] = {s:24, x:20, y:20}); }
   function fit(){
     if (!canvas) return; var wrap = canvas.parentNode, w = wrap.clientWidth || 360, top = canvas.getBoundingClientRect().top || 220;
-    var hh = Math.max(300, Math.min(1600, (window.innerHeight || 800) - top - 12)), dpr = window.devicePixelRatio || 1;
+    var hh = Math.max(300, Math.min(1600, (window.innerHeight || 800) - top - (document.querySelector('.app.camp-wide') ? 0 : 12))), dpr = window.devicePixelRatio || 1;
     canvas.style.width = w + 'px'; canvas.style.height = hh + 'px'; canvas.width = Math.round(w * dpr); canvas.height = Math.round(hh * dpr);
   }
   function frame(mp){ if (!canvas || !mp) return; var w = canvas.clientWidth || 360, h = canvas.clientHeight || 400, s = Math.max(4, Math.min(80, Math.min((w - 20) / mp.cols, (h - 20) / mp.rows))); views[mp.id] = {s:s, x:(w - mp.cols * s) / 2, y:(h - mp.rows * s) / 2}; }
@@ -314,7 +448,7 @@ var Mapas = (function(){
     c.lineWidth = Math.max(1.5, v.s * 0.06); c.strokeStyle = selTok === t.id ? '#ffd66e' : 'rgba(20,12,8,.85)'; if (t.hidden) c.setLineDash([4, 3]); c.stroke(); c.setLineDash([]);
     if (info.pct != null && v.s >= 10) { var p = Math.max(0, Math.min(1, info.pct)); c.beginPath(); c.arc(cx, cy, rad + c.lineWidth, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); c.strokeStyle = p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a'; c.lineWidth = Math.max(2, v.s * 0.08); c.stroke(); }
     if (info.down) { c.strokeStyle = '#d24a3a'; c.lineWidth = Math.max(2, rad * 0.18); c.beginPath(); c.moveTo(cx - rad * 0.6, cy - rad * 0.6); c.lineTo(cx + rad * 0.6, cy + rad * 0.6); c.moveTo(cx + rad * 0.6, cy - rad * 0.6); c.lineTo(cx - rad * 0.6, cy + rad * 0.6); c.stroke(); }
-    if (v.s >= 18) { var fs = Math.max(10, Math.min(15, v.s * 0.38)); c.font = '600 ' + fs + 'px Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'top'; c.lineWidth = 3; c.strokeStyle = 'rgba(243,233,210,.9)'; var ly = cy + rad + 3; c.strokeText(info.name, cx, ly); c.fillStyle = '#2b1d12'; c.fillText(info.name, cx, ly); }
+    if (v.s >= 40 || selTok === t.id || info.turn) { var fs = Math.max(10, Math.min(15, v.s * 0.38)); var lbl = info.name.length > 14 ? info.name.slice(0, 13) + '…' : info.name; c.font = '600 ' + fs + 'px Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'top'; c.lineWidth = 3; c.strokeStyle = 'rgba(243,233,210,.9)'; var ly = cy + rad + 3; c.strokeText(lbl, cx, ly); c.fillStyle = '#2b1d12'; c.fillText(lbl, cx, ly); }
     c.restore();
   }
   /* Encima de todo: la ficha que arrastras con su regla, el área de niebla y las señales */
@@ -476,7 +610,7 @@ var Mapas = (function(){
   function openMap(id){
     load(id).then(function(mp){
       if (!mp) { var meta = roomMeta(id); if (meta) { asked[id] = null; waitOpen = id; Sala.send({t:'map.get', id:id}); Sala.toast('Trayendo el mapa…'); } return; }
-      cur = id; layersOpen = false; setOpen = false; addOpen = false; selTok = null; mode = 'jugar'; var box = document.getElementById('mesaMaps'); if (box && visible()) editor(box); else if (box) { box.innerHTML = ''; }
+      cur = id; layersOpen = false; pop = null; selTok = null; mode = 'jugar'; var box = document.getElementById('mesaMaps'); if (box && visible()) editor(box); else if (box) { box.innerHTML = ''; }
       badge();
     });
   }
@@ -484,7 +618,8 @@ var Mapas = (function(){
   document.addEventListener('click', function(ev){
     var b = ev.target.closest && ev.target.closest('[data-act]'); if (!b || b.dataset.act.indexOf('map') !== 0) return;
     var a = b.dataset.act, mp = cur && maps[cur];
-    if (a === 'mapnew') { newOpen = !newOpen; newImg = null; render(); }
+    if (a === 'mapnew') { newOpen = b.dataset.v || (room() && isDm() ? 'dm' : 'pj'); newImg = b.dataset.src === 'img' ? {cols:30} : null; render(); var f0 = $('form[data-form="mapnew"] [name=name]'); if (f0) try { f0.focus(); } catch(e){} }
+    else if (a === 'mapnewx') { newOpen = false; newImg = null; render(); }
     else if (a === 'mapsrc') { newImg = b.dataset.v === 'img' ? (newImg || {cols:30}) : null; render(); }
     else if (a === 'mapopen') openMap(b.dataset.id);
     else if (a === 'mapgoscene') { if (window.Mesa) { document.getElementById('combat').hidden = false; Mesa.show('mapas'); } openMap(b.dataset.v); }
@@ -503,21 +638,27 @@ var Mapas = (function(){
       else { delete maps[b.dataset.id]; idbDel('map:' + b.dataset.id); setIndex(index().filter(function(x){ return x.id !== b.dataset.id; })); render(); }
     }
     else if (!mp) return;
-    else if (a === 'mapmode') { mode = b.dataset.v; if (mode === 'dibujar' && (tool.k === 'pan' || !tool.k)) tool.k = 'pen'; addOpen = false; toolbar(); paint(); }
-    else if (a === 'mapset') { setOpen = !setOpen; toolbar(); fit(); paint(); }
-    else if (a === 'mapadd') { addOpen = !addOpen; toolbar(); }
+    else if (a === 'mapmode') { mode = b.dataset.v; if (mode === 'dibujar' && (tool.k === 'pan' || !tool.k)) tool.k = 'pen'; pop = null; toolbar(); paint(); }
+    else if (a === 'mapset') { pop = pop === 'set' ? null : 'set'; toolbar(); }
+    else if (a === 'mapadd') { pop = pop === 'add' ? null : 'add'; toolbar(); }
+    else if (a === 'mappen') { if (tool.k !== 'pen') { tool.k = 'pen'; pop = 'pen'; } else pop = pop === 'pen' ? null : 'pen'; toolbar(); }
+    else if (a === 'mappopx') { pop = null; toolbar(); }
+    else if (a === 'maplayeredit') { layersOpen = !layersOpen; toolbar(); }
+    else if (a === 'mapplaceall') placeAll(mp);
+    else if (a === 'mapsheet') { if (window.Mesa) Mesa.show('combate'); if (window.Diario) Diario.renderCombat(); }
+    else if (a === 'mapchip') { var tc = mp.tokens.filter(function(t){ return t.ref === b.dataset.id && !t.comp; })[0]; if (tc) { focus(mp, tc); selTok = tc.id; paint(); tokPanel(); } else Sala.toast(isDm() ? 'No tiene ficha en este mapa: usa «Poner en el mapa».' : 'No está en este mapa.'); }
     else if (a === 'mapputme') {
       var s = Sala.summary ? Sala.summary() : null, t = myTok(mp), c = center(mp);
       if (t) { tokMove(mp, t, c[0], c[1]); selTok = t.id; tokPanel(); }
       else tokAdd(mp, {kind:'pc', name: s ? s.name : 'Yo', x:c[0], y:c[1], s:1, color:TOKCOL[1], mine:!shared(mp.id)});
     }
     else if (a === 'mapfindme') { var me2 = myTok(mp); if (me2) { focus(mp, me2); selTok = me2.id; paint(); tokPanel(); } }
-    else if (a === 'maptool') { tool.k = b.dataset.v; toolbar(); }
+    else if (a === 'maptool') { tool.k = b.dataset.v; if (pop === 'pen') pop = null; toolbar(); }
     else if (a === 'mapcolor') { tool.c = b.dataset.v; if (tool.k === 'pan' || tool.k === 'erase') tool.k = 'pen'; toolbar(); }
     else if (a === 'mapw') { tool.w = +b.dataset.v; toolbar(); }
     else if (a === 'maplayer') { tool.layer = b.dataset.v; var hd = hidden[mp.id] = hidden[mp.id] || {}; delete hd[tool.layer]; toolbar(); paint(); }
     else if (a === 'mapeye') { var hh = hidden[mp.id] = hidden[mp.id] || {}; hh[b.dataset.v] = !hh[b.dataset.v]; toolbar(); paint(); }
-    else if (a === 'maplayers') { layersOpen = !layersOpen; toolbar(); }
+    else if (a === 'maplayers') { pop = pop === 'layers' ? null : 'layers'; toolbar(); }
     else if (a === 'mapladd') { var n = 1; while (mp.layers.some(function(l){ return l.id === 'l' + n; })) n++; setMeta(mp, {layers:mp.layers.concat([{id:'l' + n, name:'Capa ' + n}])}); tool.layer = 'l' + n; }
     else if (a === 'mapldel') { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = '¿Borrar con lo que tiene?'; return; } setMeta(mp, {layers:mp.layers.filter(function(l){ return l.id !== b.dataset.v; })}); }
     else if (a === 'maplup') { var L = mp.layers.slice(), i = L.findIndex(function(l){ return l.id === b.dataset.v; }); if (i > 0) { var tt = L[i - 1]; L[i - 1] = L[i]; L[i] = tt; setMeta(mp, {layers:L}); } }
@@ -538,19 +679,20 @@ var Mapas = (function(){
     }
   });
   document.addEventListener('submit', function(ev){
-    var f = ev.target, k = f.dataset && f.dataset.form; if (k !== 'mapnew' && k !== 'maptext' && k !== 'maptok') return; ev.preventDefault();
+    var f = ev.target, k = f.dataset && f.dataset.form; if (k !== 'mapnew' && k !== 'maptext' && k !== 'maptok' && k !== 'mapapply') return; ev.preventDefault();
+    if (k === 'mapapply') { var amt = parseInt(f.elements.amount.value, 10); if (!(amt > 0)) { f.elements.amount.focus(); return; } var kd = ev.submitter && ev.submitter.dataset.kind || 'damage'; if (Sala.send({t:'apply', kind:kd, amount:amt, cond:null, note:'', targets:[f.dataset.id]})) { f.elements.amount.value = ''; Sala.toast((kd === 'heal' ? 'Curaste ' : 'Hiciste ') + amt + (kd === 'heal' ? ' PG.' : ' de daño.')); } return; }
     if (k === 'mapnew') {
       var hide = !!(f.elements.hidden && f.elements.hidden.checked), name = f.elements.name.value.trim();
       if (newImg) {
         if (!newImg.file) return;
         var cols = Math.max(8, Math.min(160, parseInt(f.elements.cols.value, 10) || 30)), rows = Math.max(8, Math.min(160, Math.round(cols * newImg.h / newImg.w)));
         var mp = newMap({name:name || newImg.file.name.replace(/\.\w+$/, ''), cols:cols, rows:rows, grid:'square', hidden:hide}), file = newImg.file;
-        newOpen = false; newImg = null; cur = mp.id; mode = 'jugar';
+        newOpen = false; newImg = null; cur = mp.id; mode = 'jugar'; pop = null;
         var box = document.getElementById('mesaMaps'); if (box) editor(box);
         setBg(mp, file);
         return;
       }
-      var mp2 = newMap({name:name, size:f.elements.size.value, grid:f.elements.grid.value, hidden:hide}); newOpen = false; cur = mp2.id; mode = 'dibujar'; tool.k = 'pen'; var box2 = document.getElementById('mesaMaps'); if (box2) editor(box2); return;
+      var mp2 = newMap({name:name, size:f.elements.size.value, grid:f.elements.grid.value, hidden:hide}); newOpen = false; cur = mp2.id; mode = 'dibujar'; tool.k = 'pen'; pop = null; var box2 = document.getElementById('mesaMaps'); if (box2) editor(box2); return;
     }
     var m = maps[cur]; if (!m) return;
     if (k === 'maptok') {
@@ -559,7 +701,7 @@ var Mapas = (function(){
       if (who.indexOf('npc:') === 0) { var n = (r.npcs || []).filter(function(x){ return 'npc:' + x.id === who; })[0]; tok.kind = 'npc'; tok.ref = n.id; tok.name = nm || n.name; if (n.hidden) tok.hidden = true; }
       else if (who.indexOf('pc:') === 0) { var pm = r.members.filter(function(x){ return 'pc:' + x.id === who; })[0]; tok.kind = 'pc'; tok.ref = pm.id; tok.name = nm || (pm.char ? pm.char.name : pm.name); tok.color = col; }
       else if (who === 'comp') { tok.kind = 'pc'; tok.comp = 1; tok.name = nm || 'Compañero'; }
-      tokAdd(m, tok); addOpen = false; toolbar(); return;
+      tokAdd(m, tok); pop = null; toolbar(); return;
     }
     var t = f.elements.t.value.trim(); $('#mapTxt').hidden = true;
     if (t && m && pendingText) addStroke(m, {k:'text', l:tool.layer, c:tool.c, w:tool.w, pts:pendingText, t:t});
@@ -570,6 +712,7 @@ var Mapas = (function(){
     if (t.id === 'mapNewImg' && t.files && t.files[0]) { readImg(t.files[0]).then(function(o){ var keepCols = newImg && newImg.cols || 30; newImg = o; newImg.cols = keepCols; render(); }).catch(function(e){ Sala.toast(e.message); }); return; }
     if (t.id === 'mapNewCols' && newImg) { newImg.cols = Math.max(8, Math.min(160, parseInt(t.value, 10) || 30)); var p = document.getElementById('mapNewRows'); if (p && newImg.w) p.textContent = 'Quedará de ' + newImg.cols + ' × ' + Math.max(8, Math.round(newImg.cols * newImg.h / newImg.w)) + ' casillas.'; return; }
     var mp = cur && maps[cur]; if (!mp) return;
+    if (t.dataset && t.dataset.mapcond && t.value) { if (Sala.send({t:'apply', kind:'cond+', amount:0, cond:t.value, note:'', targets:[t.dataset.mapcond]})) Sala.toast('Aplicaste ' + ((Sala.COND || {})[t.value] || t.value) + '.'); t.value = ''; return; }
     if (t.id === 'mapSnap') tool.snap = t.checked;
     else if (t.id === 'mapFill') tool.fill = t.checked;
     else if (t.id === 'mapName' && t.value.trim()) setMeta(mp, {name:t.value.trim()});

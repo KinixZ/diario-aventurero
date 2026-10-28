@@ -33,13 +33,20 @@ const [htmlFile, bundle] = process.argv.slice(2), html = fs.readFileSync(htmlFil
     // tablero
     M.click(M.$('[data-act="mesatab"][data-v="tablero"]')); await wait(20); M.click(M.$('[data-act="mesaboardnew"]')); await wait(20);
     M.click(M.$('[data-act="mesacat"][data-v="pnj"]')); const bf = M.$('[data-form="mesaboard"]'); bf.elements.title.value = 'Vel, el sepulturero'; bf.elements.text.value = 'Sabe dónde está la llave'; M.submit(bf);
-    await until(() => A.$$('#mesaBoard .board-item').length === 1);
-    console.log('tablero de Lyra:', A.$('#mesaBoard').textContent.replace(/\s+/g, ' ').trim(), '| Lyra puede editar:', !!A.$('[data-act="mesabedit"]'));
-    // pizarra
-    A.w.Sala.send({t:'draw.add', stroke:{color:'#8c2626', w:5, pts:[0.1,0.1,0.5,0.6,0.9,0.2]}});
-    await until(() => JSON.parse(B.w.localStorage.getItem('diario-mesa') || '{}').strokes?.length === 1);
-    M.click(M.$('[data-act="mesatab"][data-v="pizarra"]')); await wait(20);
-    console.log('pizarra del DM tiene herramientas:', !!M.$('.draw-tools'), '| hoja nueva:', !!M.$('[data-act="mesaclear"]'));
+    await until(() => A.$$('#mesaBoard .npc-card').length === 1);
+    // misión principal en pergamino y una secundaria
+    const quest = async (title, prio, look) => { M.click(M.$('[data-act="mesaboardnew"]')); await wait(20); const f = M.$('[data-form="mesaboard"]'); M.click(f.querySelector('[data-act="mesacat"][data-v="mision"]')); M.click(f.querySelector('[data-act="mesaprio"][data-v="' + prio + '"]')); if (look) M.click(f.querySelector('[data-act="mesalook"][data-v="' + look + '"]')); f.elements.title.value = title; M.submit(f); await wait(150); };
+    await quest('Encontrar la llave', 'main', 'scroll'); await quest('Pagarle a Harbin', 'side');
+    await until(() => A.$$('#mesaBoard .quest').length === 2);
+    console.log('tablero de Lyra: pergamino', A.$$('.q-scroll').length, '| nota chica', A.$$('.q-note').length, '| PNJ', A.$$('.npc-card').length, '| Lyra puede editar:', !!A.$('[data-act="mesabedit"]'));
+    if (A.$$('.q-scroll').length !== 1 || A.$$('.q-note').length !== 1) errors.push('las misiones no se ven como principal y secundaria');
+    A.click(A.$('.q-scroll')); await wait(30); console.log('leer misión en grande:', !!A.$('.board-read .quest.big'));
+    // ya no hay pestaña Pizarra: los dibujos se adjuntan al chat
+    console.log('sin pestaña pizarra:', !M.$('[data-act="mesatab"][data-v="pizarra"]'));
+    A.click(A.$('[data-act="mesatab"][data-v="chat"]')); await wait(20); A.click(A.$('[data-act="mesapad"]')); await wait(20);
+    console.log('papel de dibujo en el chat:', !!A.$('#chatPad canvas'), '| lápiz:', !!A.$('[data-act="mesapen"]'));
+    A.click(A.$('[data-act="mesapen"]')); await wait(10); console.log('grosores al tocar el lápiz:', A.$$('.pad-pop [data-act="mesaw"]').length);
+    if (!A.$('#chatPad canvas') || A.$$('.pad-pop [data-act="mesaw"]').length !== 3) errors.push('el dibujo del chat no abre bien');
     // terminar la sesión
     M.click(M.$('[data-act="mesatab"][data-v="chat"]')); await wait(20);
     M.click(M.$('[data-act="mesaend"]')); await wait(10); M.click(M.$('[data-act="mesaend"]'));

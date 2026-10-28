@@ -31,12 +31,12 @@ async function page(html, lib, url, tag, errors, opts = {}) {
 /* El DM crea una campaña desde Inicio; devuelve el código */
 async function create(P, name = 'Prueba', key = 'dragon') {
   P.submit(P.fill(P.$('[data-form="campnew"]'), { name, key, key2: key }));
-  if (!await until(() => P.$('.camp-codebig b'))) throw new Error(P.tag + ': no se creó la campaña');
-  return P.$('.camp-codebig b').textContent.trim();
+  if (!await until(() => P.$('.camp-codechip b'))) throw new Error(P.tag + ': no se creó la campaña');
+  return P.$('.camp-codechip b').textContent.trim();
 }
 async function join(P, code) {
   P.submit(P.fill(P.$('[data-form="campjoin"]'), { code }));
-  if (!await until(() => P.$('.camp-top'))) throw new Error(P.tag + ': no pudo entrar a ' + code);
+  if (!await until(() => P.$('.camp-hero'))) throw new Error(P.tag + ': no pudo entrar a ' + code);
 }
 const mk = (id, name, cls = 'Bard|XPHB') => [{ id, name, level: 3, method: 'array', base: { str: 10, dex: 14, con: 12, int: 10, wis: 12, cha: 16 }, ch: { cls, race: 'Human|XPHB', bg: 'Sage|XPHB' }, rt: {} }];
 module.exports = { page, create, join, wait, until, mk };

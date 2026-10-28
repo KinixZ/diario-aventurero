@@ -38,7 +38,7 @@ Fuera de sesión todo sigue disponible: combate, chat, pizarra, tablero, mapas y
 | `t` | Campos | Quién | Qué hace |
 |---|---|---|---|
 | `init` | `value`, `id?` | jugador (el suyo) / DM (cualquiera) | Pone la iniciativa; reordena. |
-| `npc.add` | `name`, `ac`, `hp`, `init?`, `count?`, `hidden?`, `ref?`, `initMod?`, `formula?` | DM | Agrega uno o varios PNJ ("Goblin 1", "Goblin 2"…). `ref` = `Nombre|LIBRO` del bestiario (solo lo ve el DM). |
+| `npc.add` | `name`, `ac`, `hp`, `init?`, `count?`, `hidden?`, `ref?`, `initMod?`, `formula?`, `binfo?` | DM | Agrega uno o varios PNJ ("Goblin 1", "Goblin 2"…). `ref` = `Nombre|LIBRO` del Manual; `binfo: {type, size}` es lo que se anota en el encuentro. |
 | `npc.del` | `id` | DM | Quita un PNJ. |
 | `npc.set` | `id`, `hp?`, `hpMax?`, `delta?`, `ac?`, `name?`, `conds?` | DM | Ajusta a mano un enemigo. |
 | `npc.reveal` | `id` | DM | Muestra u oculta un PNJ a los jugadores. |
@@ -49,7 +49,7 @@ Fuera de sesión todo sigue disponible: combate, chat, pizarra, tablero, mapas y
 | `end` | — | DM | Termina el combate y borra la iniciativa. |
 | `apply` | `targets[]`, `kind`, `amount?`, `cond?`, `note?` | jugadores; el DM solo sobre enemigos | `kind`: `damage`, `heal`, `temp`, `cond+`, `cond-`. |
 
-Cuando un PNJ visible entra al combate (o el DM lo revela) y el registro automático está activo, se anota solo en el bestiario del grupo, sin el número del nombre ("Goblin 2" → "Goblin").
+Cuando un monstruo **de los manuales** (con `ref`) entra visible al combate (o el DM lo revela) y el registro automático está activo, se anota solo en el bestiario del grupo como encuentro (`manual: true`), sin el número del nombre ("Goblin 2" → "Goblin"). Los jugadores reciben su `ref` para abrir la entrada en su propio Manual. Los enemigos hechos a mano no se anotan solos.
 
 ## Mapas (tablero de juego)
 
@@ -93,9 +93,9 @@ La niebla viaja como base64 de un bit por casilla (`fog.cells`). Los jugadores n
 | `chat.send` | `text`, `to?` | cualquiera | Mensaje. Con `to` es un susurro entre un jugador y el DM. |
 | `chat.roll` | `label`, `total`, `nat?`, `adv?`, `to?` | cualquiera | Tirada compartida (dados físicos). |
 | `chat.img` | `img`, `caption?`, `to?` | cualquiera | Imagen ya subida por HTTP. |
-| `board.add` / `board.edit` | `item: {cat, title, text}`, `id?`, `img?` | DM | Nota del tablero. `cat`: `mision`, `pnj`, `lugar`, `pista`, `objeto`, `otro`. |
+| `board.add` / `board.edit` | `item: {cat, title, text, prio?, look?}`, `id?`, `img?` | DM | Nota del tablero. `cat`: `mision`, `pnj`, `lugar`, `pista`, `objeto`, `otro`. Las misiones llevan `prio` (`main` o `side`) y las principales `look` (`paper` o `scroll`). Editar no cambia si estaba cumplida. |
 | `board.done` / `board.del` | `id` | DM | Marca como hecha o borra. |
-| `draw.add` | `stroke: {color, w, pts, erase?}` | cualquiera | Trazo de la pizarra. |
+| `draw.add` | `stroke: {color, w, pts, erase?}` | cualquiera | Trazo de la pizarra compartida (la app ya no la muestra: los dibujos se adjuntan al chat como imagen con `chat.img`). |
 | `draw.undo` | — | cualquiera | Quita tu último trazo. |
 | `draw.clear` | — | DM | Hoja nueva: la actual se archiva. |
 

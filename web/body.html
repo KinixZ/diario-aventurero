@@ -13,7 +13,7 @@
         <h1 id="hName">Diario del Aventurero</h1>
         <p id="hSub"></p>
       </div>
-      <button class="icon-btn" type="button" data-act="mesa" aria-label="Abrir la mesa de juego" title="Mesa: chat, pizarra y tablero"><svg class="ic"><use href="#i-chat"/></svg></button>
+      <button class="icon-btn" type="button" data-act="mesa" aria-label="Abrir la mesa de juego" title="Mesa: chat y tablero"><svg class="ic"><use href="#i-chat"/></svg></button>
       <button class="icon-btn war" type="button" data-act="campanas" aria-label="Campañas: elegir campaña, mapa, combate y chat" title="Campañas"><svg class="ic"><use href="#i-banner"/></svg></button>
       <button class="icon-btn" type="button" data-act="settings" aria-label="Ajustes del diario" title="Ajustes"><svg class="ic"><use href="#i-gear"/></svg></button>
       <button class="icon-btn" type="button" data-act="close" aria-label="Cerrar diario" title="Cerrar diario"><svg class="ic"><use href="#i-book"/></svg></button>
@@ -52,6 +52,7 @@
         <button class="btn notes-maps" type="button" data-act="mapsopen"><svg class="ic"><use href="#i-map"/></svg>Mapas de las zonas</button>
         <div class="card ses-list" id="sesList"></div>
       </div>
+      <div class="panel" data-panel="bestias" id="pBestias" hidden></div>
       <div class="panel" data-panel="grimorio" id="grim" hidden></div>
     </div>
 
@@ -212,8 +213,8 @@
           <label class="toggle" style="margin-top:10px"><input type="checkbox" id="hudBg3"> Iconos estilo Baldur's Gate 3 <small class="muted">(acción en círculo verde, adicional en triángulo naranja, reacción en morado y espacios de conjuro en cuadros azules)</small></label>
         </section>
         <section>
-          <span class="label">bestiario del dm</span>
-          <p style="margin:6px 0 0;font-size:15px">Solo para el DM: el archivo <b>bestiario-5e.json</b> con los enemigos de tu 5etools. Se crea en la laptop con <code>npm run bestiario</code>.</p>
+          <span class="label">manual de monstruos</span>
+          <p style="margin:6px 0 0;font-size:15px">El archivo <b>bestiario-5e.json</b> con las criaturas de tu 5etools. El DM lo usa para meter enemigos al combate; los jugadores, para leer el Manual en el separador Bestiario. Se crea en la laptop con <code>npm run bestiario</code>.</p>
           <div class="picks"><label class="btn pickbtn">Elegir archivo<input type="file" id="bestFile"></label><button class="btn" type="button" data-act="bestdel" id="bestDel" hidden>Quitar bestiario</button></div>
           <p class="note" id="bestStatus" style="margin:6px 0 0"></p>
         </section>
@@ -247,7 +248,6 @@
       <button type="button" role="tab" data-act="mesatab" data-v="mapas" aria-selected="false"><svg class="ic"><use href="#i-map"/></svg><span>Mapa</span><i class="badge dot" hidden></i></button>
       <button type="button" role="tab" data-act="mesatab" data-v="combate" aria-selected="false"><svg class="ic"><use href="#i-swords"/></svg><span>Combate</span><i class="badge dot" hidden></i></button>
       <button type="button" role="tab" data-act="mesatab" data-v="chat" aria-selected="false"><svg class="ic"><use href="#i-chat"/></svg><span>Chat</span><i class="badge" hidden></i></button>
-      <button type="button" role="tab" data-act="mesatab" data-v="pizarra" aria-selected="false"><svg class="ic"><use href="#i-brush"/></svg><span>Pizarra</span></button>
       <button type="button" role="tab" data-act="mesatab" data-v="tablero" aria-selected="false"><svg class="ic"><use href="#i-pin"/></svg><span>Tablero</span></button>
       <button type="button" role="tab" data-act="mesatab" data-v="bestiario" aria-selected="false"><svg class="ic"><use href="#i-paw"/></svg><span>Bestiario</span></button>
     </nav>
@@ -255,7 +255,6 @@
     <div class="mesa-p" id="mesaHome"></div>
     <div class="mesa-p" id="mesaChat"></div>
     <div class="mesa-p" id="mesaBest"></div>
-    <div class="mesa-p" id="mesaDraw"></div>
     <div class="mesa-p" id="mesaBoard"></div>
     <div class="mesa-p" id="mesaMaps"></div>
     <div class="combat-b">

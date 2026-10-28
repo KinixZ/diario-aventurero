@@ -69,19 +69,8 @@
 .camp-codein{font-family:var(--display);font-size:24px;letter-spacing:.3em;text-align:center;height:56px;text-transform:uppercase}
 
 /* ---------- Inicio: dentro de la campaña ---------- */
-.camp-top{display:flex;flex-direction:column;gap:12px;padding:14px 16px}
-.camp-top-h{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .camp-name{display:flex;flex-direction:column;min-width:0}
 .camp-name b{font-family:var(--display);font-size:24px;line-height:1.15;color:var(--gold-hi)}
-.camp-top-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center}
-.camp-codebig{display:flex;flex-direction:column;align-items:center;gap:1px;padding:8px 14px;border:1px dashed var(--gold);border-radius:10px;background:var(--parch-3);color:var(--ink)}
-.camp-codebig small{font-size:11px;letter-spacing:.12em;color:var(--ink-2)}
-.camp-codebig b{font-family:var(--display);font-size:26px;letter-spacing:.18em;line-height:1.1}
-.camp-codebig span{font-size:12px;color:var(--gold-hi)}
-.camp-ses{display:flex;flex-direction:column;gap:2px;min-width:0}
-.camp-ses b{font-family:var(--display);font-size:17px}
-.camp-ses span{font-size:15px}
-.camp-ses small{font-size:13px;color:var(--ink-2)}
 .camp-people{display:flex;flex-wrap:wrap;gap:6px}
 .camp-who{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:2px 12px;border-radius:15px;border:1px solid var(--rule);font-size:14px;color:var(--ink-2)}
 .camp-who i{width:8px;height:8px;border-radius:50%;background:var(--rule)}
@@ -89,34 +78,16 @@
 .camp-who.on i{background:#5fb85a}
 .camp-who.me{font-weight:700}
 .camp-who.dm{font-family:var(--display);letter-spacing:.08em}
-.camp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-@media (min-width:720px){ .camp-grid{grid-template-columns:repeat(4,minmax(0,1fr))} }
-.camp-big{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:104px;padding:14px;border:1px solid var(--gold);border-radius:12px;background:var(--parch-2);color:var(--ink);text-align:left}
-.camp-big .ic{width:28px;height:28px;color:var(--gold-hi);margin-bottom:4px}
-.camp-big b{font-family:var(--display);font-size:16px;line-height:1.2}
-.camp-big small{font-size:13px;color:var(--ink-2)}
-.camp-big:active{transform:translateY(1px)}
-.camp-char .fl{display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--ink-2)}
 .camp-foot{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding-top:4px}
 .banner.warn{border-color:var(--warn)}
 
 /* Panel del DM: botones grandes para tablet y teléfono */
 .dm-panel{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
-@media (min-width:760px){ .dm-panel{grid-template-columns:repeat(2,minmax(0,1fr))} .dm-set{grid-column:1/-1} }
-.dm-box{display:flex;flex-direction:column;gap:10px;padding:14px 16px}
-.dm-box>form{display:flex;flex-direction:column;gap:10px}
-.dm-box>form.dm-row{flex-direction:row}
-.dm-box>form.dm-row .field{flex:1 1 160px}
 .dm-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .dm-row .field{flex:1 1 180px;min-width:0}
 .dm-row .btn{flex:1 1 auto}
 .dm-huge{height:60px!important;font-size:18px!important;font-family:var(--display);letter-spacing:.04em;width:100%}
 .dm-huge.end{border-color:var(--bad);color:var(--bad);background:transparent}
-.dm-stat{font-style:normal;font-size:15px;color:var(--ink)}
-.dm-set summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
-.dm-set summary::-webkit-details-marker{display:none}
-.dm-set summary::after{content:"▾";color:var(--gold-hi)}
-.dm-set[open] summary::after{content:"▴"}
 .dm-set .line{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--rule-2)}
 
 /* Chat: separadores entre sesiones */

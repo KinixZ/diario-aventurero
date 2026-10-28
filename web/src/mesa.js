@@ -10,7 +10,7 @@ var Mesa = (function(){
   var PAPER = '#f3e9d2', COLORS = ['#2b1d12', '#8c2626', '#2f5d8a', '#3f6b3a', '#b08a3e', '#6a3fa0', '#e07a2e', '#ffffff'];
   var CATS = [['mision','Misión'],['pnj','PNJ'],['lugar','Lugar'],['pista','Pista'],['objeto','Objeto'],['otro','Otro']];
   var ROLLS = ['Ataque', 'Daño', 'Iniciativa', 'Percepción', 'Perspicacia', 'Investigación', 'Sigilo', 'Atletismo', 'Acrobacias', 'Arcanos', 'Historia', 'Religión', 'Naturaleza', 'Supervivencia', 'Medicina', 'Engaño', 'Persuasión', 'Intimidación', 'Interpretación', 'Juego de manos', 'Trato con animales', 'Salvación de Fuerza', 'Salvación de Destreza', 'Salvación de Constitución', 'Salvación de Inteligencia', 'Salvación de Sabiduría', 'Salvación de Carisma', 'Concentración', 'Salvación contra muerte'];
-  var C = load(), tab = 'inicio', unread = 0, rollOpen = false, tool = {color: COLORS[0], w: 4, erase: false}, boardEdit = null, boardOpen = false, endedSnap = null, uploading = false;
+  var C = load(), tab = 'inicio', unread = 0, rollOpen = false, tool = {color: COLORS[0], w: 5, erase: false}, pad = null, padPop = false, boardEdit = null, boardOpen = false, endedSnap = null, uploading = false;
 
   function load(){ try { return JSON.parse(localStorage.getItem(KEY) || 'null') || blank(); } catch(e){ return blank(); } }
   function blank(code){ return {code: code || null, title: '', started: Date.now(), chat: [], board: [], strokes: [], pages: [], members: []}; }
@@ -41,7 +41,7 @@ var Mesa = (function(){
   function show(t){
     tab = t || tab; var cb = document.getElementById('combat'); if (!cb) return; cb.setAttribute('data-tab', tab);
     $$('#mesaTabs button').forEach(function(b){ var on = b.dataset.v === tab; b.setAttribute('aria-selected', String(on)); if (on && b.scrollIntoView && b.parentNode.scrollWidth > b.parentNode.clientWidth) try { b.scrollIntoView({block:'nearest', inline:'nearest'}); } catch(e){} });
-    if (tab === 'chat') { unread = 0; } badge(); render();
+    if (tab === 'chat') { unread = 0; } if (tab === 'tablero') boardIntro = true; badge(); render();
     var sc = document.querySelector('#combat [data-tab-body="' + tab + '"]'); if (sc) sc.scrollTop = 0;
   }
   function badge(){ var b = $('#mesaTabs [data-v="chat"] .badge'); if (b) { b.textContent = unread > 99 ? '99+' : unread; b.hidden = !unread; } }
@@ -49,7 +49,6 @@ var Mesa = (function(){
     if (tab === 'inicio' && window.Campana) Campana.render();
     else if (tab === 'bestiario' && window.Grupo) Grupo.render();
     else if (tab === 'chat') renderChat(false);
-    else if (tab === 'pizarra') renderDraw();
     else if (tab === 'tablero') renderBoard();
     else if (tab === 'mapas' && window.Mapas) Mapas.render();
   }
@@ -84,11 +83,13 @@ var Mesa = (function(){
     h += '<div class="chat-list" role="log" aria-live="polite">' + chatItems() + '</div>';
     h += '<form class="chat-form" data-form="mesachat">'
       + (rollOpen ? '<div class="roll-form"><input class="field" name="label" list="rollList" placeholder="Qué tiraste (Percepción)" aria-label="Qué tiraste" autocomplete="off"><input class="field" name="total" inputmode="numeric" placeholder="Total" aria-label="Total"><input class="field" name="nat" inputmode="numeric" placeholder="d20" aria-label="Lo que salió en el d20 (opcional)"><select class="field" name="adv" aria-label="Ventaja"><option value="">Normal</option><option value="adv">Ventaja</option><option value="dis">Desventaja</option></select><button class="btn main" type="submit" data-kind="roll">Compartir tirada</button><datalist id="rollList">' + ROLLS.map(function(x){ return '<option value="' + x + '">'; }).join('') + '</datalist></div>' : '')
-      + '<div class="chat-row"><select class="field chat-to" name="to" aria-label="Para quién">' + toOptions() + '</select><button type="button" class="icon-btn" data-act="mesaroll" aria-pressed="' + rollOpen + '" aria-label="Compartir una tirada" title="Tirada"><svg class="ic"><use href="#i-d20"/></svg></button><label class="icon-btn pickbtn" aria-label="Compartir una imagen" title="Imagen"><svg class="ic"><use href="#i-image"/></svg><input type="file" id="mesaImg" accept="image/*"></label></div>'
+      + (pad ? padHtml() : '')
+      + '<div class="chat-row"><select class="field chat-to" name="to" aria-label="Para quién">' + toOptions() + '</select><button type="button" class="icon-btn" data-act="mesaroll" aria-pressed="' + rollOpen + '" aria-label="Compartir una tirada" title="Tirada"><svg class="ic"><use href="#i-d20"/></svg></button><button type="button" class="icon-btn" data-act="mesapad" aria-pressed="' + !!pad + '" aria-label="Hacer un dibujo para el chat" title="Dibujo"><svg class="ic"><use href="#i-brush"/></svg></button><label class="icon-btn pickbtn" aria-label="Compartir una imagen" title="Imagen"><svg class="ic"><use href="#i-image"/></svg><input type="file" id="mesaImg" accept="image/*"></label></div>'
       + '<div class="chat-row"><textarea class="field" id="chatIn" name="text" rows="2" placeholder="Escribe una nota de la sesión…" aria-label="Mensaje">' + esc(draft) + '</textarea><button class="btn main" type="submit" data-kind="msg">Enviar</button></div>'
       + (uploading ? '<p class="note">Subiendo imagen…</p>' : '') + '</form>';
     box.innerHTML = h;
     var l2 = box.querySelector('.chat-list'); l2.scrollTop = l2.scrollHeight;
+    if (pad) mountPad();
   }
   function headHtml(){
     var r = room(); if (!r) return '';
@@ -127,21 +128,26 @@ var Mesa = (function(){
       .then(function(){ uploading = false; renderChat(false); });
   }
 
-  /* ---------- Pizarra ---------- */
-  var canvas = null, drawing = null;
+  /* ---------- Dibujo para el chat ----------
+     Un papel dentro del chat: dibujas con el dedo y lo adjuntas como imagen. El lápiz despliega grosor y color. */
+  var canvas = null, drawing = null, PENS = [[2, 'Fino'], [5, 'Medio'], [12, 'Grueso']];
   function ctx(){ return canvas && canvas.getContext('2d'); }
-  function renderDraw(){
-    var box = document.getElementById('mesaDraw'); if (!box) return;
-    if (!online()) { box.innerHTML = lobby('Aquí dibujan todos con el dedo: mapas, rutas, la cara del villano.'); mountLobby(); return; }
-    var dm = isDm();
-    box.innerHTML = '<div class="draw-tools"><div class="swatches" role="group" aria-label="Color">' + COLORS.map(function(c){ return '<button type="button" class="sw" data-act="mesacolor" data-v="' + c + '" style="background:' + c + '" aria-pressed="' + (!tool.erase && tool.color === c) + '" aria-label="Color ' + c + '"></button>'; }).join('') + '</div>'
-      + '<div class="seg sm" role="group" aria-label="Grosor">' + [[2,'Fino'],[5,'Medio'],[12,'Grueso']].map(function(x){ return '<button type="button" data-act="mesaw" data-v="' + x[0] + '" aria-pressed="' + (tool.w === x[0]) + '">' + x[1] + '</button>'; }).join('') + '<button type="button" data-act="mesaerase" aria-pressed="' + tool.erase + '">Borrador</button></div>'
-      + '<div class="row" style="gap:6px"><button class="btn sm" type="button" data-act="mesaundo">Deshacer lo mío</button>' + (dm ? '<button class="btn sm" type="button" data-act="mesaclear">Hoja nueva</button>' : '') + '<span class="muted" style="font-size:13px">' + (C.pages.length ? C.pages.length + ' hoja' + (C.pages.length > 1 ? 's' : '') + ' guardada' + (C.pages.length > 1 ? 's' : '') : '') + '</span></div></div>'
-      + '<div class="draw-wrap"><canvas id="mesaCanvas" aria-label="Pizarra compartida: dibuja con el dedo"></canvas></div>';
-    canvas = box.querySelector('canvas');
-    fit(); drawAll(); bindCanvas();
+  function penDot(){ return tool.w < 4 ? 4 : tool.w < 8 ? 7 : 11; }
+  function padHtml(){
+    return '<div class="chat-pad" id="chatPad"><div class="pad-bar">'
+      + '<button type="button" class="icon-btn pen-btn" data-act="mesapen" aria-expanded="' + padPop + '" aria-pressed="' + !tool.erase + '" aria-label="Lápiz: grosor y color" title="Lápiz"><svg class="ic"><use href="#i-pencil"/></svg><i class="pen-dot" style="background:' + attr(tool.color) + ';--w:' + penDot() + 'px"></i></button>'
+      + '<button type="button" class="icon-btn" data-act="mesaerase" aria-pressed="' + tool.erase + '" aria-label="Borrador" title="Borrador"><svg class="ic"><use href="#i-eraser"/></svg></button>'
+      + '<button type="button" class="icon-btn" data-act="mesaundo" aria-label="Deshacer el último trazo" title="Deshacer"' + (pad.strokes.length ? '' : ' disabled') + '><svg class="ic"><use href="#i-undo"/></svg></button>'
+      + '<button type="button" class="icon-btn" data-act="mesaclear" aria-label="Borrar el dibujo" title="Borrar todo"' + (pad.strokes.length ? '' : ' disabled') + '><svg class="ic"><use href="#i-trash"/></svg></button>'
+      + '<span class="pad-sp"></span><button type="button" class="icon-btn" data-act="mesapadx" aria-label="Cerrar el dibujo" title="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>'
+      + (padPop ? '<div class="pad-pop penpop"><span class="label">trazo</span><div class="pen-ws" role="group" aria-label="Grosor">' + PENS.map(function(x, i){ return '<button type="button" data-act="mesaw" data-v="' + x[0] + '" aria-pressed="' + (tool.w === x[0]) + '" aria-label="' + x[1] + '" title="' + x[1] + '"><svg viewBox="0 0 60 20" aria-hidden="true"><path d="M6 14 Q20 2 32 10 T54 6" stroke="' + attr(tool.color) + '" stroke-width="' + [2, 4.5, 8][i] + '" fill="none" stroke-linecap="round"/></svg></button>'; }).join('') + '</div>'
+        + '<span class="label">color</span><div class="swatches" role="group" aria-label="Color">' + COLORS.map(function(c){ return '<button type="button" class="sw" data-act="mesacolor" data-v="' + c + '" style="background:' + c + '" aria-pressed="' + (!tool.erase && tool.color === c) + '" aria-label="Color ' + c + '"></button>'; }).join('') + '</div></div>' : '')
+      + '<div class="pad-paper"><canvas id="mesaCanvas" aria-label="Dibujo para el chat: dibuja con el dedo"></canvas></div>'
+      + '<button type="button" class="btn main pad-send" data-act="mesapadsend"' + (pad.strokes.length ? '' : ' disabled') + '><svg class="ic"><use href="#i-send"/></svg>Adjuntar dibujo al chat</button></div>';
   }
-  function fit(){ if (!canvas) return; var w = canvas.parentNode.clientWidth || 320, dpr = window.devicePixelRatio || 1; canvas.style.width = w + 'px'; canvas.style.height = Math.round(w * 4 / 3) + 'px'; canvas.width = Math.round(w * dpr); canvas.height = Math.round(w * 4 / 3 * dpr); }
+  function mountPad(){ canvas = document.getElementById('mesaCanvas'); if (!canvas) return; fit(); drawAll(); bindCanvas(); }
+  function padBar(){ var old = document.getElementById('chatPad'); if (!old || !pad) return; var tmp = document.createElement('div'); tmp.innerHTML = padHtml(); var nw = tmp.firstChild, paper = old.querySelector('.pad-paper'); nw.replaceChild(paper, nw.querySelector('.pad-paper')); old.parentNode.replaceChild(nw, old); }
+  function fit(){ if (!canvas) return; var w = canvas.parentNode.clientWidth || 320, h = Math.round(Math.min(w * 0.75, Math.max(200, (window.innerHeight || 700) * 0.42))), dpr = window.devicePixelRatio || 1; canvas.style.width = w + 'px'; canvas.style.height = h + 'px'; canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
   function strokeOn(c, k, W){
     if (!c || !k || !k.pts || k.pts.length < 2) return;
     W = W || (canvas ? canvas.width : 0); if (!W) return;
@@ -152,29 +158,83 @@ var Mesa = (function(){
     c.stroke(); c.restore();
   }
   function paintAll(c, W, H, strokes){ c.fillStyle = PAPER; c.fillRect(0, 0, W, H); strokes.forEach(function(k){ strokeOn(c, k, W); }); }
-  function drawAll(){ if (!canvas || !document.contains(canvas)) return; var c = ctx(); if (!c) return; paintAll(c, canvas.width, canvas.height, C.strokes); if (drawing) strokeOn(c, drawing); }
+  function drawAll(){ if (!canvas || !document.contains(canvas) || !pad) return; var c = ctx(); if (!c) return; paintAll(c, canvas.width, canvas.height, pad.strokes); if (drawing) strokeOn(c, drawing); }
   function bindCanvas(){
     var pos = function(ev){ var r = canvas.getBoundingClientRect(); return [Math.round((ev.clientX - r.left) / r.width * 1000) / 1000, Math.round((ev.clientY - r.top) / r.width * 1000) / 1000]; };
-    canvas.addEventListener('pointerdown', function(ev){ ev.preventDefault(); try { canvas.setPointerCapture(ev.pointerId); } catch(e){} var p = pos(ev); drawing = {color: tool.color, w: tool.w, erase: tool.erase, pts: [p[0], p[1]]}; strokeOn(ctx(), drawing); });
+    canvas.addEventListener('pointerdown', function(ev){ ev.preventDefault(); if (padPop) { padPop = false; padBar(); } try { canvas.setPointerCapture(ev.pointerId); } catch(e){} var p = pos(ev); drawing = {color: tool.color, w: tool.w, erase: tool.erase, pts: [p[0], p[1]]}; strokeOn(ctx(), drawing); });
     canvas.addEventListener('pointermove', function(ev){ if (!drawing) return; var p = pos(ev), n = drawing.pts.length; var dx = p[0] - drawing.pts[n - 2], dy = p[1] - drawing.pts[n - 1]; if (dx * dx + dy * dy < 0.000016) return; if (n >= 1700) return; drawing.pts.push(p[0], p[1]); var c = ctx(), W = canvas.width; c.save(); c.lineCap = 'round'; c.strokeStyle = drawing.erase ? PAPER : drawing.color; c.lineWidth = Math.max(1, drawing.w * W / 400); c.beginPath(); c.moveTo(drawing.pts[n - 2] * W, drawing.pts[n - 1] * W); c.lineTo(p[0] * W, p[1] * W); c.stroke(); c.restore(); });
-    var end = function(){ if (!drawing) return; var k = drawing; drawing = null; Sala.send({t:'draw.add', stroke:k}); };
+    var end = function(){ if (!drawing) return; var k = drawing, was = pad.strokes.length; drawing = null; pad.strokes.push(k); if (!was) padBar(); };
     canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end); canvas.addEventListener('pointerleave', function(ev){ if (ev.buttons === 0) end(); });
   }
-  window.addEventListener('resize', function(){ if (tab === 'pizarra' && canvas) { fit(); drawAll(); } });
+  /* El dibujo se vuelve imagen (papel 4:3) y se sube como cualquier imagen del chat */
+  function sendPad(){
+    if (!pad || !pad.strokes.length || !canvas) return;
+    var W = 1200, H = Math.round(W * canvas.height / canvas.width), cv = document.createElement('canvas'); cv.width = W; cv.height = H; var c = cv.getContext('2d'); if (!c) return;
+    paintAll(c, W, H, pad.strokes);
+    var f = document.querySelector('[data-form="mesachat"]'), to = f && f.elements.to ? f.elements.to.value : '', cap = f ? f.elements.text.value.trim() : ''; if (f) f.elements.text.value = '';
+    cv.toBlob(function(blob){ if (!blob) { Sala.toast('No se pudo preparar el dibujo.'); return; } pad = null; padPop = false; uploadImage(blob, cap, to); }, 'image/png');
+  }
+  window.addEventListener('resize', function(){ if (pad && canvas && document.contains(canvas)) { fit(); drawAll(); } });
 
-  /* ---------- Tablero del DM ---------- */
+  /* ---------- Tablero ----------
+     Misiones clavadas en un tablero de corcho: las principales en papel grande y gastado (o pergamino), las secundarias en
+     notas chicas. Los PNJ que conocen van en su propia pared de retratos; lugares, pistas y objetos, en notas de campo. */
+  var seenBoard = null, readId = null, boardIntro = true;
+  var FIELD = [['lugar', 'Lugares', 'i-map'], ['pista', 'Pistas', 'i-eye'], ['objeto', 'Objetos', 'i-gem'], ['otro', 'Otras notas', 'i-quill']];
+  function rot(id, k){ var h = 0; for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0; return ((Math.abs(h) % (k * 20 + 1)) / 10 - k).toFixed(1); }
+  function isMain(b){ return b.prio ? b.prio === 'main' : true; }
+  function initialsOf(t){ return String(t || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(function(w){ return w.charAt(0); }).join('').toUpperCase(); }
+  function dmBtns(b){ return '<span class="q-btns"><button class="pill" type="button" data-act="mesabdone" data-id="' + attr(b.id) + '">' + (b.done ? 'Reabrir' : b.cat === 'mision' ? 'Cumplida' : 'Hecho') + '</button><button class="pill" type="button" data-act="mesabedit" data-id="' + attr(b.id) + '">Editar</button><button class="pill" type="button" data-act="mesabdel" data-id="' + attr(b.id) + '">Borrar</button></span>'; }
+  function body(b, clamp){ return (b.text ? '<p' + (clamp ? ' class="clamp"' : '') + '>' + esc(b.text).replace(/\n/g, '<br>') + '</p>' : '') + (b.img ? '<img class="q-img" alt="" loading="lazy" src="' + attr(imgUrl(b.img)) + '">' : ''); }
+  function questHtml(b, i, dm, big){
+    var main = isMain(b), look = main ? (b.look === 'scroll' ? 'scroll' : 'worn') : 'note', fresh = seenBoard && !seenBoard[b.id] && !big;
+    return '<article class="quest q-' + look + (b.done ? ' done' : '') + (fresh ? ' fresh' : '') + (big ? ' big' : '') + '" style="--r:' + (big ? 0 : rot(b.id, main ? 1.4 : 3.2)) + 'deg;--d:' + (i * 70) + 'ms"' + (big ? '' : ' data-act="mesabread" data-id="' + attr(b.id) + '" role="button" tabindex="0" aria-label="Leer ' + attr(b.title) + '"') + '>'
+      + (look === 'scroll' ? '<i class="q-rod top"></i>' : '<i class="q-pin"></i>')
+      + '<span class="q-kind">' + (main ? 'Misión principal' : 'Misión secundaria') + '</span><h4>' + esc(b.title) + '</h4>' + body(b, !big)
+      + (b.done ? '<span class="q-stamp">Cumplida</span>' : '') + (look === 'scroll' ? '<i class="q-rod bot"></i>' : '')
+      + (dm && big ? dmBtns(b) : '') + '</article>';
+  }
+  function npcHtml(b, i, dm, big){
+    var fresh = seenBoard && !seenBoard[b.id] && !big;
+    return '<article class="npc-card' + (b.done ? ' done' : '') + (fresh ? ' fresh' : '') + (big ? ' big' : '') + '" style="--r:' + (big ? 0 : rot(b.id, 2)) + 'deg;--d:' + (i * 60) + 'ms"' + (big ? '' : ' data-act="mesabread" data-id="' + attr(b.id) + '" role="button" tabindex="0" aria-label="Leer sobre ' + attr(b.title) + '"') + '>'
+      + '<span class="npc-face">' + (b.img ? '<img alt="" loading="lazy" src="' + attr(imgUrl(b.img)) + '">' : '<b>' + esc(initialsOf(b.title)) + '</b>') + '</span>'
+      + '<h4>' + esc(b.title) + '</h4>' + (b.text ? '<p' + (big ? '' : ' class="clamp"') + '>' + esc(b.text).replace(/\n/g, '<br>') + '</p>' : '') + (b.done ? '<span class="npc-tag">Fuera de escena</span>' : '') + (dm && big ? dmBtns(b) : '') + '</article>';
+  }
+  function fieldHtml(b, i, dm, big, icon){
+    var fresh = seenBoard && !seenBoard[b.id] && !big;
+    return '<article class="field-note' + (b.done ? ' done' : '') + (fresh ? ' fresh' : '') + (big ? ' big' : '') + '" style="--d:' + (i * 50) + 'ms"' + (big ? '' : ' data-act="mesabread" data-id="' + attr(b.id) + '" role="button" tabindex="0"') + '><svg class="ic"><use href="#' + icon + '"/></svg><div><h4>' + esc(b.title) + '</h4>' + body(b, !big) + '</div>' + (dm && big ? dmBtns(b) : '') + '</article>';
+  }
+  function itemHtml(b, i, dm, big){ if (b.cat === 'mision') return questHtml(b, i, dm, big); if (b.cat === 'pnj') return npcHtml(b, i, dm, big); var f = FIELD.filter(function(x){ return x[0] === b.cat; })[0] || FIELD[3]; return fieldHtml(b, i, dm, big, f[2]); }
+  function boardForm(){
+    var e = boardEdit || {cat:'mision', title:'', text:'', prio:'main', look:'worn'}, pr = e.prio || 'main', lk = e.look === 'scroll' ? 'scroll' : 'paper';
+    return '<form class="board-form card" data-form="mesaboard"><div class="row"><b>' + (e.id ? 'Editar nota' : 'Nueva nota') + '</b><button class="icon-btn sm" type="button" data-act="mesaboardnew" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div><div class="seg sm">' + CATS.map(function(c){ return '<button type="button" data-act="mesacat" data-v="' + c[0] + '" aria-pressed="' + (e.cat === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>'
+      + '<input type="hidden" name="cat" value="' + attr(e.cat) + '"><input type="hidden" name="prio" value="' + attr(pr) + '"><input type="hidden" name="look" value="' + attr(lk) + '">'
+      + '<div class="q-opts"' + (e.cat === 'mision' ? '' : ' hidden') + '><div class="seg sm" role="group" aria-label="Importancia"><button type="button" data-act="mesaprio" data-v="main" aria-pressed="' + (pr === 'main') + '">Principal</button><button type="button" data-act="mesaprio" data-v="side" aria-pressed="' + (pr === 'side') + '">Secundaria</button></div>'
+      + '<div class="seg sm q-look" role="group" aria-label="Cómo se ve"' + (pr === 'main' ? '' : ' hidden') + '><button type="button" data-act="mesalook" data-v="paper" aria-pressed="' + (lk === 'paper') + '">Papel gastado</button><button type="button" data-act="mesalook" data-v="scroll" aria-pressed="' + (lk === 'scroll') + '">Pergamino</button></div></div>'
+      + '<input class="field" name="title" value="' + attr(e.title) + '" placeholder="Título (Rescatar al herrero)" aria-label="Título" autocomplete="off"><textarea class="field" name="text" rows="3" placeholder="Lo que deben recordar…" aria-label="Texto">' + esc(e.text) + '</textarea>' + (e.img ? '<img class="board-img" alt="" src="' + attr(imgUrl(e.img)) + '">' : '') + '<button class="btn main" type="submit">' + (e.id ? 'Guardar' : 'Clavar en el tablero') + '</button></form>';
+  }
   function renderBoard(){
     var box = document.getElementById('mesaBoard'); if (!box) return;
-    if (!online()) { box.innerHTML = lobby('Aquí el DM fija la misión, los PNJ, los lugares y las pistas para que todos los tengan a la mano.'); mountLobby(); return; }
-    var dm = isDm(), h = '';
-    if (dm) h += '<div class="row" style="gap:8px;margin-bottom:10px"><button class="btn main sm" type="button" data-act="mesaboardnew">' + (boardOpen ? 'Cerrar' : 'Nueva nota') + '</button><span class="note">Solo tú escribes aquí; todos lo ven.</span></div>';
-    if (dm && boardOpen) { var e = boardEdit || {cat:'mision', title:'', text:''}; h += '<form class="board-form card" data-form="mesaboard"><div class="seg sm">' + CATS.map(function(c){ return '<button type="button" data-act="mesacat" data-v="' + c[0] + '" aria-pressed="' + (e.cat === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div><input type="hidden" name="cat" value="' + attr(e.cat) + '"><input class="field" name="title" value="' + attr(e.title) + '" placeholder="Título (Vela, la herrera)" aria-label="Título" autocomplete="off"><textarea class="field" name="text" rows="3" placeholder="Lo que deben recordar…" aria-label="Texto">' + esc(e.text) + '</textarea>' + (e.img ? '<img class="board-img" alt="" src="' + attr(imgUrl(e.img)) + '">' : '') + '<button class="btn main" type="submit">' + (e.id ? 'Guardar' : 'Fijar en el tablero') + '</button></form>'; }
-    if (!C.board.length) h += '<p class="note">' + (dm ? 'Todavía no hay notas. Empieza por la misión actual.' : 'El DM todavía no ha fijado nada.') + '</p>';
-    CATS.forEach(function(c){
-      var items = C.board.filter(function(b){ return b.cat === c[0]; }); if (!items.length) return;
-      h += '<div class="group-h">' + c[1] + '</div>' + items.map(function(b){ return '<div class="board-item card' + (b.done ? ' done' : '') + '"><div class="row"><b>' + esc(b.title) + '</b>' + (dm ? '<span class="board-btns"><button class="pill" type="button" data-act="mesabdone" data-id="' + attr(b.id) + '">' + (b.done ? 'Reabrir' : 'Hecho') + '</button><button class="pill" type="button" data-act="mesabedit" data-id="' + attr(b.id) + '">Editar</button><button class="pill" type="button" data-act="mesabdel" data-id="' + attr(b.id) + '">Borrar</button></span>' : '') + '</div>' + (b.text ? '<p>' + esc(b.text).replace(/\n/g, '<br>') + '</p>' : '') + (b.img ? '<button type="button" class="msg-img" data-act="mesaview" data-img="' + attr(b.img) + '"><img alt="" loading="lazy" src="' + attr(imgUrl(b.img)) + '"></button>' : '') + '</div>'; }).join('');
-    });
+    if (!online()) { box.innerHTML = lobby('Aquí el DM clava las misiones, los PNJ que conocen, los lugares y las pistas.'); mountLobby(); return; }
+    var dm = isDm(), B = C.board, h = '<div class="board-home' + (boardIntro ? ' intro' : '') + '">'; boardIntro = false;
+    var quests = B.filter(function(b){ return b.cat === 'mision'; }), mains = quests.filter(isMain), sides = quests.filter(function(b){ return !isMain(b); });
+    var open = function(a){ return a.filter(function(b){ return !b.done; }).concat(a.filter(function(b){ return b.done; })); };
+    if (dm) h += '<div class="board-dmbar"><button class="btn main sm" type="button" data-act="mesaboardnew"><svg class="ic"><use href="#i-pin"/></svg>' + (boardOpen ? 'Cerrar' : 'Clavar una nota') + '</button><span class="note">Solo tú escribes aquí; todos lo ven.</span></div>' + (boardOpen ? boardForm() : '');
+    // Tablero de misiones
+    h += '<section class="qboard-wrap"><h3 class="board-h"><svg class="ic"><use href="#i-scroll"/></svg>Tablero de misiones' + (quests.length ? '<small>' + quests.filter(function(b){ return !b.done; }).length + ' abiertas</small>' : '') + '</h3><div class="qboard">'
+      + (quests.length ? '<div class="q-mains">' + open(mains).map(function(b, i){ return questHtml(b, i, dm); }).join('') + '</div>' + (sides.length ? '<div class="q-sides">' + open(sides).map(function(b, i){ return questHtml(b, i + mains.length, dm); }).join('') + '</div>' : '')
+        : '<p class="qboard-empty">' + (dm ? 'El tablero está vacío. Clava la primera misión.' : 'Todavía no hay misiones en el tablero.') + '</p>') + '</div></section>';
+    // PNJ
+    var npcs = B.filter(function(b){ return b.cat === 'pnj'; });
+    if (npcs.length) h += '<section><h3 class="board-h"><svg class="ic"><use href="#i-helm"/></svg>Personajes que conocen<small>' + npcs.length + '</small></h3><div class="npc-wall">' + open(npcs).map(function(b, i){ return npcHtml(b, i, dm); }).join('') + '</div></section>';
+    // Notas de campo
+    FIELD.forEach(function(f){ var it = B.filter(function(b){ return b.cat === f[0]; }); if (!it.length) return; h += '<section><h3 class="board-h"><svg class="ic"><use href="#' + f[2] + '"/></svg>' + f[1] + '</h3><div class="field-notes">' + open(it).map(function(b, i){ return fieldHtml(b, i, dm, false, f[2]); }).join('') + '</div></section>'; });
+    h += '</div>';
+    var rd = readId && B.filter(function(b){ return b.id === readId; })[0];
+    if (rd) h += '<div class="board-read" data-act="mesabreadx"><div class="board-read-in">' + itemHtml(rd, 0, dm, true) + '<button class="icon-btn board-read-x" type="button" data-act="mesabreadx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div></div>';
+    else readId = null;
     box.innerHTML = h;
+    var s2 = {}; B.forEach(function(b){ s2[b.id] = 1; }); seenBoard = s2;
   }
 
   /* ---------- Fin de la sesión: Notas + archivo ---------- */
@@ -248,15 +308,22 @@ var Mesa = (function(){
     else if (a === 'mesaend') { if (b.dataset.sure) Sala.send({t:'session.end'}); else { b.dataset.sure = 1; b.textContent = '¿Seguro? Toca otra vez'; setTimeout(function(){ if (document.contains(b)) { delete b.dataset.sure; b.textContent = 'Terminar sesión'; } }, 4000); } }
     else if (a === 'mesastart') Sala.send({t:'session.start'});
     else if (a === 'mesadl') { var ix = index(); if (ix[0]) download(ix[0].id); }
-    else if (a === 'mesacolor') { tool.color = b.dataset.v; tool.erase = false; renderDraw(); }
-    else if (a === 'mesaw') { tool.w = +b.dataset.v; renderDraw(); }
-    else if (a === 'mesaerase') { tool.erase = !tool.erase; renderDraw(); }
-    else if (a === 'mesaundo') Sala.send({t:'draw.undo'});
-    else if (a === 'mesaclear') { if (b.dataset.sure) Sala.send({t:'draw.clear'}); else { b.dataset.sure = 1; b.textContent = '¿Guardar y limpiar?'; setTimeout(function(){ if (document.contains(b)) { delete b.dataset.sure; b.textContent = 'Hoja nueva'; } }, 4000); } }
+    else if (a === 'mesapad') { pad = pad ? null : {strokes: []}; padPop = false; renderChat(false); }
+    else if (a === 'mesapadx') { pad = null; padPop = false; renderChat(false); }
+    else if (a === 'mesapen') { if (tool.erase) { tool.erase = false; padPop = true; } else padPop = !padPop; padBar(); }
+    else if (a === 'mesacolor') { tool.color = b.dataset.v; tool.erase = false; padBar(); }
+    else if (a === 'mesaw') { tool.w = +b.dataset.v; tool.erase = false; padPop = false; padBar(); }
+    else if (a === 'mesaerase') { tool.erase = !tool.erase; padPop = false; padBar(); }
+    else if (a === 'mesaundo') { if (pad) { pad.strokes.pop(); drawAll(); padBar(); } }
+    else if (a === 'mesaclear') { if (pad) { pad.strokes = []; drawAll(); padBar(); } }
+    else if (a === 'mesapadsend') sendPad();
     else if (a === 'mesaboardnew') { boardOpen = !boardOpen; boardEdit = null; renderBoard(); }
-    else if (a === 'mesacat') { var f = b.closest('form'); f.elements.cat.value = b.dataset.v; $$('[data-act="mesacat"]', f).forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); }); if (boardEdit) boardEdit.cat = b.dataset.v; }
-    else if (a === 'mesabedit') { boardEdit = JSON.parse(JSON.stringify(C.board.filter(function(x){ return x.id === b.dataset.id; })[0] || null)); boardOpen = !!boardEdit; renderBoard(); }
-    else if (a === 'mesabdel') { if (b.dataset.sure) Sala.send({t:'board.del', id:b.dataset.id}); else { b.dataset.sure = 1; b.textContent = '¿Borrar?'; } }
+    else if (a === 'mesacat') { var f = b.closest('form'); f.elements.cat.value = b.dataset.v; $$('[data-act="mesacat"]', f).forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); }); if (boardEdit) boardEdit.cat = b.dataset.v; var qo = f.querySelector('.q-opts'); if (qo) qo.hidden = b.dataset.v !== 'mision'; }
+    else if (a === 'mesaprio' || a === 'mesalook') { var f2 = b.closest('form'), nm = a === 'mesaprio' ? 'prio' : 'look'; f2.elements[nm].value = b.dataset.v; $$('[data-act="' + a + '"]', f2).forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); }); if (a === 'mesaprio') f2.querySelector('.q-look').hidden = b.dataset.v !== 'main'; }
+    else if (a === 'mesabread') { if (ev.target.closest('.pill')) return; readId = b.dataset.id; renderBoard(); }
+    else if (a === 'mesabreadx') { if (ev.target.closest('.board-read-in') && !ev.target.closest('.board-read-x')) return; var rdv = document.querySelector('.board-read'); readId = null; if (rdv) { rdv.classList.add('closing'); setTimeout(renderBoard, 180); } else renderBoard(); }
+    else if (a === 'mesabedit') { boardEdit = JSON.parse(JSON.stringify(C.board.filter(function(x){ return x.id === b.dataset.id; })[0] || null)); if (boardEdit && boardEdit.cat === 'mision' && !boardEdit.prio) boardEdit.prio = 'main'; boardOpen = !!boardEdit; readId = null; renderBoard(); var bf = document.querySelector('[data-form="mesaboard"]'); if (bf && bf.scrollIntoView) try { bf.scrollIntoView({block:'start', behavior:'smooth'}); } catch(e){} }
+    else if (a === 'mesabdel') { if (b.dataset.sure) { Sala.send({t:'board.del', id:b.dataset.id}); readId = null; } else { b.dataset.sure = 1; b.textContent = '¿Borrar?'; } }
     else if (a === 'mesabdone') Sala.send({t:'board.done', id:b.dataset.id});
     else if (a === 'sesdl') download(b.dataset.id);
     else if (a === 'sesdel') { if (b.dataset.sure) { idbDelK('ses:' + b.dataset.id); setIndex(index().filter(function(x){ return x.id !== b.dataset.id; })); renderSessions(); } else { b.dataset.sure = 1; b.style.borderColor = 'var(--bad)'; b.setAttribute('aria-label', 'Toca otra vez para borrar'); } }
@@ -264,13 +331,13 @@ var Mesa = (function(){
   document.addEventListener('submit', function(ev){
     var f = ev.target, kind = f.dataset && f.dataset.form; if (kind !== 'mesachat' && kind !== 'mesaboard') return;
     ev.preventDefault();
-    if (kind === 'mesaboard') { var it = {cat:f.elements.cat.value, title:f.elements.title.value.trim(), text:f.elements.text.value.trim()}; if (!it.title) { f.elements.title.focus(); return; } if (boardEdit && boardEdit.id) Sala.send({t:'board.edit', id:boardEdit.id, item:it, img:boardEdit.img || null}); else Sala.send({t:'board.add', item:it, img: boardEdit && boardEdit.img || null}); boardEdit = null; boardOpen = false; return; }
+    if (kind === 'mesaboard') { var it = {cat:f.elements.cat.value, title:f.elements.title.value.trim(), text:f.elements.text.value.trim(), prio:f.elements.prio.value, look:f.elements.look.value === 'scroll' ? 'scroll' : 'paper'}; if (!it.title) { f.elements.title.focus(); return; } if (boardEdit && boardEdit.id) Sala.send({t:'board.edit', id:boardEdit.id, item:it, img:boardEdit.img || null}); else Sala.send({t:'board.add', item:it, img: boardEdit && boardEdit.img || null}); boardEdit = null; boardOpen = false; return; }
     var k = ev.submitter && ev.submitter.dataset.kind || 'msg', to = f.elements.to ? f.elements.to.value : '';
     if (k === 'roll') { var tot = parseInt(f.elements.total.value, 10); if (!isFinite(tot)) { f.elements.total.focus(); return; } Sala.send({t:'chat.roll', label:f.elements.label.value.trim(), total:tot, nat:f.elements.nat.value.trim() || null, adv:f.elements.adv.value || null, to:to || null}); rollOpen = false; renderChat(false); return; }
     var tx = f.elements.text.value.trim(); if (!tx) return;
     Sala.send({t:'chat.send', text:tx, to:to || null}); f.elements.text.value = '';
   });
-  document.addEventListener('keydown', function(ev){ if (ev.target && ev.target.id === 'chatIn' && ev.key === 'Enter' && !ev.shiftKey && window.matchMedia('(min-width: 900px)').matches) { ev.preventDefault(); var f = ev.target.form; var btn = f.querySelector('[data-kind="msg"]'); var e2 = new Event('submit', {bubbles:true, cancelable:true}); try { Object.defineProperty(e2, 'submitter', {value:btn}); } catch(x){} f.dispatchEvent(e2); } });
+  document.addEventListener('keydown', function(ev){ var t0 = ev.target; if (t0 && t0.matches && t0.matches('article[data-act="mesabread"]') && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); t0.click(); return; } if (ev.key === 'Escape' && readId) { readId = null; renderBoard(); return; } if (ev.target && ev.target.id === 'chatIn' && ev.key === 'Enter' && !ev.shiftKey && window.matchMedia('(min-width: 900px)').matches) { ev.preventDefault(); var f = ev.target.form; var btn = f.querySelector('[data-kind="msg"]'); var e2 = new Event('submit', {bubbles:true, cancelable:true}); try { Object.defineProperty(e2, 'submitter', {value:btn}); } catch(x){} f.dispatchEvent(e2); } });
   document.addEventListener('change', function(ev){
     var t = ev.target;
     if (t.id === 'mesaImg' && t.files && t.files[0]) { var f = t.form, to = f && f.elements.to ? f.elements.to.value : ''; var cap = f ? f.elements.text.value.trim() : ''; if (f) f.elements.text.value = ''; uploadImage(t.files[0], cap, to); t.value = ''; }

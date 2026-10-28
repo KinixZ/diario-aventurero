@@ -17,6 +17,7 @@ Los scripts se cargan en este orden y cada uno expone un objeto global:
 | `campana.js` | `Campana` | `Sala`, `Mesa` | Pestaña Inicio: selector de campañas, entrar con código, crear o abrir como DM y el panel del DM (sesión, mapa en pantalla, bestiario, ajustes). Activa la vista ancha `.app.camp-wide`. |
 | `bestiario.js` | `Bestiario` | `Sala`, `Render5e` | Bestiario del DM (`bestiario-5e.json`, IndexedDB `bestiary`): buscador, ficha y agregar a la iniciativa. |
 | `grupo.js` | `Grupo` | `Sala`, `Bestiario` | Bestiario del grupo: lista, ficha compartida, notas y formulario del DM. |
+| `cronica.js` | `Cronica` | `Sala`, `Bestiario` | Separador Bestiario del diario: encuentros de todas las campañas guardados en IndexedDB `encuentros` y acceso al Manual de Monstruos. |
 | `mapas.js` | `Mapas` | `Sala` | Mesa virtual: lienzo con zoom, cuadrícula, capas, trazos, fondo, fichas, niebla, regla y señales; modos Jugar / Dibujar / Niebla. Copia en IndexedDB `map:<id>` e índice `localStorage['diario-mapas']`. |
 
 ## El personaje

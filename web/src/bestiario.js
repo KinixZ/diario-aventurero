@@ -45,7 +45,7 @@ var Bestiario = (function(){
   function settings(){
     var st = $('#bestStatus'); if (!st) return;
     ready().then(function(){
-      st.textContent = has() ? list.length + ' criaturas cargadas' + (meta && meta.creado ? ' · creado el ' + new Date(meta.creado).toLocaleDateString('es-MX') : '') + '.' : 'Sin bestiario. Solo lo necesita el DM.';
+      st.textContent = has() ? list.length + ' criaturas cargadas' + (meta && meta.creado ? ' · creado el ' + new Date(meta.creado).toLocaleDateString('es-MX') : '') + '.' : 'Sin bestiario. El DM lo usa en combate; los jugadores, para leer el Manual de Monstruos en su diario.';
       var del = $('#bestDel'); if (del) del.hidden = !has();
     });
   }
@@ -56,7 +56,7 @@ var Bestiario = (function(){
       var j; try { j = JSON.parse(fr.result); } catch(e){ if (st) st.textContent = 'Ese archivo no es un JSON válido.'; return; }
       if (!j || !Array.isArray(j.monster) || !j.monster.length) { if (st) st.textContent = 'Ese archivo no trae criaturas. Usa el que crea "npm run bestiario".'; return; }
       if (!j._bestiario && j._diario) { if (st) st.textContent = 'Ese es el paquete del diario. El bestiario es otro archivo: bestiario-5e.json.'; return; }
-      setData(j); loading = Promise.resolve(true);
+      setData(j); loading = Promise.resolve(true); if (window.Cronica) Cronica.render();
       idbPut('bestiary', j).then(function(ok){ if (st) st.textContent = ok ? list.length + ' criaturas cargadas en este dispositivo.' : 'Se cargó, pero no hubo espacio para guardarlo: tendrás que cargarlo otra vez.'; var del = $('#bestDel'); if (del) del.hidden = false; });
     };
     fr.onerror = function(){ if (st) st.textContent = 'No se pudo leer el archivo.'; };
@@ -64,8 +64,9 @@ var Bestiario = (function(){
   }
 
   /* ---------- Buscador ---------- */
-  function open(ref, readOnly){
-    view.ref = ref || null; view.readOnly = !!readOnly;
+  function open(ref, readOnly, q){
+    view.ref = ref || null; view.readOnly = !!readOnly; if (q != null) { view.q = q; view.shown = 60; }
+    var tt = document.getElementById('bestTitle'); if (tt) tt.textContent = readOnly && !(window.Sala && Sala.room() && Sala.room().role === 'dm') ? 'Manual de Monstruos' : 'Bestiario';
     if (window.Diario) Diario.openSheet('bestSheet');
     ready().then(render);
   }
@@ -94,7 +95,7 @@ var Bestiario = (function(){
       + '<select class="field" data-bestf="src" aria-label="Libro">' + opt('*', 'Todos los libros', view.src) + Object.keys(srcs).sort(function(a, b){ return srcs[b] - srcs[a]; }).map(function(s){ return opt(s, (window.Rules5e ? Rules5e.srcName(s) : s) + ' (' + srcs[s] + ')', view.src); }).join('') + '</select></div>'
       + '<label class="toggle"><input type="checkbox" data-bestf="old"' + (view.old ? ' checked' : '') + '> Incluir versiones viejas que ya tienen reimpresión (por ejemplo, el Ogro de 2014)</label></div>';
     h += '<p class="note best-count">' + (res.length === list.length ? 'Todas las criaturas' : res.length + ' resultado' + (res.length === 1 ? '' : 's')) + '</p><div class="best-list">'
-      + res.slice(0, view.shown).map(function(m){ return '<button type="button" class="best-row" data-act="bestpick" data-ref="' + attr(m.name + '|' + m.source) + '"><span><b>' + esc(Render5e.Tname(m.name)) + '</b><small>VD ' + esc(crText(m.cr)) + ' · ' + esc(TYPE_ES[m._t] || m._t) + ' · ' + esc(m.source) + '</small></span><span class="best-n"><i>CA</i>' + acOf(m) + '</span><span class="best-n"><i>PG</i>' + hpOf(m) + '</span></button>'; }).join('')
+      + res.slice(0, view.shown).map(function(m){ return '<button type="button" class="best-row" data-act="bestpick" data-ref="' + attr(m.name + '|' + m.source) + '"><span><b>' + esc(Render5e.Tname(m.name)) + (window.Cronica && Cronica.met(m.name + '|' + m.source) ? ' <i class="tag met">encontrado</i>' : '') + '</b><small>VD ' + esc(crText(m.cr)) + ' · ' + esc(TYPE_ES[m._t] || m._t) + ' · ' + esc(m.source) + '</small></span><span class="best-n"><i>CA</i>' + acOf(m) + '</span><span class="best-n"><i>PG</i>' + hpOf(m) + '</span></button>'; }).join('')
       + '</div>' + (res.length > view.shown ? '<button class="btn" type="button" data-act="bestmore" style="width:100%">Ver más (' + (res.length - view.shown) + ')</button>' : '') + (!res.length ? '<p class="empty-state">Nada con esos filtros.</p>' : '');
     box.innerHTML = h;
     if (focus) { var qi = $('#bestQ'); qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
@@ -182,7 +183,7 @@ var Bestiario = (function(){
     var v = function(n){ return f.elements[n].type === 'checkbox' ? f.elements[n].checked : f.elements[n].value.trim(); };
     var hp = parseInt(v('hp'), 10), count = Math.max(1, Math.min(12, parseInt(v('count'), 10) || 1));
     if (!(hp > 0)) { f.elements.hp.focus(); return; }
-    var ok = Sala.send({t:'npc.add', name:v('name') || m.name, ac:parseInt(v('ac'), 10) || acOf(m), hp:hp, init:v('init'), count:count, hidden:v('hidden'), ref:m.name + '|' + m.source, initMod:initOf(m), formula:m.hp && m.hp.formula || null});
+    var ok = Sala.send({t:'npc.add', name:v('name') || m.name, ac:parseInt(v('ac'), 10) || acOf(m), hp:hp, init:v('init'), count:count, hidden:v('hidden'), ref:m.name + '|' + m.source, initMod:initOf(m), formula:m.hp && m.hp.formula || null, binfo:{type:TYPE_ES[m._t] || m._t || '', size:SIZE_ES[(m.size || [])[0]] || ''}});
     if (ok) { Sala.toast((count > 1 ? count + ' × ' : '') + (v('name') || m.name) + ' en la iniciativa.'); if (window.Diario) Diario.closeSheets(); view.ref = null; }
   });
 
@@ -199,5 +200,6 @@ var Bestiario = (function(){
   function statOf(ref){ var m = find(ref); if (!m) return null; var o = {}; Object.keys(m).forEach(function(k){ if (k.charAt(0) !== '_') o[k] = m[k]; }); return o; }
   function nameOf(ref){ var m = find(ref); return m ? Render5e.Tname(m.name) : String(ref || '').split('|')[0]; }
 
-  return {open:open, settings:settings, ready:ready, has:has, find:find, initOf:initOf, _set:setData, statHtml:statHtml, search:search, infoOf:infoOf, statOf:statOf, nameOf:nameOf};
+  function count(){ return list ? list.filter(function(m){ return !m.rep; }).length : 0; }
+  return {open:open, count:count, settings:settings, ready:ready, has:has, find:find, initOf:initOf, _set:setData, statHtml:statHtml, search:search, infoOf:infoOf, statOf:statOf, nameOf:nameOf};
 })();

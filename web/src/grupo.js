@@ -20,6 +20,7 @@ var Grupo = (function(){
 
   function render(){
     var b = box(); if (!b) return;
+    if (window.Bestiario && !Bestiario.has() && !render.tried) { render.tried = true; Bestiario.ready().then(function(ok){ if (ok && visible()) render(); }); }
     var r = room();
     if (!r) { b.innerHTML = '<div class="mesa-lobby card"><p class="note">Aquí se anotan los enemigos y PNJ que encuentra el grupo en la campaña: lo que el DM revela y lo que ustedes descubren.</p><button class="btn main" type="button" data-act="mesatab" data-v="inicio">Elegir campaña</button></div>'; return; }
     if (edit) { b.innerHTML = editHtml(); return; }
@@ -46,7 +47,8 @@ var Grupo = (function(){
     var h = '<div class="gr-detail"><div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn sm" type="button" data-act="grback">Volver</button>' + (dm ? '<button class="btn sm" type="button" data-act="gredit" data-id="' + attr(sum.id) + '"' + (b ? '' : ' disabled') + '>Editar</button><button class="btn sm" type="button" data-act="grdel" data-id="' + attr(sum.id) + '">Borrar</button>' : '') + '</div>';
     h += '<div class="gr-top">' + (d.img ? '<button type="button" class="gr-img" data-act="mesaview" data-img="' + attr(d.img) + '"><img alt="' + attr(d.name) + '" src="' + attr(img(d.img)) + '"></button>' : '<span class="gr-ini big">' + esc(initials(d.name)) + '</span>')
       + '<div><h3>' + esc(d.name) + '</h3><p class="muted">' + esc(kindName(d.kind)) + (sum.hidden ? ' · en preparación, solo tú lo ves' : '') + (sum.seen ? ' · visto el ' + new Date(sum.seen).toLocaleDateString('es-MX', {day:'numeric', month:'long'}) + (sum.ses ? ' (sesión ' + sum.ses + ')' : '') : '') + '</p>'
-      + (dm && sum.ref ? '<p class="note">De tu bestiario: ' + esc(window.Bestiario ? Bestiario.nameOf(sum.ref) : sum.ref) + ' <button class="pill" type="button" data-act="bestref" data-ref="' + attr(sum.ref) + '">Ver ficha</button></p>' : '') + '</div></div>';
+      + (dm && sum.ref ? '<p class="note">De tu bestiario: ' + esc(window.Bestiario ? Bestiario.nameOf(sum.ref) : sum.ref) + ' <button class="pill" type="button" data-act="bestref" data-ref="' + attr(sum.ref) + '">Ver ficha</button></p>'
+        : sum.manual && sum.ref ? (window.Bestiario && Bestiario.has() && Bestiario.find(sum.ref) ? '<button class="btn sm" type="button" data-act="bestref" data-ref="' + attr(sum.ref) + '"><svg class="ic"><use href="#i-tome"/></svg>Leer en el Manual</button>' : '<p class="note">Viene del Manual de Monstruos.</p>') : '') + '</div></div>';
     var rows = INFO.filter(function(k){ return info[k[0]]; });
     if (rows.length) h += '<dl class="gmeta gr-info">' + rows.map(function(k){ return '<dt>' + k[1] + '</dt><dd>' + esc(info[k[0]]) + '</dd>'; }).join('') + '</dl>';
     if (b && b.text) h += '<div class="card gr-text">' + esc(b.text).replace(/\n/g, '<br>') + '</div>';

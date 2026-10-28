@@ -11,6 +11,7 @@
     ['equipo','Equipo','i-bag','Folio III · Equipo'],
     ['rasgos','Rasgos','i-shield','Folio IV · Rasgos'],
     ['notas','Notas','i-quill','Folio V · Notas'],
+    ['bestias','Bestiario','i-paw','Folio VI · Bestiario'],
     ['grimorio','Grimorio','i-tome','Grimorio']
   ];
   var GSECS = [['reglas','Reglas'],['acciones','Acciones'],['condiciones','Condiciones'],['conjuros','Conjuros'],['objetos','Objetos'],['dotes','Dotes']];
@@ -136,10 +137,11 @@
       $('#bodySlots').innerHTML = ''; $('#coins').innerHTML = '';
       $$('.it', grid).forEach(function(e){ e.remove(); }); $('#caseText').innerHTML = h; $('#caseActions').innerHTML = '';
       $('#notes').value = ''; $('#notes').disabled = true;
-      renderChars(); save(); return;
+      renderChars(); if (S.tab === 'bestias' && window.Cronica) Cronica.render(); save(); return;
     }
     $('#notes').disabled = false; $('#notes').value = rt(C).notes || '';
     renderPersonaje(C); renderConjuros(C); renderRasgos(C); renderEquip(); renderCoins(C); renderChars();
+    if (S.tab === 'bestias' && window.Cronica) Cronica.render();
     if (!$('#combat').hidden) renderCombat();
     save();
   }

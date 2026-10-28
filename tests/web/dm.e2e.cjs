@@ -36,6 +36,16 @@ const [htmlFile, bundle] = process.argv.slice(2), html = fs.readFileSync(htmlFil
     M.click(M.$('[data-act="salaend"]'));
     await until(() => A.$('#roundTxt').hidden);
     console.log('al terminar, ronda oculta:', A.$('#roundTxt').hidden);
+    // encuentros: solo los monstruos de los manuales se anotan solos y quedan en el diario del jugador
+    M.w.Sala.send({t:'npc.add', name:'Goblin Warrior', ac:15, hp:10, ref:'Goblin Warrior|XMM', binfo:{type:'feérico', size:'Pequeño'}});
+    await until(() => (A.w.Sala.room().beasts || []).length === 1);
+    A.click(A.$('#combat [data-act="endcombat"]')); await wait(50); A.click(A.$('[data-act="tab"][data-tab="bestias"]'));
+    await until(() => A.$$('.bx-card').length === 1);
+    console.log('encuentros en el diario:', A.$$('.bx-card .bx-name').map((e) => e.textContent).join(', '), '| tipo:', (A.$('.bx-card .bx-sub') || {}).textContent);
+    if (A.$$('.bx-card').length !== 1 || /Ogro/.test(A.$('#pBestias').textContent)) errors.push('el bestiario del diario no quedó bien');
+    await wait(800);
+    const saved = await A.w.eval('new Promise((res) => { const r = indexedDB.open("diario5e", 2); r.onsuccess = () => { const q = r.result.transaction("kv").objectStore("kv").get("encuentros"); q.onsuccess = () => res(q.result); }; })');
+    console.log('guardado en el teléfono:', Object.values(saved.camps).map((c) => c.name + ': ' + Object.values(c.beasts).map((b) => b.name).join(', ')).join(' | '));
   } catch(e){ errors.push(e.stack); }
   await srv.close();
   console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'NO ERRORS'); process.exit(errors.length ? 1 : 0);
