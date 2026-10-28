@@ -47,7 +47,7 @@ const best = {_bestiario:{v:1, creado:'2026-10-26T00:00:00Z'}, monster:[
   const maps = w.Mapas._maps(), mp = Object.values(maps)[0];
   check('capas por defecto', mp.layers.map(l => l.name).join(',') === 'Terreno,Paredes y puertas,Notas');
   act('maplayers'); act('mapladd'); check('agregar capa', mp.layers.length === 4);
-  const g = $('#mapGrid'); g.value = 'hex'; g.dispatchEvent(new w.Event('change', {bubbles:true})); check('cambiar cuadrícula', mp.grid === 'hex');
+  act('mapset'); const g = $('#mapGrid'); g.value = 'hex'; g.dispatchEvent(new w.Event('change', {bubbles:true})); check('cambiar cuadrícula', mp.grid === 'hex');
   act('mapback'); await wait(700);
   const ix = JSON.parse(w.localStorage.getItem('diario-mapas'));
   check('queda en la lista del teléfono', ix.length === 1 && ix[0].name === 'Cripta de Vel' && $$('.map-card').length === 1);

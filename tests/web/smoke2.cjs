@@ -29,7 +29,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   $('#hbXDice').value = '1d6'; $('#hbSize').value = '2x6'; $('#hbNotes').value = 'Arma de Guts';
   $('#hbForm').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true })); await wait(50);
   console.log('hb err hidden:', $('#hbErr').hidden, '| sheet hidden:', $('#hbSheet').hidden, '| main slot:', [...d.querySelectorAll('#bodySlots .slot .v')].map(e => e.textContent).join(', '));
-  act('combat'); await wait(30);
+  act('campanas'); act('mesatab', '[data-v="combate"]'); await wait(30);
   console.log('combat weapon:', d.querySelector('#cTurno .wpn h3').textContent, '|', d.querySelector('#cTurno .wpn .wpn-dmg').textContent, '|', d.querySelector('#cTurno .wpn .wpn-roll').textContent);
   act('endcombat'); act('hbnew'); await wait(20); console.log('saved list:', d.querySelectorAll('#hbSaved .line').length);
   // validacion

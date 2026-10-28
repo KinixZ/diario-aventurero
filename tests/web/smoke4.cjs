@@ -63,6 +63,6 @@ const mc = {id:'mc', name:'Mixto', level:11, cl:['Paladin|XPHB','Paladin|XPHB','
   // steel defender from library
   act('compnew'); await wait(10); click(d.querySelector('#compList [data-act="compadd"][data-ref="Steel Defender|TCE"]')); await wait(30);
   const c3 = $$('#pPersonaje .compc')[2]; console.log('Steel Defender:', c3 && c3.querySelector('.comp-stats').textContent, '|', c3 && [...c3.querySelectorAll('.comp-atk')].map(e => e.textContent).join(' / '));
-  act('combat'); await wait(30); console.log('combat comps:', $$('#cRec .compc').length);
+  act('campanas'); act('mesatab', '[data-v="combate"]'); await wait(30); console.log('combat comps:', $$('#cRec .compc').length);
   console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'NO ERRORS'); process.exit(0);
 })().catch(e => { console.log('FAIL', e.stack, errors.join('\n')); process.exit(1); });

@@ -42,7 +42,7 @@ const check = (name, cond) => { console.log((cond ? 'bien ' : 'MAL  ') + name); 
   check('aparece en Homebrew con su línea', /3d6 fuerza/.test($$('#pRasgos .rg-line').map(e => e.textContent).join('|')));
   const D = R.derive(st()); check('es un recurso de 3 usos', D.resources.some(x => x.key === 'hb:' + ab[0].id && x.max === 3));
   // acceso rápido
-  act('combat'); await wait(30); click($('[data-act="csub"][data-v="turno"]'));
+  act('campanas'); act('mesatab', '[data-v="combate"]'); await wait(30); click($('[data-act="csub"][data-v="turno"]'));
   const rows = $$('#cTurno .q-row h4').map(e => e.textContent);
   check('por defecto: habilidad, rasgos con usos y poción', rows.indexOf('Rayo de fuerza') >= 0 && rows.indexOf('Lay on Hands') >= 0 && rows.indexOf('Poción de curación') >= 0);
   check('otras armas: jabalinas sí, armadura no', rows.indexOf('Jabalinas') >= 0 && rows.indexOf('Placas') < 0);

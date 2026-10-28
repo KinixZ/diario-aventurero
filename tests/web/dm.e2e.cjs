@@ -1,34 +1,17 @@
 // Un jugador y el DM: las rondas solo aparecen al empezar el combate; el DM lleva vida y estados de los enemigos
-const fs = require('fs'); const { JSDOM } = require('jsdom'); const path = require('path'); const { IDBFactory } = require('fake-indexeddb');
-const [html, bundle] = process.argv.slice(2), lib = JSON.parse(fs.readFileSync(bundle, 'utf8')), errors = []; const wait = ms => new Promise(r => setTimeout(r, ms));
+const fs = require('fs'); const path = require('path');
+const { page: open, create, join, until, wait, mk } = require('./camp.cjs');
+const [htmlFile, bundle] = process.argv.slice(2), html = fs.readFileSync(htmlFile, 'utf8'), lib = JSON.parse(fs.readFileSync(bundle, 'utf8')), errors = [];
 (async () => {
   const { startServer } = await import(path.join(__dirname, '../../server/index.mjs'));
   const srv = await startServer({ port: 0, host: '127.0.0.1', quiet: true, env: {} });
   const url = 'http://127.0.0.1:' + srv.port + '/';
-  async function page(tag){
-    const idb = new IDBFactory();
-    await new Promise(res => { const r = idb.open('diario5e', 2); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => { const t = r.result.transaction('kv', 'readwrite'); t.objectStore('kv').put(lib, 'lib'); t.oncomplete = () => { r.result.close(); res(); }; }; });
-    const dom = new JSDOM(fs.readFileSync(html, 'utf8'), { runScripts: 'dangerously', pretendToBeVisual: true, url, beforeParse(w){
-      w.indexedDB = idb; w.fetch = (u, o) => fetch(new URL(u, url).href, o); w.matchMedia = () => ({ matches: false, addEventListener(){}, addListener(){} });
-      w.addEventListener('error', e => errors.push(tag + ': ' + (e.error && e.error.stack || e.message))); w.console.error = (...a) => errors.push(tag + ': ' + a.join(' '));
-      w.HTMLElement.prototype.scrollIntoView = function(){}; w.Element.prototype.animate = function(){ return {set onfinish(f){ setTimeout(f, 5); }}; };
-    }});
-    const w = dom.window, d = w.document;
-    const api = { w, d, $: s => d.querySelector(s), $$: s => [...d.querySelectorAll(s)],
-      click(el){ if (!el) throw new Error(tag + ': falta un elemento'); el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); },
-      change(el, v){ el.value = v; el.dispatchEvent(new w.Event('change', { bubbles: true })); },
-      submit(form){ const ev = new w.Event('submit', { bubbles: true, cancelable: true }); Object.defineProperty(ev, 'submitter', { value: form.querySelector('[type=submit]') }); form.dispatchEvent(ev); } };
-    await wait(1500); api.click(d.querySelector('[data-act="combat"]')); await wait(50);
-    return api;
-  }
-  const until = async (fn, ms = 4000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { if (fn()) return true; } catch(e){} await wait(50); } return false; };
   try {
-    const A = await page('jugador'), M = await page('DM');
-    console.log('ronda visible sin sala:', !A.$('#roundTxt').hidden);
-    A.click(A.$('[data-act="salacreate"]')); await until(() => A.$('.sala-code'));
-    const code = A.$('.sala-code').textContent;
-    M.$('#salaCode').value = code; M.$('#salaDm').checked = true; M.click(M.$('[data-act="salajoin"]'));
-    await until(() => M.$('.sala-code'));
+    const A = await open(html, lib, url, 'jugador', errors, { chars: mk('ly', 'Lyra') }), M = await open(html, lib, url, 'DM', errors);
+    console.log('ronda visible sin campaña:', !A.$('#roundTxt').hidden);
+    const code = await create(M, 'Ogros'); await join(A, code);
+    A.tab('combate'); M.tab('combate'); A.w.Diario.renderCombat(); M.w.Diario.renderCombat();
+    await until(() => M.$('.sala-code') && A.$('[data-form="salainit"]'));
     console.log('DM en modo DM:', M.$('#combat').classList.contains('dm-mode'), '| ronda visible antes de empezar:', !A.$('#roundTxt').hidden);
     // agregar enemigos
     M.click(M.$('[data-act="salanpc"]')); await wait(20);

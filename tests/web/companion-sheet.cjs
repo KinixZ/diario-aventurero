@@ -34,7 +34,7 @@ const [html,pkg]=process.argv.slice(2), lib=JSON.parse(fs.readFileSync(pkg,'utf8
   console.log('hoja convertida, nombre en editor:', $('#ceForm [name=name]').value, '| CA', $('#ceForm [name=ac]').value, '| ataques', $$('#ceAtks .ce-atk').map(r=>r.querySelector('[name=an]').value+' '+r.querySelector('[name=ab2]').value+' '+r.querySelector('[name=ad]').value).join(';'));
   click($('[data-act="closesheet"]'));
   // combate y resumen para la sala
-  click($('[data-act="combat"]')); await wait(30);
+  click($('[data-act="campanas"]')); click($('[data-act="mesatab"][data-v="combate"]')); await wait(30);
   console.log('compañeros en combate:', $$('#cRec .compc').length, '| para la sala:', JSON.stringify(w.Diario.compSummaries()));
   console.log(errors.length?'ERRORS:\n'+errors.join('\n'):'NO ERRORS'); process.exit(errors.length?1:0);
 })();

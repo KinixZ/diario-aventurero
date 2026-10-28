@@ -1,4 +1,4 @@
-# Despliegue en Render (plan gratis): un solo servicio que sirve la web y las salas por WebSocket.
+# Despliegue en Render (plan gratis): un solo servicio que sirve la web y las campañas por WebSocket.
 # En Render: New → Blueprint → elige este repo.
 services:
   - type: web
@@ -11,6 +11,9 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      # Campañas guardadas: cadena de conexión de Neon (Postgres gratis). Sin ella, las campañas viven en memoria.
+      - key: DATABASE_URL
+        sync: false
       # Traducción para teléfonos: pon UNA de las claves (GEMINI_API_KEY es gratis) en el panel de Render (Environment).
       - key: GEMINI_API_KEY
         sync: false

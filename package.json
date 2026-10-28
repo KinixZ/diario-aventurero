@@ -4,7 +4,9 @@
   "private": true,
   "description": "Hoja de personaje de D&D con forma de diario, creador nivel por nivel desde 5etools y salas de combate en tiempo real.",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "node tools/build-web.mjs",
     "build:artifact": "node tools/build-web.mjs --artifact",
@@ -16,6 +18,7 @@
     "bestiario": "node tools/crear-bestiario.mjs"
   },
   "dependencies": {
+    "pg": "^8.23.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {

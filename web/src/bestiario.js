@@ -122,9 +122,9 @@ var Bestiario = (function(){
     }).join('');
   }
   function listOf(arr, field){ return (arr || []).map(function(x){ return typeof x === 'string' ? DMG_ES[x] || x : x[field] ? x[field].map(function(y){ return DMG_ES[y] || y; }).join(', ') + (x.note ? ' ' + strip(x.note) : '') : strip(x.special || ''); }).join('; '); }
-  function detail(m){
-    var ro = view.readOnly, dm = window.Sala && Sala.room() && Sala.room().role === 'dm', sp = m.speed || {}, pb = pbOf(m);
-    var h = '<button class="btn sm" type="button" data-act="bestback">' + (ro ? 'Buscar otro' : 'Volver a la lista') + '</button>';
+  function detail(m, bare){
+    var ro = view.readOnly || bare, dm = !bare && window.Sala && Sala.room() && Sala.room().role === 'dm', sp = m.speed || {}, pb = pbOf(m);
+    var h = bare ? '' : '<button class="btn sm" type="button" data-act="bestback">' + (ro ? 'Buscar otro' : 'Volver a la lista') + '</button>' + (dm && window.Grupo ? '<button class="btn sm" type="button" data-act="grfrom" data-ref="' + attr(m.name + '|' + m.source) + '" style="margin-left:6px">Registrar en el bestiario del grupo</button>' : '');
     h += '<div class="best-card"><h3>' + esc(Render5e.Tname(m.name)) + '</h3><p class="muted">' + esc((SIZE_ES[(m.size || [])[0]] || '') + ' ' + (TYPE_ES[m._t] || m._t)) + ' · VD ' + esc(crText(m.cr)) + ' · ' + esc(window.Rules5e ? Rules5e.srcName(m.source) : m.source) + '</p>'
       + '<div class="best-stats"><div><b>' + acOf(m) + '</b><span>CA' + (acNote(m) ? ' · ' + esc(acNote(m)) : '') + '</span></div><div><b>' + hpOf(m) + '</b><span>PG' + (m.hp && m.hp.formula ? ' · ' + esc(m.hp.formula) : '') + '</span></div><div><b>' + sgn(initOf(m)) + '</b><span>iniciativa</span></div></div>'
       + '<p><b>Velocidad</b> ' + esc([['walk',''],['fly','vuelo '],['swim','nado '],['climb','trepar '],['burrow','excavar ']].filter(function(x){ return sp[x[0]]; }).map(function(x){ return x[1] + ft(sp[x[0]]); }).join(', ') || '—') + (sp.canHover ? ' (flota)' : '') + '</p>'
@@ -140,13 +140,13 @@ var Bestiario = (function(){
     if (m.languages) rows.push(['Idiomas', m.languages.map(strip).join(', ')]);
     rows.push(['Competencia', '+' + pb]);
     h += '<dl class="gmeta">' + rows.map(function(r){ return '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>'; }).join('') + '</dl>';
-    if (!ro) h += addForm(m, dm);
+    if (!ro && !bare) h += addForm(m, dm);
     var body = block('Rasgos', m.trait) + (m.spellcasting ? '<h4>Conjuros</h4>' + spells(m.spellcasting) : '') + block('Acciones', m.action) + block('Acciones adicionales', m.bonus) + block('Reacciones', m.reaction, m.reactionHeader)
       + block('Acciones legendarias', m.legendary, m.legendaryHeader || (m.legendary ? ['Puede usar ' + (m.legendaryActions || 3) + ' acciones legendarias, una a la vez, al final del turno de otra criatura.'] : null)) + block('Acciones míticas', m.mythic, m.mythicHeader);
     var g = m.legendaryGroup && groups[key(m.legendaryGroup.name, m.legendaryGroup.source)];
     if (g && g.lairActions) body += '<h4>Guarida</h4>' + Render5e.entries(g.lairActions);
     h += window.Diario ? Diario.trWrap(body, 'm|' + m.name + '|' + m.source) : body;
-    if (ro && dm) h += '<button class="btn" type="button" data-act="bestpick" data-ref="' + attr(m.name + '|' + m.source) + '" data-add="1" style="width:100%;margin-top:10px">Agregar más como este</button>';
+    if (ro && dm && !bare) h += '<button class="btn" type="button" data-act="bestpick" data-ref="' + attr(m.name + '|' + m.source) + '" data-add="1" style="width:100%;margin-top:10px">Agregar más como este</button>';
     return h + '</div>';
   }
   function addForm(m, dm){
@@ -186,5 +186,18 @@ var Bestiario = (function(){
     if (ok) { Sala.toast((count > 1 ? count + ' × ' : '') + (v('name') || m.name) + ' en la iniciativa.'); if (window.Diario) Diario.closeSheets(); view.ref = null; }
   });
 
-  return {open:open, settings:settings, ready:ready, has:has, find:find, initOf:initOf, _set:setData};
+  /* ---------- Para el bestiario del grupo ---------- */
+  function prep(m){ var x = JSON.parse(JSON.stringify(m)); x._k = key(x.name, x.source); x._n = norm(x.name); x._cr = crNum(x.cr); x._t = typeName(x.type); return x; }
+  function statHtml(m){ return detail(prep(m), true); }
+  function search(q, n){
+    if (!list) return []; q = norm(String(q || '').trim()); if (!q) return [];
+    var hits = []; for (var i = 0; i < list.length; i++) { var m = list[i]; if (!view.old && m.rep) continue; var nn = norm(m.name), at = m._n.indexOf(q); if (at < 0) continue; hits.push({m:m, r: nn === q ? 0 : nn.indexOf(q) === 0 ? 1 : at > 0 && m._n.charAt(at - 1) === ' ' ? 2 : 3}); }
+    hits.sort(function(a, b){ return a.r - b.r || a.m.name.length - b.m.name.length || a.m.name.localeCompare(b.m.name); });
+    return hits.slice(0, n || 8).map(function(h){ var m = h.m; return {ref:m.name + '|' + m.source, name:Render5e.Tname(m.name), cr:crText(m.cr), type:TYPE_ES[m._t] || m._t, src:m.source}; });
+  }
+  function infoOf(ref){ var m = find(ref); if (!m) return null; var sp = m.speed || {}; return {type:(TYPE_ES[m._t] || m._t || ''), cr:crText(m.cr), ac:String(acOf(m)), hp:String(hpOf(m)) + (m.hp && m.hp.formula ? ' (' + m.hp.formula + ')' : ''), size:SIZE_ES[(m.size || [])[0]] || '', speed:[['walk',''],['fly','vuelo '],['swim','nado '],['climb','trepar ']].filter(function(x){ return sp[x[0]]; }).map(function(x){ return x[1] + ft(sp[x[0]]); }).join(', ')}; }
+  function statOf(ref){ var m = find(ref); if (!m) return null; var o = {}; Object.keys(m).forEach(function(k){ if (k.charAt(0) !== '_') o[k] = m[k]; }); return o; }
+  function nameOf(ref){ var m = find(ref); return m ? Render5e.Tname(m.name) : String(ref || '').split('|')[0]; }
+
+  return {open:open, settings:settings, ready:ready, has:has, find:find, initOf:initOf, _set:setData, statHtml:statHtml, search:search, infoOf:infoOf, statOf:statOf, nameOf:nameOf};
 })();

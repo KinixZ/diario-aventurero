@@ -1185,6 +1185,10 @@
     addNote:function(text){ var C = cur(); if (!C) return false; var r = rt(C); r.notes = (r.notes ? r.notes.replace(/\s+$/, '') + '\n\n' : '') + text; save(); if ($('#notes')) $('#notes').value = r.notes; return true; },
     newTurn:function(){ var C = cur(); if (!C) return; rt(C).econ = {a:false,b:false,r:false,m:false}; S.cSub = 'turno'; save(); if (!$('#combat').hidden) renderCombat(); },
     combatRefresh:function(){ if (!$('#combat').hidden) combatHead(); },
+    chars:function(){ return S.chars.map(function(c){ return {id:c.id, name:c.name || 'Sin nombre', sub:(c.ch && c.ch.cls || '').split('|')[0] + (c.level ? ' · nivel ' + c.level : ''), active:c.id === S.active}; }); },
+    activeId:function(){ return S.active; },
+    useChar:function(id){ if (!S.chars.some(function(c){ return c.id === id; }) || S.active === id) return false; S.active = id; sel = null; render(false); save(); return true; },
+    renderCombat:function(){ if (!$('#combat').hidden) renderCombat(); },
     compSummaries:function(){ var C = cur(); if (!C || !D || !D.ok) return []; return (rt(C).comp || []).map(function(c){ var st = compStats(c); return st ? {name:c.n || st.m.name, ac:st.ac, hp:c.hp == null ? st.hpMax : c.hp, hpMax:st.hpMax} : null; }).filter(Boolean); }};
 
   /* ==================== COMBATE ==================== */
@@ -2091,6 +2095,7 @@
       case 'quse': quickUse(b.dataset.q, b.dataset.lv); break;
       case 'qequip': sel = b.dataset.id; equip(); sel = null; if (!$('#combat').hidden) renderCombat(); if (invMsg) { if (window.Sala) Sala.toast(invMsg.replace(/<[^>]+>/g, '')); invMsg = ''; } break;
       case 'combat': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('combate'); break;
+      case 'campanas': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show(window.Sala && Sala.status() === 'on' && Mesa.tab() !== 'inicio' ? Mesa.tab() : 'inicio'); break;
       case 'mapsopen': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('mapas'); break;
       case 'mesa': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('chat'); break;
       case 'endcombat': $('#combat').hidden = true; break;

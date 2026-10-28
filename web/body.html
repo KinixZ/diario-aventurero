@@ -14,7 +14,7 @@
         <p id="hSub"></p>
       </div>
       <button class="icon-btn" type="button" data-act="mesa" aria-label="Abrir la mesa de juego" title="Mesa: chat, pizarra y tablero"><svg class="ic"><use href="#i-chat"/></svg></button>
-      <button class="icon-btn war" type="button" data-act="combat" aria-label="Entrar en combate" title="Entrar en combate"><svg class="ic"><use href="#i-swords"/></svg></button>
+      <button class="icon-btn war" type="button" data-act="campanas" aria-label="Campañas: elegir campaña, mapa, combate y chat" title="Campañas"><svg class="ic"><use href="#i-banner"/></svg></button>
       <button class="icon-btn" type="button" data-act="settings" aria-label="Ajustes del diario" title="Ajustes"><svg class="ic"><use href="#i-gear"/></svg></button>
       <button class="icon-btn" type="button" data-act="close" aria-label="Cerrar diario" title="Cerrar diario"><svg class="ic"><use href="#i-book"/></svg></button>
     </header>
@@ -201,9 +201,9 @@
           </div>
         </section>
         <section>
-          <span class="label">salas de combate</span>
-          <p style="margin:6px 0 0;font-size:15px">Dirección del servidor de salas. Si abriste el diario desde el servidor del proyecto no hace falta escribir nada.</p>
-          <input class="field" id="salaUrl" type="url" inputmode="url" autocomplete="off" aria-label="Dirección del servidor de salas" style="margin-top:8px">
+          <span class="label">servidor de campañas</span>
+          <p style="margin:6px 0 0;font-size:15px">Dirección del servidor donde viven las campañas. Si abriste el diario desde el servidor del proyecto no hace falta escribir nada.</p>
+          <input class="field" id="salaUrl" type="url" inputmode="url" autocomplete="off" aria-label="Dirección del servidor de campañas" style="margin-top:8px">
           <p class="note" id="salaStatus" style="margin:6px 0 0"></p>
         </section>
         <section>
@@ -236,22 +236,25 @@
   <nav class="ribbons" id="ribbons" aria-label="Separadores del diario"></nav>
 
   <!-- MODO COMBATE -->
-  <section class="combat" id="combat" hidden aria-label="Mesa de juego" data-tab="combate">
+  <section class="combat" id="combat" hidden aria-label="Campaña" data-tab="inicio">
     <div class="combat-h">
-      <svg class="ic" style="color:var(--gold-hi)"><use href="#i-d20"/></svg>
-      <h2>Mesa</h2>
+      <button type="button" class="camp-title" data-act="mesatab" data-v="inicio" aria-label="Inicio de la campaña"><svg class="ic" style="color:var(--gold-hi)"><use href="#i-banner"/></svg><h2 id="campTitle">Campañas</h2><i class="camp-live-dot" id="campLive" hidden title="En sesión"></i></button>
       <span class="round" id="roundBox"><span id="roundTxt" hidden>Ronda <b id="round">1</b><small id="turnName"></small></span></span>
-      <button class="icon-btn" type="button" data-act="endcombat" aria-label="Salir del combate" style="background:transparent;color:var(--on-dark);border-color:var(--gold-hi)"><svg class="ic"><use href="#i-x"/></svg></button>
+      <button class="icon-btn" type="button" data-act="endcombat" aria-label="Volver al diario" title="Volver al diario" style="background:transparent;color:var(--on-dark);border-color:var(--gold-hi)"><svg class="ic"><use href="#i-book"/></svg></button>
     </div>
-    <nav class="mesa-tabs" id="mesaTabs" role="tablist" aria-label="Secciones de la mesa">
+    <nav class="mesa-tabs" id="mesaTabs" role="tablist" aria-label="Secciones de la campaña">
+      <button type="button" role="tab" data-act="mesatab" data-v="inicio" aria-selected="true"><svg class="ic"><use href="#i-banner"/></svg><span>Inicio</span></button>
+      <button type="button" role="tab" data-act="mesatab" data-v="mapas" aria-selected="false"><svg class="ic"><use href="#i-map"/></svg><span>Mapa</span><i class="badge dot" hidden></i></button>
+      <button type="button" role="tab" data-act="mesatab" data-v="combate" aria-selected="false"><svg class="ic"><use href="#i-swords"/></svg><span>Combate</span><i class="badge dot" hidden></i></button>
       <button type="button" role="tab" data-act="mesatab" data-v="chat" aria-selected="false"><svg class="ic"><use href="#i-chat"/></svg><span>Chat</span><i class="badge" hidden></i></button>
       <button type="button" role="tab" data-act="mesatab" data-v="pizarra" aria-selected="false"><svg class="ic"><use href="#i-brush"/></svg><span>Pizarra</span></button>
-      <button type="button" role="tab" data-act="mesatab" data-v="mapas" aria-selected="false"><svg class="ic"><use href="#i-map"/></svg><span>Mapas</span></button>
       <button type="button" role="tab" data-act="mesatab" data-v="tablero" aria-selected="false"><svg class="ic"><use href="#i-pin"/></svg><span>Tablero</span></button>
-      <button type="button" role="tab" data-act="mesatab" data-v="combate" aria-selected="true"><svg class="ic"><use href="#i-swords"/></svg><span>Combate</span></button>
+      <button type="button" role="tab" data-act="mesatab" data-v="bestiario" aria-selected="false"><svg class="ic"><use href="#i-paw"/></svg><span>Bestiario</span></button>
     </nav>
     <div class="sala-toast" id="salaToast" role="status" aria-live="polite" hidden></div>
+    <div class="mesa-p" id="mesaHome"></div>
     <div class="mesa-p" id="mesaChat"></div>
+    <div class="mesa-p" id="mesaBest"></div>
     <div class="mesa-p" id="mesaDraw"></div>
     <div class="mesa-p" id="mesaBoard"></div>
     <div class="mesa-p" id="mesaMaps"></div>

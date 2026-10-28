@@ -1,40 +1,20 @@
 // La mesa con DM y dos jugadores: chat, susurros, tiradas, tablero, pizarra y cierre de sesión
-const fs = require('fs'); const { JSDOM } = require('jsdom'); const path = require('path'); const { IDBFactory } = require('fake-indexeddb');
-const [html, bundle] = process.argv.slice(2), lib = JSON.parse(fs.readFileSync(bundle, 'utf8')), errors = []; const wait = ms => new Promise(r => setTimeout(r, ms));
+const fs = require('fs'); const path = require('path');
+const { page: open, create, join, until, wait, mk } = require('./camp.cjs');
+const [htmlFile, bundle] = process.argv.slice(2), html = fs.readFileSync(htmlFile, 'utf8'), lib = JSON.parse(fs.readFileSync(bundle, 'utf8')), errors = [];
 (async () => {
   const { startServer } = await import(path.join(__dirname, '../../server/index.mjs'));
   const srv = await startServer({ port: 0, host: '127.0.0.1', quiet: true, env: {} });
   const url = 'http://127.0.0.1:' + srv.port + '/';
-  async function page(tag, chars){
-    const idb = new IDBFactory();
-    await new Promise(res => { const r = idb.open('diario5e', 2); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => { const t = r.result.transaction('kv', 'readwrite'); t.objectStore('kv').put(lib, 'lib'); t.oncomplete = () => { r.result.close(); res(); }; }; });
-    const dom = new JSDOM(fs.readFileSync(html, 'utf8'), { runScripts: 'dangerously', pretendToBeVisual: true, url, beforeParse(w){
-      if (chars) w.localStorage.setItem('diario-v4', JSON.stringify({v:4, chars, active:chars[0].id}));
-      w.indexedDB = idb; w.fetch = (u, o) => fetch(new URL(u, url).href, o); w.matchMedia = () => ({ matches: false, addEventListener(){}, addListener(){} });
-      w.URL.createObjectURL = () => 'blob:x'; w.URL.revokeObjectURL = () => {};
-      w.addEventListener('error', e => errors.push(tag + ': ' + (e.error && e.error.stack || e.message))); w.console.error = (...a) => errors.push(tag + ': ' + a.join(' '));
-      w.HTMLElement.prototype.scrollIntoView = function(){}; w.Element.prototype.animate = function(){ return {set onfinish(f){ setTimeout(f, 5); }}; };
-    }});
-    const w = dom.window, d = w.document;
-    const api = { w, d, $: s => d.querySelector(s), $$: s => [...d.querySelectorAll(s)],
-      click(el){ if (!el) throw new Error(tag + ': falta un elemento'); el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); },
-      submit(form, kind){ const ev = new w.Event('submit', { bubbles: true, cancelable: true }); Object.defineProperty(ev, 'submitter', { value: kind ? form.querySelector('[data-kind="' + kind + '"]') : form.querySelector('[type=submit]') }); form.dispatchEvent(ev); },
-      msgs(){ return [...d.querySelectorAll('#mesaChat .msg')].map(m => m.textContent.replace(/\s+/g, ' ').trim()); } };
-    await wait(1500); api.click(d.querySelector('[data-act="mesa"]')); await wait(50);
-    return api;
-  }
-  const until = async (fn, ms = 4000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { if (fn()) return true; } catch(e){} await wait(50); } return false; };
-  const mk = (id, name) => [{id, name, level:3, method:'array', base:{str:10,dex:14,con:12,int:10,wis:12,cha:16}, ch:{cls:'Bard|XPHB', race:'Human|XPHB', bg:'Sage|XPHB'}, rt:{}}];
   try {
-    const M = await page('DM'), A = await page('Lyra', mk('ly', 'Lyra')), B = await page('Bram', mk('br', 'Bram'));
-    console.log('pestaña inicial:', M.$('#combat').dataset.tab, '| lobby en el chat:', !!M.$('#mesaChat .sala'));
-    M.$('#mesaChat #salaDm').checked = true; M.click(M.$('#mesaChat [data-act="salacreate"]'));
-    await until(() => M.$('#mesaChat .chat-form'));
-    const code = M.$('.mesa-code').textContent.replace('Mesa ', '');
-    for (const P of [A, B]) { P.$('#mesaChat #salaCode').value = code; P.click(P.$('#mesaChat [data-act="salajoin"]')); }
-    await until(() => A.$('#mesaChat .chat-form') && B.$('#mesaChat .chat-form'));
-    // título, mensaje, susurro y tirada
-    const t = M.$('#mesaTitle'); t.value = 'La cripta de Vel'; t.dispatchEvent(new M.w.Event('change', { bubbles: true }));
+    const M = await open(html, lib, url, 'DM', errors), A = await open(html, lib, url, 'Lyra', errors, { chars: mk('ly', 'Lyra') }), B = await open(html, lib, url, 'Bram', errors, { chars: mk('br', 'Bram') });
+    console.log('pestaña inicial:', M.$('#combat').dataset.tab, '| selector visible:', !!M.$('[data-form="campnew"]'));
+    const code = await create(M, 'Cripta'); await join(A, code); await join(B, code);
+    // el DM empieza la sesión con título desde Inicio
+    M.submit(M.fill(M.$('[data-form="campsesstart"]'), { title: 'La cripta de Vel' }));
+    await until(() => B.$('.camp-pill.live'));
+    for (const P of [M, A, B]) P.tab('chat');
+    await until(() => A.$('#mesaChat .chat-form') && B.$('#mesaChat .chat-form') && M.$('#mesaChat .chat-form'));
     A.$('#chatIn').value = 'Abro el sarcófago con cuidado'; A.submit(A.$('[data-form="mesachat"]'), 'msg');
     await until(() => B.msgs().length === 1);
     const lyraId = [...M.$$('#mesaChat .chat-to option')].find(o => /Lyra/.test(o.textContent)).value;

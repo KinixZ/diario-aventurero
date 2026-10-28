@@ -1,8 +1,8 @@
 
-/* ==================== MESA DE JUEGO: CHAT, PIZARRA, TABLERO ==================== */
-/* Vive dentro del modo combate como pestañas. Usa la conexión de la Sala (Sala.on / Sala.send).
-   Cada teléfono guarda una copia de la mesa: si el servidor se reinicia, el DM la reabre con ella,
-   y al terminar la sesión cada quien la guarda en sus Notas y en un archivo. */
+/* ==================== CAMPAÑA: CHAT, PIZARRA, TABLERO Y PESTAÑAS ==================== */
+/* Pestañas de la vista de campaña. Usa la conexión de la Sala (Sala.on / Sala.send). El servidor guarda todo;
+   cada teléfono conserva una copia de la campaña abierta para verla aunque se corte la señal.
+   Al terminar cada sesión, cada quien guarda el resumen en sus Notas y en un archivo. */
 var Mesa = (function(){
   var esc = function(s){ return Render5e.esc(s == null ? '' : s); }, attr = function(s){ return Render5e.attr(s == null ? '' : s); };
   var $ = function(s, r){ return (r || document).querySelector(s); }, $$ = function(s, r){ return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
@@ -10,7 +10,7 @@ var Mesa = (function(){
   var PAPER = '#f3e9d2', COLORS = ['#2b1d12', '#8c2626', '#2f5d8a', '#3f6b3a', '#b08a3e', '#6a3fa0', '#e07a2e', '#ffffff'];
   var CATS = [['mision','Misión'],['pnj','PNJ'],['lugar','Lugar'],['pista','Pista'],['objeto','Objeto'],['otro','Otro']];
   var ROLLS = ['Ataque', 'Daño', 'Iniciativa', 'Percepción', 'Perspicacia', 'Investigación', 'Sigilo', 'Atletismo', 'Acrobacias', 'Arcanos', 'Historia', 'Religión', 'Naturaleza', 'Supervivencia', 'Medicina', 'Engaño', 'Persuasión', 'Intimidación', 'Interpretación', 'Juego de manos', 'Trato con animales', 'Salvación de Fuerza', 'Salvación de Destreza', 'Salvación de Constitución', 'Salvación de Inteligencia', 'Salvación de Sabiduría', 'Salvación de Carisma', 'Concentración', 'Salvación contra muerte'];
-  var C = load(), tab = 'combate', unread = 0, rollOpen = false, tool = {color: COLORS[0], w: 4, erase: false}, boardEdit = null, boardOpen = false, endedSnap = null, uploading = false;
+  var C = load(), tab = 'inicio', unread = 0, rollOpen = false, tool = {color: COLORS[0], w: 4, erase: false}, boardEdit = null, boardOpen = false, endedSnap = null, uploading = false;
 
   function load(){ try { return JSON.parse(localStorage.getItem(KEY) || 'null') || blank(); } catch(e){ return blank(); } }
   function blank(code){ return {code: code || null, title: '', started: Date.now(), chat: [], board: [], strokes: [], pages: [], members: []}; }
@@ -24,32 +24,37 @@ var Mesa = (function(){
   function hhmm(t){ var d = new Date(t || Date.now()); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
 
   /* ---------- Mensajes de la Sala ---------- */
-  Sala.on('joined', function(m){ if (C.code !== m.code) { C = blank(m.code); endedSnap = null; } persist(); });
+  Sala.on('joined', function(m){ if (C.code !== m.code) { C = blank(m.code); endedSnap = null; unread = 0; } persist(); });
+  Sala.on('live', function(){ endedSnap = null; if (tab === 'chat' && visibleNow()) renderChat(false); });
   Sala.on('mesa.init', function(m){ C.chat = m.chat || []; C.strokes = m.strokes || []; persist(); drawAll(); render(); });
-  Sala.on('state', function(r){ C.board = r.board || []; C.title = r.session ? r.session.title : C.title; if (r.session) C.started = r.session.started; C.members = r.members.map(function(x){ return {id:x.id, name: x.role === 'dm' ? 'DM' : x.char ? x.char.name : x.name, role:x.role}; }); if (r.role === 'dm') { C.combat = Sala.encounter('Combate en curso'); C.npcHp = r.npcHp; C.mapIds = (r.maps || []).map(function(m){ return m.id; }); } persist(); if (tab !== 'combate' && tab !== 'mapas') render(); badge(); });
+  Sala.on('state', function(r){ C.board = r.board || []; C.title = r.session ? r.session.title : C.title; if (r.session) C.started = r.session.started; C.members = r.members.map(function(x){ return {id:x.id, name: x.role === 'dm' ? 'DM' : x.char ? x.char.name : x.name, role:x.role}; }); C.live = r.live; C.ses = r.session ? r.session.n : 0; C.name = r.name; persist(); if (tab === 'tablero' || (tab === 'chat' && !document.querySelector('#mesaChat .chat-list'))) render(); else if (tab === 'chat') chatHead(); badge(); });
   Sala.on('chat', function(m){ C.chat.push(m.msg); if (C.chat.length > 800) C.chat.shift(); persist(); if (tab === 'chat' && visibleNow()) renderChat(true); else { unread++; badge(); } });
   Sala.on('draw', function(m){ C.strokes.push(m.stroke); persist(); strokeOn(ctx(), m.stroke); });
   Sala.on('draw.undo', function(m){ C.strokes = C.strokes.filter(function(k){ return k.id !== m.id; }); persist(); drawAll(); });
   Sala.on('draw.clear', function(){ if (C.strokes.length) C.pages.push({at: Date.now(), strokes: C.strokes}); C.strokes = []; persist(); drawAll(); render(); });
   Sala.on('ended', function(m){ endedSnap = m.snapshot; finishSession(m.snapshot); });
-  Sala.on('left', function(){ render(); });
+  Sala.on('left', function(){ C = blank(); persist(); render(); });
   function visibleNow(){ var c = document.getElementById('combat'); return c && !c.hidden; }
 
-  /* Copia para reabrir la mesa si el servidor la perdió (solo el DM la usa) */
-  function restoreSnapshot(code){ if (C.code !== code || endedSnap) return null; return {code: code, title: C.title, started: C.started, chat: C.chat, board: C.board, strokes: C.strokes, pages: C.pages, combat: C.combat || null, npcHp: C.npcHp || null}; }
-  function restoreMapIds(){ return (C.mapIds || []).slice(); }
 
   /* ---------- Pestañas ---------- */
-  function show(t){ tab = t || tab; var cb = document.getElementById('combat'); if (!cb) return; cb.setAttribute('data-tab', tab); $$('#mesaTabs button').forEach(function(b){ b.setAttribute('aria-selected', String(b.dataset.v === tab)); }); if (tab === 'chat') { unread = 0; } badge(); render(); }
+  function show(t){
+    tab = t || tab; var cb = document.getElementById('combat'); if (!cb) return; cb.setAttribute('data-tab', tab);
+    $$('#mesaTabs button').forEach(function(b){ var on = b.dataset.v === tab; b.setAttribute('aria-selected', String(on)); if (on && b.scrollIntoView && b.parentNode.scrollWidth > b.parentNode.clientWidth) try { b.scrollIntoView({block:'nearest', inline:'nearest'}); } catch(e){} });
+    if (tab === 'chat') { unread = 0; } badge(); render();
+    var sc = document.querySelector('#combat [data-tab-body="' + tab + '"]'); if (sc) sc.scrollTop = 0;
+  }
   function badge(){ var b = $('#mesaTabs [data-v="chat"] .badge'); if (b) { b.textContent = unread > 99 ? '99+' : unread; b.hidden = !unread; } }
   function render(){
-    if (tab === 'chat') renderChat(false);
+    if (tab === 'inicio' && window.Campana) Campana.render();
+    else if (tab === 'bestiario' && window.Grupo) Grupo.render();
+    else if (tab === 'chat') renderChat(false);
     else if (tab === 'pizarra') renderDraw();
     else if (tab === 'tablero') renderBoard();
     else if (tab === 'mapas' && window.Mapas) Mapas.render();
   }
-  function lobby(where){ return '<div class="mesa-lobby">' + (endedSnap ? endedBanner() : '') + '<p class="note">' + (where || 'Entra a una mesa para usar esto.') + '</p><div id="salaBoxM"></div></div>'; }
-  function mountLobby(){ var b = document.getElementById('salaBoxM'); if (b && window.Sala) Sala.mount(b); }
+  function lobby(where){ var e = Sala.active(), conn = e && Sala.status() === 'connecting'; return '<div class="mesa-lobby card">' + (endedSnap ? endedBanner() : '') + '<p class="note">' + (where || 'Esto vive dentro de una campaña.') + '</p>' + (conn ? '<p class="note"><b>Entrando a ' + esc(e.name || e.code) + '…</b> ' + esc(Sala.error() || '') + '</p>' : '<button class="btn main" type="button" data-act="mesatab" data-v="inicio">Elegir campaña</button>') + '</div>'; }
+  function mountLobby(){}
 
   /* ---------- Chat ---------- */
   function msgHtml(m){
@@ -72,11 +77,11 @@ var Mesa = (function(){
     var box = document.getElementById('mesaChat'); if (!box) return;
     if (!online()) { box.innerHTML = lobby('Aquí va el chat de la sesión: notas de todos, tiradas, imágenes del DM y susurros.'); mountLobby(); return; }
     var list = box.querySelector('.chat-list');
-    if (keepComposer && list) { var atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80; list.innerHTML = C.chat.map(msgHtml).join(''); if (atBottom) list.scrollTop = list.scrollHeight; return; }
+    if (keepComposer && list) { var atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80; list.innerHTML = chatItems(); if (atBottom) list.scrollTop = list.scrollHeight; return; }
     var r = room(), dm = isDm(), draft = (box.querySelector('#chatIn') || {}).value || '';
-    var h = '<div class="mesa-head">' + (dm ? '<input class="field mesa-title" id="mesaTitle" value="' + attr(C.title) + '" placeholder="Título de la sesión (La cripta de Vel)" aria-label="Título de la sesión"><button class="btn sm" type="button" data-act="mesaend">Terminar sesión</button>' : '<b class="mesa-title-ro">' + esc(C.title || 'Sesión del ' + new Date(C.started).toLocaleDateString('es-MX')) + '</b>') + '<span class="muted mesa-code">Mesa ' + esc(r.code) + '</span></div>';
+    var h = '<div class="mesa-head" id="chatHead">' + headHtml() + '</div>';
     if (endedSnap) h += endedBanner();
-    h += '<div class="chat-list" role="log" aria-live="polite">' + (C.chat.length ? C.chat.map(msgHtml).join('') : '<p class="note chat-empty">Nada todavía. Escribe lo que pasa, lo que descubren o lo que sacaron en sus dados.</p>') + '</div>';
+    h += '<div class="chat-list" role="log" aria-live="polite">' + chatItems() + '</div>';
     h += '<form class="chat-form" data-form="mesachat">'
       + (rollOpen ? '<div class="roll-form"><input class="field" name="label" list="rollList" placeholder="Qué tiraste (Percepción)" aria-label="Qué tiraste" autocomplete="off"><input class="field" name="total" inputmode="numeric" placeholder="Total" aria-label="Total"><input class="field" name="nat" inputmode="numeric" placeholder="d20" aria-label="Lo que salió en el d20 (opcional)"><select class="field" name="adv" aria-label="Ventaja"><option value="">Normal</option><option value="adv">Ventaja</option><option value="dis">Desventaja</option></select><button class="btn main" type="submit" data-kind="roll">Compartir tirada</button><datalist id="rollList">' + ROLLS.map(function(x){ return '<option value="' + x + '">'; }).join('') + '</datalist></div>' : '')
       + '<div class="chat-row"><select class="field chat-to" name="to" aria-label="Para quién">' + toOptions() + '</select><button type="button" class="icon-btn" data-act="mesaroll" aria-pressed="' + rollOpen + '" aria-label="Compartir una tirada" title="Tirada"><svg class="ic"><use href="#i-d20"/></svg></button><label class="icon-btn pickbtn" aria-label="Compartir una imagen" title="Imagen"><svg class="ic"><use href="#i-image"/></svg><input type="file" id="mesaImg" accept="image/*"></label></div>'
@@ -84,6 +89,19 @@ var Mesa = (function(){
       + (uploading ? '<p class="note">Subiendo imagen…</p>' : '') + '</form>';
     box.innerHTML = h;
     var l2 = box.querySelector('.chat-list'); l2.scrollTop = l2.scrollHeight;
+  }
+  function headHtml(){
+    var r = room(); if (!r) return '';
+    return (r.live ? '<span class="camp-pill live">Sesión ' + r.session.n + '</span><b class="mesa-title-ro">' + esc(r.session.title || '') + '</b>' : '<span class="camp-pill">Fuera de sesión</span><span class="note mesa-off">El chat sigue abierto entre sesiones.</span>')
+      + (isDm() ? (r.live ? '<button class="btn sm" type="button" data-act="mesaend">Terminar sesión</button>' : '<button class="btn main sm" type="button" data-act="mesastart">Empezar sesión</button>') : '');
+  }
+  function chatHead(){ var h = document.getElementById('chatHead'); if (h) h.innerHTML = headHtml(); }
+  /* Separadores entre sesiones: «Sesión 3», «Fuera de sesión» */
+  function chatItems(){
+    if (!C.chat.length) return '<p class="note chat-empty">Nada todavía. Escribe lo que pasa, lo que descubren o lo que sacaron en sus dados.</p>';
+    var out = [], prev = null;
+    C.chat.forEach(function(m){ var s = m.ses || 0; if (s !== prev) { out.push('<div class="chat-sep"><span>' + (s ? 'Sesión ' + s : 'Fuera de sesión') + ' · ' + new Date(m.at).toLocaleDateString('es-MX', {day:'numeric', month:'short'}) + '</span></div>'); prev = s; } out.push(msgHtml(m)); });
+    return out.join('');
   }
   function endedBanner(){ return '<div class="banner"><p>La sesión terminó y se guardó en tus Notas.</p><button class="btn main sm" type="button" data-act="mesadl">Descargar resumen</button></div>'; }
 
@@ -96,11 +114,15 @@ var Mesa = (function(){
       img.src = url;
     });
   }
+  /* Sube una imagen a la campaña (achicada) y devuelve su id */
+  function upload(file, max){
+    return shrink(file, max || 1600).then(function(blob){ return fetch(Sala.httpBase() + '/api/img?code=' + encodeURIComponent(Sala.code()) + '&token=' + encodeURIComponent(Sala.token()), {method:'POST', headers:{'content-type':'image/jpeg'}, body:blob}); })
+      .then(function(r){ return r.json().then(function(j){ if (!r.ok) throw new Error(j.msg || 'No se pudo subir'); return j.id; }); });
+  }
   function uploadImage(file, caption, to){
     uploading = true; renderChat(false);
-    return shrink(file, 1600).then(function(blob){ return fetch(Sala.httpBase() + '/api/img?code=' + encodeURIComponent(Sala.code()) + '&token=' + encodeURIComponent(Sala.token()), {method:'POST', headers:{'content-type':'image/jpeg'}, body:blob}); })
-      .then(function(r){ return r.json().then(function(j){ if (!r.ok) throw new Error(j.msg || 'No se pudo subir'); return j; }); })
-      .then(function(j){ Sala.send({t:'chat.img', img:j.id, caption:caption || '', to:to || null}); })
+    return upload(file, 1600)
+      .then(function(id){ Sala.send({t:'chat.img', img:id, caption:caption || '', to:to || null}); })
       .catch(function(e){ Sala.toast(e.message || 'No se pudo subir la imagen.'); })
       .then(function(){ uploading = false; renderChat(false); });
   }
@@ -194,8 +216,8 @@ var Mesa = (function(){
       var ix = index().filter(function(x){ return x.id !== id; }); ix.unshift({id:id, title:title, date:snap.started}); setIndex(ix.slice(0, 60));
       renderSessions();
     });
-    try { localStorage.removeItem(KEY); } catch(e){}
-    C = blank(); Sala.toast('La sesión terminó y se guardó en tus Notas.');
+    if (C.strokes.length) { C.pages.push({at: Date.now(), strokes: C.strokes}); C.strokes = []; }
+    persist(); Sala.toast('La sesión terminó y se guardó en tus Notas.');
     render();
   }
   function download(id){
@@ -224,6 +246,7 @@ var Mesa = (function(){
     else if (a === 'mesaviewclose') closeViewer();
     else if (a === 'mesapin') { boardEdit = {cat:'otro', title: b.dataset.cap || 'Imagen', text:'', img: b.dataset.img}; boardOpen = true; show('tablero'); }
     else if (a === 'mesaend') { if (b.dataset.sure) Sala.send({t:'session.end'}); else { b.dataset.sure = 1; b.textContent = '¿Seguro? Toca otra vez'; setTimeout(function(){ if (document.contains(b)) { delete b.dataset.sure; b.textContent = 'Terminar sesión'; } }, 4000); } }
+    else if (a === 'mesastart') Sala.send({t:'session.start'});
     else if (a === 'mesadl') { var ix = index(); if (ix[0]) download(ix[0].id); }
     else if (a === 'mesacolor') { tool.color = b.dataset.v; tool.erase = false; renderDraw(); }
     else if (a === 'mesaw') { tool.w = +b.dataset.v; renderDraw(); }
@@ -251,7 +274,6 @@ var Mesa = (function(){
   document.addEventListener('change', function(ev){
     var t = ev.target;
     if (t.id === 'mesaImg' && t.files && t.files[0]) { var f = t.form, to = f && f.elements.to ? f.elements.to.value : ''; var cap = f ? f.elements.text.value.trim() : ''; if (f) f.elements.text.value = ''; uploadImage(t.files[0], cap, to); t.value = ''; }
-    if (t.id === 'mesaTitle') Sala.send({t:'session.title', title:t.value.trim()});
   });
 
   /* Visor de imagen a pantalla completa */
@@ -259,5 +281,5 @@ var Mesa = (function(){
   function closeViewer(){ var v = document.getElementById('mesaViewer'); if (v) v.hidden = true; }
 
   setTimeout(renderSessions, 0);
-  return {restoreMapIds:restoreMapIds, show:show, render:render, restoreSnapshot:restoreSnapshot, renderSessions:renderSessions, tab:function(){ return tab; }};
+  return {show:show, render:render, renderSessions:renderSessions, tab:function(){ return tab; }, imgUrl:imgUrl, shrink:shrink, upload:upload, openViewer:openViewer};
 })();
