@@ -125,4 +125,4 @@ const json = JSON.stringify({ _bestiario: { v: 1, creado: new Date().toISOString
 writeFileSync(outFile, json);
 const libros = new Set(out.map((m) => m.source)).size;
 console.log(`Listo: ${outFile}\n${out.length} criaturas de ${libros} libros (${files.length} archivos), ${groups.length} guaridas, ${(json.length / 1048576).toFixed(1)} MB.` + (skipped ? ` Se saltaron ${skipped} plantillas sin números.` : ''));
-console.log('En el diario: Ajustes → Bestiario del DM → Elegir archivo.');
+console.log('En el diario: Ajustes → Manual de Monstruos → Elegir archivo.');

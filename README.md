@@ -41,15 +41,15 @@ El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abra
 - **Encuentros guardados**: el DM guarda el combate a la mitad (enemigos con vida y estados, iniciativa de todos, ronda y turno) y lo carga en otra sesión. Si el servidor se reinicia, la mesa vuelve con el combate.
 - **Mapas sin campaña**: lienzos con cuadrícula cuadrada o hexagonal, capas, lápiz, líneas, rectángulos, texto y borrador; quedan en el teléfono y se bajan como imagen.
 
-## Bestiario del DM
+## Manual de Monstruos (bestiario-5e.json)
 
-El DM carga un segundo archivo con los enemigos; los jugadores no lo necesitan. Se crea desde la misma copia de 5etools:
+Segundo archivo, con las criaturas de los manuales. El DM lo usa para meter enemigos al combate; los jugadores, para leer el Manual en el separador Bestiario de su diario (sin él, sus encuentros se ven igual, pero no la entrada completa). Se crea desde la misma copia de 5etools:
 
 ```bash
 npm run bestiario -- ./5etools-src/data ./bestiario-5e.json
 ```
 
-Luego, en el teléfono o laptop del DM: **Ajustes → Bestiario del DM → Elegir archivo**. Pesa unos 8 MB y queda guardado en ese dispositivo.
+Luego, en cada teléfono o laptop: **Ajustes → Manual de Monstruos → Elegir archivo**. Pesa unos 8 MB y queda guardado en ese dispositivo.
 
 ## Traducción en el teléfono
 
