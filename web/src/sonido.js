@@ -69,6 +69,10 @@ var Sfx = (function(){
     crit: function(t){ bell(bus.combate, 520, t, 1.6, 0.22, 3.5, 4, 0.6); burst(bus.combate, t, 0.5, 'bandpass', 4200, 6, 0.15); tone(bus.combate, 'sine', 110, t, 0.004, 0.4, 0.8, 40); },
     turn: function(t){ bell(bus.combate, 98, t, 3.2, 0.32, 1.41, 3.2, 0.7); bell(bus.combate, 196, t, 2.4, 0.08, 1.41, 2, 0.5); },
     spell: function(t){ burst(bus.combate, t, 0.7, 'highpass', 500, 0.7, 0.18, 6000); var o = osc('sine', 600, t, 0.7), e = g(0); o.frequency.exponentialRampToValueAtTime(1800, t + 0.6); env(e.gain, t, 0.05, 0.08, 0.6); chain(o, e, bus.combate); var w = g(0.6); e.connect(w); w.connect(verbIn); },
+    // puerta: crujido de bisagra (sierra con filtro que tiembla) y el golpe de la madera
+    door: function(t){ var o = osc('sawtooth', 210, t, 0.42), f = filt('bandpass', 1300, 7), e = g(0), lfo = osc('sine', 23, t, 0.42), lg = g(140); o.frequency.exponentialRampToValueAtTime(120, t + 0.4); chain(lfo, lg); lg.connect(f.frequency); env(e.gain, t, 0.04, 0.045, 0.36); chain(o, f, e, bus.ui); burst(bus.ui, t + 0.36, 0.12, 'lowpass', 380, 0.9, 0.55); tone(bus.ui, 'sine', 72, t + 0.36, 0.004, 0.2, 0.5, 40); },
+    // con llave: el pestillo traquetea
+    locked: function(t){ for (var i = 0; i < 3; i++) { burst(bus.ui, t + i * 0.07, 0.03, 'bandpass', 2600 - i * 300, 4, 0.32); tone(bus.ui, 'square', 160, t + i * 0.07, 0.002, 0.03, 0.05, 90); } },
     dice: function(t){ var tt = t; for (var i = 0; i < 7; i++) { burst(bus.combate, tt, 0.018, 'bandpass', 2400 + Math.random() * 2200, 3, 0.3 * (1 - i / 9)); tt += 0.03 + Math.random() * 0.07 * (1 + i / 4); } }
   };
   var lastAt = {};
@@ -154,7 +158,7 @@ var Sfx = (function(){
     var box = document.getElementById('sfxBox'); if (!box) return;
     box.innerHTML = '<label class="toggle big"><input type="checkbox" id="sfxOn"' + (cfg.on ? ' checked' : '') + '> Sonido</label>'
       + '<div class="sfx-vols"' + (cfg.on ? '' : ' hidden') + '>' + [['master', 'General', '']].concat(CH).map(function(c){ return '<label class="sfx-vol"><span><b>' + c[1] + '</b>' + (c[2] ? '<small>' + c[2] + '</small>' : '') + '</span><input type="range" min="0" max="100" step="5" data-sfxvol="' + c[0] + '" value="' + Math.round(cfg[c[0]] * 100) + '" aria-label="Volumen: ' + c[1] + '"><output>' + Math.round(cfg[c[0]] * 100) + '</output></label>'; }).join('')
-      + '<div class="row sfx-try"><button class="btn sm" type="button" data-act="sfxtry" data-v="page">Página</button><button class="btn sm" type="button" data-act="sfxtry" data-v="hit">Golpe</button><button class="btn sm" type="button" data-act="sfxtry" data-v="heal">Curación</button><button class="btn sm" type="button" data-act="sfxtry" data-v="turn">Turno</button><button class="btn sm" type="button" data-act="sfxtry" data-v="dice">Dados</button></div></div>'
+      + '<div class="row sfx-try"><button class="btn sm" type="button" data-act="sfxtry" data-v="page">Página</button><button class="btn sm" type="button" data-act="sfxtry" data-v="hit">Golpe</button><button class="btn sm" type="button" data-act="sfxtry" data-v="heal">Curación</button><button class="btn sm" type="button" data-act="sfxtry" data-v="turn">Turno</button><button class="btn sm" type="button" data-act="sfxtry" data-v="dice">Dados</button><button class="btn sm" type="button" data-act="sfxtry" data-v="door">Puerta</button></div></div>'
       + '<p class="note">Todo se genera en tu teléfono: no gasta datos. El ambiente y la música los pone el DM; aquí decides qué tan fuerte los oyes.</p>';
   }
   document.addEventListener('input', function(ev){ var k = ev.target && ev.target.dataset && ev.target.dataset.sfxvol; if (!k) return; cfg[k] = (+ev.target.value) / 100; var o = ev.target.nextElementSibling; if (o) o.textContent = ev.target.value; levels(); save(); });

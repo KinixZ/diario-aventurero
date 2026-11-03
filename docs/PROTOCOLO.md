@@ -66,15 +66,36 @@ Cuando un monstruo **de los manuales** (con `ref`) entra visible al combate (o e
 | `map.bg` | `id`, `img?`, `op?` | dueño / DM | Imagen de fondo (subida por HTTP) y su opacidad. |
 | `fog.on` | `id`, `value` | DM | Activa la niebla de guerra. |
 | `fog.rect` | `id`, `rect: [x1, y1, x2, y2]`, `value` | DM | Descubre (`false`) o cubre (`true`) casillas. |
-| `fog.all` | `id`, `value` | DM | Cubre o descubre todo. |
+| `fog.all` | `id`, `value` | DM | Cubre o descubre todo. Con la visión puesta, lo que ven ahora los personajes vuelve a quedar descubierto. Apagar la niebla apaga la visión. |
+| `map.vis` | `id`, `on?`, `range?`, `lines?` | DM | Visión de los personajes: prenderla prende la niebla; `range` en casillas (0 = sin límite); `lines`: `auto` (los jugadores ven las líneas de pared si no hay imagen de fondo), `yes` o `no`. Responde `map.vis` y `map.fog`. |
+| `wall.add` / `wall.upd` | `id`, `walls: [{id, a: [x, y], b: [x, y], t, open?, lock?, found?, side?}]` | dueño / DM | Pone o cambia paredes (`wall.add` también reemplaza si el id ya existe). Tipos: `wall`, `door`, `secret`, `window`, `oneway`, `low`, `curtain`, `barrier`. Hasta 3000 por mapa. |
+| `wall.rm` | `id`, `wids` | dueño / DM | Quita paredes. |
+| `door` | `id`, `wid`, `open?` | cualquiera (de cerca) / DM | Abre o cierra una puerta (sin `open`, la alterna). Un jugador necesita una ficha suya a 2 casillas o menos y que no tenga llave (`locked`, `far`). Abrir una secreta la marca encontrada. |
 | `tok.add` | `id`, `tok: {x, y, s, name, color, img?, kind, ref?, hidden?, comp?}` | cualquiera | Pone una ficha. `kind`: `pc`, `npc`, `obj`. La ficha propia de un jugador es única por mapa: ponerla otra vez la mueve. Hasta 5 fichas por jugador y 120 por mapa. |
-| `tok.move` | `id`, `tid`, `x`, `y` | dueño / DM | Mueve una ficha. |
+| `tok.move` | `id`, `tid`, `x`, `y` | dueño / DM | Mueve una ficha. Con paredes, la de un jugador va en recto o rodeando; si no hay camino, el servidor le regresa la ficha (`tok`) y un `error` `blocked`. El DM pasa por donde sea. Con la visión puesta, descubre lo que la ficha ve en el camino. |
 | `tok.set` | `id`, `tid`, `name?`, `s?`, `color?`, `img?`, `hidden?`, `ref?` | dueño / DM (`hidden`, `ref` solo DM) | Ajusta una ficha. |
 | `tok.del` | `id`, `tid` | dueño / DM | Quita una ficha. |
 | `scene.set` | `id?` | DM | Muestra ese mapa a todos (lo destapa si estaba oculto). Sin `id` lo quita. |
 | `map.ping` | `id`, `x`, `y`, `color?` | quien lo ve | Señala un punto (pulsación larga). |
 
-La niebla viaja como base64 de un bit por casilla (`fog.cells`). Los jugadores no reciben capas del DM, fichas ocultas ni mapas ocultos.
+La niebla viaja como base64 de un bit por casilla (`fog.cells`, 1 = descubierta). Los jugadores no reciben capas del DM, fichas ocultas ni mapas ocultos, y las puertas secretas sin encontrar les llegan como paredes (`wall`); ya encontradas, como puertas.
+
+### Paredes y visión
+
+Una pared es un segmento entre dos puntos en casillas (`a`, `b`) con un tipo (`t`):
+
+| Tipo | Tapa la vista | Tapa el paso |
+|---|---|---|
+| `wall` pared | sí | sí |
+| `door` puerta | cerrada sí | cerrada sí |
+| `secret` puerta secreta | cerrada sí | cerrada sí |
+| `window` ventana | no | sí |
+| `oneway` un sentido | desde un lado (`side`) | sí |
+| `low` muro bajo | no | no |
+| `curtain` cortina | sí | no |
+| `barrier` barrera invisible | no | sí |
+
+El servidor y el navegador usan el mismo motor (`web/src/vision.cjs`). Con `vis.on`, el servidor descubre en la niebla lo que ven las fichas de personaje del grupo (visión compartida; no cuentan las ocultas, las caídas ni las cegadas o inconscientes) cuando se ponen, se mueven, se abre una puerta o cambian las paredes, y manda `map.fog` si algo cambió. Lo que el grupo ve en este momento lo calcula cada navegador.
 
 
 ### Editar el mapa
@@ -120,7 +141,8 @@ Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `t
 | `ended` | `snapshot` | Terminó la sesión: título, horas, chat visible, tablero, hojas de la pizarra y participantes. |
 | `mesa.init` | chat, trazos, mapas | Al entrar. |
 | `chat`, `draw`, `draw.undo`, `draw.clear` | | Eventos sueltos de la mesa. |
-| `map`, `map.meta`, `map.add`, `map.rm`, `map.bg`, `map.fog`, `tok`, `tok.del`, `scene`, `ping` | | Cambios de mapas, solo a quien puede verlos. |
+| `map`, `map.meta`, `map.add`, `map.rm`, `map.bg`, `map.fog`, `map.vis`, `tok`, `tok.del`, `scene`, `ping` | | Cambios de mapas, solo a quien puede verlos. |
+| `walls` | `id`, `put`, `del`, `wrev` | | Paredes nuevas o cambiadas (`put`) y quitadas (`del`); a los jugadores, con las secretas disfrazadas. |
 | `beast`, `beast.saved` | | Ficha de una criatura; confirmación al DM. |
 | `applied` | `kind`, `amount`, `cond`, `note`, `from` | Alguien te aplicó algo: tu hoja lo aplica y responde con `char`. |
 | `yourturn` | `round` | Empieza tu turno. |

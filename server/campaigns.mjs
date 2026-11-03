@@ -6,6 +6,9 @@
 // y el jugador responde con su resumen actualizado.
 
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createRequire } from 'node:module';
+// el mismo motor de visión que usa el navegador (web/src/vision.cjs): paredes, línea de vista y caminos
+const Vision = createRequire(import.meta.url)('../web/src/vision.cjs');
 
 export const CONDITIONS = ['blinded', 'charmed', 'deafened', 'exhaustion', 'frightened', 'grappled', 'incapacitated',
   'invisible', 'paralyzed', 'petrified', 'poisoned', 'prone', 'restrained', 'stunned', 'unconscious', 'concentration'];
@@ -27,6 +30,7 @@ const COLOR_RE = /^#[0-9a-f]{6}$/i;
 export const NPC_HP = ['none', 'state', 'bar', 'pct', 'num']; // lo que ven los jugadores de la vida de los enemigos
 const MAPS_MAX = 40, MAP_STROKES_MAX = 6000, MAP_PTS_MAX = 600, MAP_LAYERS_MAX = 8, MAP_TOOLS = ['pen', 'line', 'rect', 'text', 'asset', 'img'];
 const TOKENS_MAX = 120, PLAYER_TOKENS_MAX = 5, TOKEN_KINDS = ['pc', 'npc', 'obj'];
+const WALLS_MAX = 3000, WALL_LINES = ['auto', 'yes', 'no'], DOOR_REACH = 2;
 const BEASTS_MAX = 400, NOTES_MAX = 60, STAT_MAX = 80000;
 export const BEAST_KINDS = ['enemigo', 'pnj', 'criatura'];
 
@@ -198,7 +202,7 @@ export class Campaigns {
     c.order = Array.isArray(d.order) ? d.order : []; c.turn = int(d.turn, -1, 999, -1); c.round = int(d.round, 0, 999, 0);
     c.log = Array.isArray(d.log) ? d.log.slice(-LOG_LEN) : [];
     c.chat = Array.isArray(d.chat) ? d.chat.slice(-CHAT_MAX) : []; c.board = Array.isArray(d.board) ? d.board : []; c.strokes = Array.isArray(d.strokes) ? d.strokes : []; c.pages = Array.isArray(d.pages) ? d.pages.slice(-PAGES_MAX) : [];
-    for (const mp of d.maps || []) { const m = { ...mp, layers: mp.layers || [], strokes: mp.strokes || [], tokens: mp.tokens || [], bg: mp.bg || null }; m.fog = { on: !!(mp.fog && mp.fog.on), cells: mp.fog && mp.fog.cells ? Buffer.from(mp.fog.cells, 'base64') : null }; if (!m.fog.cells || m.fog.cells.length !== Math.ceil(m.cols * m.rows / 8)) m.fog.cells = fogNew(m, false); c.maps.set(m.id, m); }
+    for (const mp of d.maps || []) { const m = { ...mp, layers: mp.layers || [], strokes: mp.strokes || [], tokens: mp.tokens || [], bg: mp.bg || null, walls: Array.isArray(mp.walls) ? mp.walls : [], vis: cleanVis(mp.vis), wrev: 0 }; m.fog = { on: !!(mp.fog && mp.fog.on), cells: mp.fog && mp.fog.cells ? Buffer.from(mp.fog.cells, 'base64') : null }; if (!m.fog.cells || m.fog.cells.length !== Math.ceil(m.cols * m.rows / 8)) m.fog.cells = fogNew(m, false); c.maps.set(m.id, m); }
     c.scene = d.scene && c.maps.has(d.scene) ? d.scene : null;
     for (const im of d.images || []) { c.images.set(im.id, im); c.imgBytes += im.size || 0; }
     c.beasts = Array.isArray(d.beasts) ? d.beasts : []; c.autoBeasts = d.autoBeasts !== false; c.amb = cleanAmb(d.amb);
@@ -375,7 +379,7 @@ export class Campaigns {
         const old = c.maps.get(mp.id);
         if (!old && c.maps.size >= MAPS_MAX) throw err('too_many', 'La campaña ya tiene demasiados mapas.');
         if (old && !isDm && old.by !== me.id) throw err('dm_only', 'Solo el DM o quien lo creó puede reemplazar este mapa.');
-        if (old && !isDm) { mp.hidden = old.hidden; mp.tokens = old.tokens; mp.fog = old.fog; mp.bg = old.bg; mp.layers = old.layers.filter((l) => l.dm).concat(mp.layers); mp.strokes = old.strokes.filter((k) => layerDm(old, k.l)).concat(mp.strokes); }
+        if (old && !isDm) { mp.hidden = old.hidden; mp.tokens = old.tokens; mp.fog = old.fog; mp.bg = old.bg; mp.walls = old.walls; mp.vis = old.vis; mp.layers = old.layers.filter((l) => l.dm).concat(mp.layers); mp.strokes = old.strokes.filter((k) => layerDm(old, k.l)).concat(mp.strokes); }
         if (!old && !isDm) mp.hidden = false;
         mp.updated = this.now(); c.maps.set(mp.id, mp);
         this.sendMap(c, mp, out);
@@ -471,11 +475,78 @@ export class Campaigns {
       case 'fog.on': case 'fog.rect': case 'fog.all': {
         dmOnly('Solo el DM maneja la niebla.');
         const mp = this.mapFor(c, me, msg.id);
-        if (msg.t === 'fog.on') mp.fog.on = !!msg.value;
+        let visOff = false;
+        if (msg.t === 'fog.on') { mp.fog.on = !!msg.value; if (!mp.fog.on && mp.vis.on) { mp.vis.on = false; visOff = true; } }
         else if (msg.t === 'fog.all') mp.fog.cells = fogNew(mp, !!msg.value);
         else { const r = Array.isArray(msg.rect) ? msg.rect.map((v) => int(v, -1, 999, 0)) : null; if (!r || r.length !== 4) throw err('bad_msg', 'Área de niebla inválida.'); fogRect(mp, r[0], r[1], r[2], r[3], !!msg.value); }
         mp.updated = this.now();
-        for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm)) out.push({ to: mm.id, msg: { t: 'map.fog', id: mp.id, fog: fogOut(mp), updated: mp.updated } });
+        if (visOff) for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm)) out.push({ to: mm.id, msg: { t: 'map.vis', id: mp.id, vis: mp.vis, updated: mp.updated } });
+        // cubrir todo con la visión puesta: lo que ven ahora los personajes vuelve a quedar descubierto
+        if (msg.t !== 'fog.on') this.explore(c, mp, []);
+        this.sendFog(c, mp, out);
+        out.quiet = true;
+        break;
+      }
+      case 'map.vis': {
+        dmOnly('Solo el DM maneja la visión de los personajes.');
+        const mp = this.mapFor(c, me, msg.id);
+        if (msg.on != null) mp.vis.on = !!msg.on;
+        if (msg.range != null) mp.vis.range = int(msg.range, 0, 200, 0);
+        if (msg.lines != null && WALL_LINES.includes(msg.lines)) mp.vis.lines = msg.lines;
+        if (mp.vis.on) mp.fog.on = true;
+        mp.updated = this.now();
+        for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm)) out.push({ to: mm.id, msg: { t: 'map.vis', id: mp.id, vis: mp.vis, updated: mp.updated } });
+        if (!this.explore(c, mp, out)) this.sendFog(c, mp, out);
+        out.quiet = true;
+        break;
+      }
+      /* ---------- Paredes: las pone el DM (o quien creó el mapa); las puertas las abre cualquiera que esté cerca ---------- */
+      case 'wall.add': case 'wall.upd': {
+        const mp = this.mapFor(c, me, msg.id);
+        if (!isDm && mp.by !== me.id) throw err('dm_only', 'Solo el DM o quien creó el mapa pone paredes.');
+        const list = (Array.isArray(msg.walls) ? msg.walls : []).slice(0, 400), put = [];
+        for (const w0 of list) {
+          const w = cleanWall(w0, mp); if (!w) continue;
+          const i = mp.walls.findIndex((x) => x.id === w.id);
+          if (msg.t === 'wall.upd' && i < 0) continue;
+          if (i >= 0) mp.walls[i] = w;
+          else { if (mp.walls.length >= WALLS_MAX) throw err('too_many', 'Este mapa ya tiene demasiadas paredes.'); mp.walls.push(w); }
+          put.push(w);
+        }
+        if (!put.length) { out.quiet = true; break; }
+        mp.wrev = (mp.wrev || 0) + 1; mp.updated = this.now();
+        this.sendWalls(c, mp, out, put, []); this.explore(c, mp, out);
+        out.quiet = true;
+        break;
+      }
+      case 'wall.rm': {
+        const mp = this.mapFor(c, me, msg.id);
+        if (!isDm && mp.by !== me.id) throw err('dm_only', 'Solo el DM o quien creó el mapa quita paredes.');
+        const set = new Set((Array.isArray(msg.wids) ? msg.wids : []).slice(0, 600).map((x) => str(x, 20))), del = [];
+        mp.walls = mp.walls.filter((w) => { if (set.has(w.id)) { del.push(w.id); return false; } return true; });
+        if (!del.length) { out.quiet = true; break; }
+        mp.wrev = (mp.wrev || 0) + 1; mp.updated = this.now();
+        this.sendWalls(c, mp, out, [], del); this.explore(c, mp, out);
+        out.quiet = true;
+        break;
+      }
+      case 'door': {
+        const mp = this.mapFor(c, me, msg.id);
+        const w = mp.walls.find((x) => x.id === str(msg.wid, 20));
+        const isDoor = w && (w.t === 'door' || (w.t === 'secret' && (isDm || w.found)));
+        if (!isDoor) throw err('no_target', 'Ahí no hay una puerta.');
+        const open = msg.open == null ? !w.open : !!msg.open;
+        if (!isDm) {
+          if (w.lock && open) throw err('locked', 'Está cerrada con llave.');
+          const mine = mp.tokens.filter((t) => !t.hidden && (t.ref === me.id || t.by === me.id));
+          const near = mine.some((t) => { const p = Vision.center(t); return Vision.segDist(p[0], p[1], w.a, w.b) <= DOOR_REACH + (t.s || 1) / 2; });
+          if (!near) throw err('far', 'Acércate a la puerta para abrirla.');
+        }
+        if (!!w.open === open) { out.quiet = true; break; }
+        if (open) w.open = true; else delete w.open;
+        if (w.t === 'secret' && open) w.found = true;
+        mp.wrev = (mp.wrev || 0) + 1; mp.updated = this.now();
+        this.sendWalls(c, mp, out, [w], []); this.explore(c, mp, out);
         out.quiet = true;
         break;
       }
@@ -486,12 +557,12 @@ export class Campaigns {
           t.hidden = false;
           if (t.kind === 'npc') throw err('dm_only', 'Solo el DM pone enemigos en el mapa.');
           // tu personaje solo puede estar una vez en cada mapa: si ya estaba, se mueve
-          if (t.kind === 'pc' && t.ref === me.id) { const was = mp.tokens.find((x) => x.kind === 'pc' && x.ref === me.id && !x.comp); if (was && !msg.tok.comp) { was.x = t.x; was.y = t.y; mp.updated = this.now(); this.sendTok(c, mp, was, out, was.hidden); out.quiet = true; break; } }
+          if (t.kind === 'pc' && t.ref === me.id) { const was = mp.tokens.find((x) => x.kind === 'pc' && x.ref === me.id && !x.comp); if (was && !msg.tok.comp) { if (!mp.vis.on) { was.x = t.x; was.y = t.y; mp.updated = this.now(); } this.sendTok(c, mp, was, out, was.hidden); out.quiet = true; break; } }
           if (mp.tokens.filter((x) => x.by === me.id).length >= PLAYER_TOKENS_MAX) throw err('too_many', 'Ya tienes muchas fichas en este mapa.');
         }
         if (mp.tokens.length >= TOKENS_MAX) throw err('too_many', 'Este mapa ya tiene demasiadas fichas.');
         mp.tokens.push(t); mp.updated = this.now();
-        this.sendTok(c, mp, t, out, t.hidden); out.quiet = true;
+        this.sendTok(c, mp, t, out, t.hidden); this.explore(c, mp, out, [t]); out.quiet = true;
         break;
       }
       case 'tok.move': case 'tok.set': {
@@ -499,7 +570,22 @@ export class Campaigns {
         const t = mp.tokens.find((x) => x.id === str(msg.tid, 20)); if (!t) throw err('no_target', 'Esa ficha ya no está.');
         if (!isDm && t.by !== me.id && t.ref !== me.id) throw err('not_yours', 'Solo puedes mover tus fichas; el DM mueve todas.');
         const wasHidden = t.hidden;
-        if (msg.t === 'tok.move') { t.x = num(msg.x, 0, mp.cols - 1, t.x); t.y = num(msg.y, 0, mp.rows - 1, t.y); }
+        let from = null, cells = null;
+        if (msg.t === 'tok.move') {
+          const s0 = t.s || 1, nx = num(msg.x, 0, mp.cols - s0, t.x), ny = num(msg.y, 0, mp.rows - s0, t.y);
+          // las paredes no dejan pasar: el jugador rodea si hay por dónde; si no, la ficha vuelve a su lugar (el DM pasa por donde sea)
+          if (mp.walls.length) {
+            const r = Vision.route(mp, t, nx, ny);
+            if (!r.ok && !isDm) {
+              out.push({ to: me.id, msg: { t: 'tok', id: mp.id, tok: t, updated: mp.updated } });
+              out.push({ to: me.id, msg: { t: 'error', code: 'blocked', msg: 'Hay una pared en medio: por ahí no se llega.', on: 'tok.move' } });
+              out.quiet = true; break;
+            }
+            if (r.ok) cells = r.cells || null;
+            from = r.ok ? Vision.center(t) : null;
+          } else from = Vision.center(t);
+          t.x = nx; t.y = ny;
+        }
         else {
           if (msg.name != null && str(msg.name, 40)) t.name = str(msg.name, 40);
           if (msg.s != null) t.s = int(msg.s, 1, 6, t.s);
@@ -509,7 +595,7 @@ export class Campaigns {
           if (msg.ref !== undefined && isDm) t.ref = msg.ref ? str(msg.ref, 20) : null;
         }
         mp.updated = this.now();
-        this.sendTok(c, mp, t, out, wasHidden); out.quiet = true;
+        this.sendTok(c, mp, t, out, wasHidden); this.explore(c, mp, out, [t], from, cells); out.quiet = true;
         break;
       }
       case 'tok.del': {
@@ -646,6 +732,7 @@ export class Campaigns {
     const dm = mm.role === 'dm';
     const secret = new Set(mp.layers.filter((l) => l.dm).map((l) => l.id));
     return { id: mp.id, name: mp.name, cols: mp.cols, rows: mp.rows, grid: mp.grid, by: mp.by, created: mp.created, updated: mp.updated, hidden: !!mp.hidden, bg: mp.bg || null, fog: fogOut(mp),
+      walls: dm ? mp.walls : mp.walls.map(Vision.forPlayer), vis: mp.vis, wrev: mp.wrev || 0,
       layers: dm ? mp.layers : mp.layers.filter((l) => !l.dm), strokes: dm ? mp.strokes : mp.strokes.filter((k) => !secret.has(k.l)), tokens: dm ? mp.tokens : mp.tokens.filter((t) => !t.hidden) };
   }
   sendMap(c, mp, out, filter) { for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm) && (!filter || filter(mm))) out.push({ to: mm.id, msg: { t: 'map', map: this.mapView(mp, mm) } }); }
@@ -655,6 +742,29 @@ export class Campaigns {
       if (mm.role === 'dm' || !t.hidden) out.push({ to: mm.id, msg: { t: 'tok', id: mp.id, tok: t, updated: mp.updated } });
       else if (!wasHidden) out.push({ to: mm.id, msg: { t: 'tok.del', id: mp.id, tid: t.id } });
     }
+  }
+  sendFog(c, mp, out) { for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm)) out.push({ to: mm.id, msg: { t: 'map.fog', id: mp.id, fog: fogOut(mp), updated: mp.updated } }); }
+  /* Paredes que cambiaron (put) o se quitaron (del): a los jugadores, con las secretas disfrazadas */
+  sendWalls(c, mp, out, put, del) {
+    for (const mm of c.members.values()) {
+      if (!this.canSeeMap(c, mp, mm)) continue;
+      out.push({ to: mm.id, msg: { t: 'walls', id: mp.id, put: mm.role === 'dm' ? put : put.map(Vision.forPlayer), del: del || [], wrev: mp.wrev, updated: mp.updated } });
+    }
+  }
+  /* Visión del grupo: lo que ven las fichas de personaje se descubre en la niebla (y se queda descubierto).
+     Con `from` y `cells` se descubre también lo que vio en el camino. Devuelve cuántas casillas nuevas. */
+  explore(c, mp, out, toks, from, cells) {
+    if (!mp.vis || !mp.vis.on) return 0;
+    const ix = Vision.sightOf(mp), range = mp.vis.range;
+    const charOf = (t) => { const m = t.ref && !t.comp ? c.members.get(t.ref) : null; return m && m.role !== 'dm' ? m.char : null; };
+    let n = 0;
+    for (const t of toks || mp.tokens) {
+      if (!Vision.isViewer(t, charOf(t))) continue;
+      const pts = toks && from ? Vision.trail(from, Vision.center(t), cells, t.s) : [Vision.center(t)];
+      for (const p of pts) n += Vision.explore(mp.fog.cells, mp.cols, mp.rows, Vision.poly(ix, p[0], p[1], range, mp.cols, mp.rows));
+    }
+    if (n) { mp.updated = this.now(); this.sendFog(c, mp, out); }
+    return n;
   }
   sendBeast(c, b, out) { for (const mm of c.members.values()) if (mm.role === 'dm' || !b.hidden) out.push({ to: mm.id, msg: { t: 'beast', beast: beastFor(b, mm.role === 'dm') } }); }
 
@@ -762,9 +872,30 @@ function cleanMap(m, by, isDm, c) {
   mp.fog = { on: isDm ? !!(m.fog && m.fog.on) : false, cells: null };
   if (isDm && m.fog && typeof m.fog.cells === 'string') { const b = Buffer.from(m.fog.cells, 'base64'); if (b.length === Math.ceil(mp.cols * mp.rows / 8)) mp.fog.cells = b; }
   if (!mp.fog.cells) mp.fog.cells = fogNew(mp, false);
+  // paredes y visión: la visión dinámica es cosa del DM (como la niebla)
+  const wids = new Set();
+  mp.walls = (Array.isArray(m.walls) ? m.walls : []).slice(0, WALLS_MAX).map((w) => cleanWall(w, mp)).filter((w) => { if (!w || wids.has(w.id)) return false; wids.add(w.id); return true; });
+  mp.vis = cleanVis(isDm ? m.vis : null); mp.wrev = 0;
+  if (mp.vis.on) mp.fog.on = true;
   const me = c.members.get(by) || { id: by, role: isDm ? 'dm' : 'player' };
   mp.tokens = isDm && Array.isArray(m.tokens) ? m.tokens.slice(0, TOKENS_MAX).map((t) => { try { const o = cleanToken(t, mp, c, me); if (t.id && /^[\w-]{2,20}$/.test(t.id)) o.id = t.id; if (t.by && c.members.has(t.by)) o.by = t.by; if (t.kind === 'pc' && t.ref && c.members.has(t.ref)) o.ref = t.ref; return o; } catch { return null; } }).filter(Boolean) : [];
   return mp;
+}
+/* Una pared: dos puntos en casillas (dentro del mapa), un tipo y su estado (abierta, con llave, encontrada, lado) */
+function cleanWall(w, mp) {
+  if (!w || typeof w !== 'object' || !Array.isArray(w.a) || !Array.isArray(w.b)) return null;
+  const P = (p) => [num(p[0], 0, mp.cols, 0), num(p[1], 0, mp.rows, 0)];
+  const a = P(w.a), b = P(w.b); if (a[0] === b[0] && a[1] === b[1]) return null;
+  const t = Vision.KINDS.includes(w.t) ? w.t : 'wall';
+  const o = { id: /^[\w-]{2,20}$/.test(w.id || '') ? w.id : 'w' + id(5), a, b, t };
+  if (Vision.TYPES[t].door) { if (w.open) o.open = true; if (w.lock) o.lock = true; }
+  if (t === 'secret' && (w.found || w.open)) o.found = true;
+  if (t === 'oneway') o.side = w.side < 0 ? -1 : 1;
+  return o;
+}
+function cleanVis(v) {
+  v = v && typeof v === 'object' ? v : {};
+  return { on: !!v.on, range: int(v.range, 0, 200, 0), lines: WALL_LINES.includes(v.lines) ? v.lines : 'auto' };
 }
 function cleanBeast(b, c) {
   if (!b || typeof b !== 'object') return null;

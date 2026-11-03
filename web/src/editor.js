@@ -3,7 +3,7 @@
    encierra varios. Con algo elegido: arrastrar lo mueve, las esquinas lo escalan, el círculo de arriba lo gira
    (de 15 en 15 grados; con Shift, libre). La barra de selección cambia color y capa, duplica, gira 90°, edita el texto
    y borra. Teclado: Supr, flechas, R, Ctrl+Z/Y/C/V/D, Esc.
-   Historial por mapa de lo que hiciste tú: {add}, {rm} y {upd:{b, a}}. Los ids de los trazos los pone el cliente,
+   Historial por mapa de lo que hiciste tú: {add}, {rm} y {upd:{b, a}}; de paredes, {wadd}, {wrm}, {wupd:{b, a}} y {wset:{b, a}} (un grupo que se cambia por otro, como partir una pared para poner una puerta). Los ids de los trazos los pone el cliente,
    así deshacer un borrado vuelve a crear el mismo trazo.
    Geometría en casillas. Un elemento se describe como caja girada {cx, cy, w, h, r}. */
 var MapEd = (function(){
@@ -145,6 +145,11 @@ var MapEd = (function(){
     if (e.add) { if (back) A.rm(m, e.add.map(function(k){ return k.id; })); else A.add(m, e.add); }
     else if (e.rm) { if (back) A.add(m, e.rm); else A.rm(m, e.rm.map(function(k){ return k.id; })); }
     else if (e.upd) { var list = (back ? e.upd.b : e.upd.a).map(function(k){ var cur = m.strokes.filter(function(x){ return x.id === k.id; })[0]; var n = JSON.parse(JSON.stringify(k)); n.v = ((cur && cur.v) || 0) + 1; return n; }); A.upd(m, list); }
+    // paredes (las pone mapas.js): agregar, quitar y cambiar
+    else if (e.wadd) { if (back) A.wrm(m, e.wadd.map(function(w){ return w.id; })); else A.wput(m, e.wadd); }
+    else if (e.wrm) { if (back) A.wput(m, e.wrm); else A.wrm(m, e.wrm.map(function(w){ return w.id; })); }
+    else if (e.wupd) A.wput(m, back ? e.wupd.b : e.wupd.a);
+    else if (e.wset) { var from = back ? e.wset.a : e.wset.b, to = back ? e.wset.b : e.wset.a, stay = {}; to.forEach(function(w){ stay[w.id] = 1; }); var gone = from.filter(function(w){ return !stay[w.id]; }).map(function(w){ return w.id; }); if (gone.length) A.wrm(m, gone); A.wput(m, to); }
   }
   function undo(m){ var h = H(m), e = h.u.pop(); if (!e) return false; apply(m, e, true); h.r.push(e); prune(m); A.toolbar(); return true; }
   function redo(m){ var h = H(m), e = h.r.pop(); if (!e) return false; apply(m, e, false); h.u.push(e); A.toolbar(); return true; }

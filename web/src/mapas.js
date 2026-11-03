@@ -2,7 +2,8 @@
 /* Lienzos con cuadrícula, capas, fichas y niebla. Tres modos:
    Jugar   — mueves tu ficha (el DM, todas) y ves la distancia en metros; mantén presionado para señalar un punto.
    Dibujar — lápiz, líneas, rectángulos y texto por capas, como antes.
-   Niebla  — solo el DM: arrastra para descubrir o cubrir casillas.
+   Niebla  — solo el DM: arrastra para descubrir o cubrir casillas; con la visión de los personajes, se descubre sola
+             con lo que ven las fichas del grupo, y las paredes (Dibujar → Paredes) tapan la vista y el paso.
    En una campaña todo viaja por el servidor; cada teléfono guarda su copia (IndexedDB) para verla sin conexión.
    Fuera de una campaña dibujas y pones fichas solo en tu copia. */
 var Mapas = (function(){
@@ -15,12 +16,17 @@ var Mapas = (function(){
   var SIZES = [['24x18','Pequeño · 24 × 18'],['40x30','Mediano · 40 × 30'],['60x45','Grande · 60 × 45'],['100x75','Enorme · 100 × 75']];
   var DRAW_TOOLS = [['pen','Lápiz','i-brush'],['line','Línea','i-line'],['rect','Rectángulo','i-rect'],['text','Texto','i-text'],['erase','Borrar','i-eraser']];
   var TSIZE = [[1,'Mediano (1 casilla)'],[2,'Grande (2 × 2)'],[3,'Enorme (3 × 3)'],[4,'Gargantuesco (4 × 4)']];
-  var maps = {}, cur = null, mode = 'jugar', tool = {k:'pen', c:COLORS[0][0], w:0.14, snap:true, fill:false, layer:null, fogV:1}, hidden = {}, views = {}, asked = {};
+  // paredes: [tipo, nombre, icono, qué hace, solo DM]
+  var WALLT = [['wall','Pared','i-wall','Tapa la vista y el paso.'],['door','Puerta','i-door','Se abre y se cierra; cerrada tapa todo.'],['secret','Puerta secreta','i-secret','Para los jugadores es pared hasta que la encuentran.',1],['window','Ventana','i-window','Se ve a través, no se pasa.'],['oneway','Un sentido','i-oneway','Se ve solo desde el lado de la flecha.'],['low','Muro bajo','i-lowwall','No tapa la vista ni el paso; dará cobertura.'],['curtain','Cortina','i-curtain','Tapa la vista; se puede cruzar.'],['barrier','Barrera invisible','i-barrier','Nadie la ve ni tapa la vista; no deja pasar.',1]];
+  var WCOL = {wall:'#e8c26a', door:'#e0873a', secret:'#d070e0', window:'#5fc6e8', oneway:'#f0d040', low:'#7cc86a', curtain:'#a98ae8', barrier:'#5b9cf0'};
+  var RANGES = [[0,'Sin límite'],[4,'6 m'],[8,'12 m'],[12,'18 m'],[20,'30 m'],[40,'60 m']];
+  var maps = {}, cur = null, mode = 'jugar', tool = {k:'pen', c:COLORS[0][0], w:0.14, snap:true, fill:false, layer:null, fogV:1, wt:'wall', wroom:false}, hidden = {}, views = {}, asked = {};
   var locked = {}; // capas bloqueadas por mapa (solo en tu vista)
   var newOpen = false, layersOpen = false, pendingText = null, selTok = null, pings = [], imgs = {}, fogCache = {}, newImg = null, busyUp = false;
   var waitOpen = null, canvas = null, ptr = {}, gesture = null, drawing = null, erasing = null, drag = null, fogDrag = null, press = null, raf = 0;
   var edOn = false; // un gesto del editor (seleccionar, mover, girar…) en curso
   var gl = null, glRaf = 0, fogSeq = 0, preloaded = false; // motor WebGL (mapa-gl.js) cuando el aparato lo permite; si no, Canvas 2D
+  var selWall = null, wop = null, viewAs = false, doorAnim = {}, visCache = {}, visSeq = 0; // paredes elegida y en edición; el DM viendo como jugador
 
   /* ---------- Guardado en el dispositivo ---------- */
   function idb(){ return new Promise(function(res, rej){ var r = indexedDB.open('diario5e', 2); r.onupgradeneeded = function(){ if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); }; r.onsuccess = function(){ res(r.result); }; r.onerror = function(){ rej(r.error); }; }); }
@@ -30,7 +36,7 @@ var Mapas = (function(){
   function index(){ try { return JSON.parse(localStorage.getItem(IDX) || '[]'); } catch(e){ return []; } }
   function setIndex(a){ try { localStorage.setItem(IDX, JSON.stringify(a)); } catch(e){} }
   var saveT = {};
-  function norm(mp){ if (!mp.tokens) mp.tokens = []; if (!mp.fog) mp.fog = {on:false, cells:''}; if (!mp.layers || !mp.layers.length) mp.layers = [{id:'l1', name:'Terreno'}]; if (!mp.strokes) mp.strokes = []; return mp; }
+  function norm(mp){ if (!mp.tokens) mp.tokens = []; if (!mp.fog) mp.fog = {on:false, cells:''}; if (!mp.layers || !mp.layers.length) mp.layers = [{id:'l1', name:'Terreno'}]; if (!mp.strokes) mp.strokes = []; if (!mp.walls) mp.walls = []; if (!mp.vis) mp.vis = {on:false, range:0, lines:'auto'}; if (mp.wrev == null) mp.wrev = 0; return mp; }
   function keep(mp){
     norm(mp); maps[mp.id] = mp;
     var ix = index().filter(function(x){ return x.id !== mp.id; });
@@ -71,6 +77,17 @@ var Mapas = (function(){
     Sala.on('map.meta', function(m){ var mp = maps[m.id]; if (!mp) return; mp.name = m.name; mp.grid = m.grid; mp.layers = m.layers; var ok = {}; m.layers.forEach(function(l){ ok[l.id] = 1; }); mp.strokes = mp.strokes.filter(function(k){ return ok[k.l]; }); mp.updated = m.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
     Sala.on('map.bg', function(m){ var mp = maps[m.id]; if (!mp) return; mp.bg = m.bg; mp.updated = m.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
     Sala.on('map.fog', function(m){ var mp = maps[m.id]; if (!mp) return; mp.fog = m.fog; mp.updated = m.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
+    Sala.on('walls', function(m){
+      var mp = maps[m.id]; if (!mp) return; var now = Date.now();
+      (m.put || []).forEach(function(w){
+        var i = wallIdx(mp, w.id), old = i >= 0 ? mp.walls[i] : null;
+        if (old && isDoorT(w) && !!old.open !== !!w.open) { doorAnim[w.id] = {t0:now, to:w.open ? 1 : 0}; if (cur === m.id && window.Sfx) Sfx.play('door'); }
+        if (i >= 0) mp.walls[i] = w; else mp.walls.push(w);
+      });
+      if (m.del && m.del.length) { var set = {}; m.del.forEach(function(x){ set[x] = 1; }); mp.walls = mp.walls.filter(function(w){ return !set[w.id]; }); if (set[selWall]) selWall = null; }
+      mp.wrev = (mp.wrev || 0) + 1; mp.updated = m.updated || mp.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); animate(); }
+    });
+    Sala.on('map.vis', function(m){ var mp = maps[m.id]; if (!mp) return; mp.vis = m.vis; if (m.vis.on) mp.fog.on = true; mp.updated = m.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
     Sala.on('tok', function(m){ var mp = maps[m.id]; if (!mp) return; var i = mp.tokens.findIndex(function(t){ return t.id === m.tok.id; }); if (i >= 0) mp.tokens[i] = m.tok; else mp.tokens.push(m.tok); mp.updated = m.updated || mp.updated; keep(mp); if (drag && drag.tok.id === m.tok.id) return; repaintIfCur(m.id); });
     Sala.on('tok.del', function(m){ var mp = maps[m.id]; if (!mp) return; mp.tokens = mp.tokens.filter(function(t){ return t.id !== m.tid; }); if (selTok === m.tid) selTok = null; keep(mp); repaintIfCur(m.id); });
     Sala.on('ping', function(m){ if (cur !== m.id) return; pings.push({x:m.x, y:m.y, name:m.name, color:m.color, t:Date.now()}); animate(); });
@@ -127,11 +144,11 @@ var Mapas = (function(){
   }
   function tokAdd(mp, t){
     if (shared(mp.id)) { Sala.send({t:'tok.add', id:mp.id, tok:t}); return; }
-    t.id = uid('t'); t.by = 'yo'; mp.tokens.push(t); mp.updated = Date.now(); keep(mp); selTok = t.id; paint(); tokPanel();
+    t.id = uid('t'); t.by = 'yo'; mp.tokens.push(t); exploreLocal(mp, [t]); mp.updated = Date.now(); keep(mp); selTok = t.id; paint(); tokPanel();
   }
-  function tokMove(mp, t, x, y){
+  function tokMove(mp, t, x, y, cells){
     if (shared(mp.id)) { t.x = x; t.y = y; paint(); Sala.send({t:'tok.move', id:mp.id, tid:t.id, x:x, y:y}); return; }
-    t.x = x; t.y = y; mp.updated = Date.now(); keep(mp); paint();
+    var from = window.Vision ? Vision.center(t) : null; t.x = x; t.y = y; exploreLocal(mp, [t], from, cells); mp.updated = Date.now(); keep(mp); paint();
   }
   function tokSet(mp, t, o){
     if (shared(mp.id)) { o.t = 'tok.set'; o.id = mp.id; o.tid = t.id; Sala.send(o); return; }
@@ -144,16 +161,110 @@ var Mapas = (function(){
   function fogDo(mp, msg){
     if (shared(mp.id)) { msg.id = mp.id; Sala.send(msg); return; }
     var bits = fogBits(mp).slice();
-    if (msg.t === 'fog.on') mp.fog.on = !!msg.value;
+    if (msg.t === 'fog.on') { mp.fog.on = !!msg.value; if (!mp.fog.on) mp.vis.on = false; }
     else if (msg.t === 'fog.all') bits.fill(msg.value ? 255 : 0);
     else { var r = msg.rect; for (var y = Math.max(0, Math.min(r[1], r[3])); y <= Math.min(mp.rows - 1, Math.max(r[1], r[3])); y++) for (var x = Math.max(0, Math.min(r[0], r[2])); x <= Math.min(mp.cols - 1, Math.max(r[0], r[2])); x++) { var i = y * mp.cols + x; if (msg.value) bits[i >> 3] |= 1 << (i & 7); else bits[i >> 3] &= ~(1 << (i & 7)); } }
-    if (msg.t !== 'fog.on') mp.fog.cells = b64(bits);
+    if (msg.t !== 'fog.on') { mp.fog.cells = b64(bits); exploreLocal(mp); }
     mp.updated = Date.now(); keep(mp); toolbar(); paint();
   }
   function ping(mp, p){
     var col = mp && room() ? (myTok(mp) || {}).color || '#ffd66e' : '#ffd66e';
     if (shared(mp.id)) Sala.send({t:'map.ping', id:mp.id, x:p[0], y:p[1], color:col});
     else { pings.push({x:p[0], y:p[1], name:'', color:col, t:Date.now()}); animate(); }
+  }
+
+  /* ---------- Paredes y puertas ---------- */
+  function wallIdx(mp, id){ for (var i = 0; i < mp.walls.length; i++) if (mp.walls[i].id === id) return i; return -1; }
+  function wallById(mp, id){ var i = wallIdx(mp, id); return i >= 0 ? mp.walls[i] : null; }
+  function isDoorT(w){ return w.t === 'door' || w.t === 'secret'; }
+  function newWid(){ return 'w' + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 6); }
+  function cloneW(w){ return JSON.parse(JSON.stringify(w)); }
+  /* Se ven al instante; en la campaña el servidor las confirma a todos. wput/wrm no anotan en el historial (los usa el propio historial). */
+  function wput(mp, list){
+    list = list.filter(function(w){ return w && w.a && w.b && !(w.a[0] === w.b[0] && w.a[1] === w.b[1]); }); if (!list.length) return;
+    list.forEach(function(w){ var i = wallIdx(mp, w.id); if (i >= 0) mp.walls[i] = w; else mp.walls.push(w); });
+    mp.wrev = (mp.wrev || 0) + 1; mp.updated = Date.now();
+    if (shared(mp.id)) Sala.send({t:'wall.add', id:mp.id, walls:list}); else exploreLocal(mp);
+    keep(mp); toolbar(); paint();
+  }
+  function wrm(mp, ids){
+    if (!ids.length) return; var set = {}; ids.forEach(function(x){ set[x] = 1; });
+    mp.walls = mp.walls.filter(function(w){ return !set[w.id]; }); if (set[selWall]) selWall = null;
+    mp.wrev = (mp.wrev || 0) + 1; mp.updated = Date.now();
+    if (shared(mp.id)) Sala.send({t:'wall.rm', id:mp.id, wids:ids}); else exploreLocal(mp);
+    keep(mp); toolbar(); paint();
+  }
+  function wallsAdd(mp, list){ wput(mp, list); MapEd.record(mp, {wadd:list.map(cloneW)}); }
+  function wallsDel(mp, ids){ var set = {}; ids.forEach(function(x){ set[x] = 1; }); var gone = mp.walls.filter(function(w){ return set[w.id]; }).map(cloneW); if (!gone.length) return; wrm(mp, ids); MapEd.record(mp, {wrm:gone}); }
+  function wallsUpd(mp, before, after){ if (!after.length) return; wput(mp, after); MapEd.record(mp, {wupd:{b:before.map(cloneW), a:after.map(cloneW)}}); }
+  /* Abrir o cerrar: en la campaña lo decide el servidor (con llave no, de lejos no) y llega a todos con su animación */
+  function doorToggle(mp, w, open){
+    if (open == null) open = !w.open;
+    if (shared(mp.id)) { Sala.send({t:'door', id:mp.id, wid:w.id, open:open}); return; }
+    var n = cloneW(w); if (open) n.open = true; else delete n.open; if (n.t === 'secret' && open) n.found = true;
+    doorAnim[w.id] = {t0:Date.now(), to:open ? 1 : 0}; if (window.Sfx) Sfx.play('door');
+    mp.walls[wallIdx(mp, w.id)] = n; mp.wrev = (mp.wrev || 0) + 1; mp.updated = Date.now(); exploreLocal(mp); keep(mp); toolbar(); paint(); animate();
+  }
+  /* Un jugador toca una puerta: tiene que tener una ficha cerca y que no esté con llave */
+  function doorClick(mp, w){
+    if (!master(mp)) {
+      if (w.lock && !w.open) { Sala.toast('Está cerrada con llave.'); if (window.Sfx) Sfx.play('locked'); return; }
+      var near = mp.tokens.some(function(t){ if (t.hidden || !mine(t)) return false; var c = Vision.center(t); return Vision.segDist(c[0], c[1], w.a, w.b) <= 2 + (t.s || 1) / 2; });
+      if (!near) { Sala.toast('Acércate a la puerta para abrirla.'); return; }
+    }
+    doorToggle(mp, w);
+  }
+  function doorAt(mp, m){
+    if (!window.Vision || !mp.walls.length) return null; var dm = master(mp) && !viewAs, tol = Math.max(0.3, 16 / V().s), best = null, bd = tol, bits = mp.fog && mp.fog.on && !dm ? fogBits(mp) : null, vs = bits ? visOf(mp) : null;
+    mp.walls.forEach(function(w){
+      if (!(w.t === 'door' || (w.t === 'secret' && dm))) return;
+      var d = Vision.segDist(m[0], m[1], w.a, w.b); if (d >= bd) return;
+      // con niebla, solo las puertas que el grupo ya conoce (descubierta o a la vista alguna de sus dos caras)
+      if (bits) {
+        var mx = (w.a[0] + w.b[0]) / 2, my = (w.a[1] + w.b[1]) / 2, L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1, nx = -(w.b[1] - w.a[1]) / L * 0.4, ny = (w.b[0] - w.a[0]) / L * 0.4;
+        var known = [[mx + nx, my + ny], [mx - nx, my - ny]].some(function(q){ var cx = Math.min(mp.cols - 1, Math.max(0, Math.floor(q[0]))), cy = Math.min(mp.rows - 1, Math.max(0, Math.floor(q[1]))); return seen(bits, mp, cx, cy) || (vs && Vision.inAny(vs.polys, q[0], q[1])); });
+        if (!known) return;
+      }
+      bd = d; best = w;
+    });
+    return best;
+  }
+  /* Ajustes de la visión (alcance, si los jugadores ven las líneas de pared) */
+  function visDo(mp, o){
+    if (shared(mp.id)) { o.t = 'map.vis'; o.id = mp.id; Sala.send(o); return; }
+    if (o.on != null) mp.vis.on = !!o.on; if (o.range != null) mp.vis.range = o.range; if (o.lines) mp.vis.lines = o.lines;
+    if (mp.vis.on) mp.fog.on = true; exploreLocal(mp); mp.updated = Date.now(); keep(mp); toolbar(); paint();
+  }
+  function linesOn(mp){ var l = mp.vis && mp.vis.lines || 'auto'; return l === 'yes' || (l === 'auto' && !mp.bg); }
+
+  /* ---------- Visión del grupo ---------- */
+  function charOf(mp, t){ var r = room(); if (!r || !shared(mp.id) || !t.ref || t.comp) return null; var m = r.members.filter(function(x){ return x.id === t.ref; })[0]; return m && m.role !== 'dm' ? m.char : null; }
+  /* Polígonos de lo que ve ahora el grupo (se recalculan solo si algo cambió) */
+  function visOf(mp){
+    if (!mp.vis || !mp.vis.on || !window.Vision) return null;
+    var key = mp.wrev + '|' + mp.walls.length + '|' + mp.vis.range + '|' + mp.cols + 'x' + mp.rows, toks = [];
+    mp.tokens.forEach(function(t){ if (!Vision.isViewer(t, charOf(mp, t))) return; toks.push(t); key += '|' + t.id + ':' + t.x + ',' + t.y + ',' + (t.s || 1); });
+    var c = visCache[mp.id]; if (c && c.key === key) return c;
+    var ix = Vision.sightOf(mp);
+    c = visCache[mp.id] = {key:key, n:++visSeq, polys:toks.map(function(t){ var p = Vision.center(t); return Vision.poly(ix, p[0], p[1], mp.vis.range, mp.cols, mp.rows); })};
+    return c;
+  }
+  /* Sin campaña (o en tu copia) la niebla la descubres tú mismo al mover las fichas */
+  function exploreLocal(mp, toks, from, cells){
+    if (shared(mp.id) || !mp.vis || !mp.vis.on || !window.Vision) return 0;
+    var bits = fogBits(mp).slice(), ix = Vision.sightOf(mp), n = 0;
+    (toks || mp.tokens).forEach(function(t){ if (!Vision.isViewer(t, null)) return; var pts = toks && from ? Vision.trail(from, Vision.center(t), cells, t.s) : [Vision.center(t)]; pts.forEach(function(p){ n += Vision.explore(bits, mp.cols, mp.rows, Vision.poly(ix, p[0], p[1], mp.vis.range, mp.cols, mp.rows)); }); });
+    if (n) mp.fog.cells = b64(bits);
+    return n;
+  }
+  /* Con la visión puesta, un jugador solo ve a los enemigos que alguien del grupo ve (los objetos, si ya se descubrió dónde están) */
+  function ownT(t){ return !viewAs && mine(t); }
+  function tokShown(mp, t, vs, dmView){
+    if (dmView || !vs || t.kind === 'pc' || ownT(t)) return true;
+    var s = t.s || 1, pts = [[t.x + s / 2, t.y + s / 2]]; if (s > 1) pts.push([t.x + 0.3, t.y + 0.3], [t.x + s - 0.3, t.y + 0.3], [t.x + 0.3, t.y + s - 0.3], [t.x + s - 0.3, t.y + s - 0.3]);
+    for (var i = 0; i < pts.length; i++) if (Vision.inAny(vs.polys, pts[i][0], pts[i][1])) return true;
+    if (t.kind === 'obj') { var b = fogBits(mp); return !!seen(b, mp, Math.min(mp.cols - 1, Math.floor(pts[0][0])), Math.min(mp.rows - 1, Math.floor(pts[0][1]))); }
+    return false;
   }
 
   /* ---------- Niebla: un bit por casilla (1 = descubierta) ---------- */
@@ -240,11 +351,11 @@ var Mapas = (function(){
     var modes = [['jugar','Jugar','i-token'],['dibujar','Dibujar','i-pencil']]; if (dm) modes.push(['niebla','Niebla','i-fog']);
     put(bar, '<button class="icon-btn sm" type="button" data-act="mapback" aria-label="Volver a los mapas" title="Mapas"><svg class="ic"><use href="#i-back"/></svg></button>'
       + (admin ? '<input class="field map-name" id="mapName" value="' + attr(mp.name) + '" aria-label="Nombre del mapa">' : '<b class="map-name ro">' + esc(mp.name) + '</b>')
-      + '<span class="map-where">' + (scene ? '<i class="tag new">en pantalla</i>' : '') + (meta && meta.hidden ? '<i class="tag">oculto</i>' : '') + (sh ? '' : '<i class="tag">solo tu copia</i>') + '</span>'
+      + '<span class="map-where">' + (scene ? '<i class="tag new">en pantalla</i>' : '') + (meta && meta.hidden ? '<i class="tag">oculto</i>' : '') + (sh ? '' : '<i class="tag">solo tu copia</i>') + (viewAs && dm ? '<button type="button" class="tag vis-as" data-act="mapviewas" title="Dejar de ver como jugador">como jugador ×</button>' : '') + '</span>'
       + '<div class="seg map-modes" role="tablist" aria-label="Modo">' + modes.map(function(x){ return '<button type="button" data-act="mapmode" data-v="' + x[0] + '" aria-pressed="' + (mode === x[0]) + '" title="' + x[1] + '"><svg class="ic"><use href="#' + x[2] + '"/></svg><span>' + x[1] + '</span></button>'; }).join('') + '</div>'
       + (admin ? '<button class="icon-btn sm" type="button" data-act="mapset" aria-expanded="' + (pop === 'set') + '" aria-label="Ajustes del mapa" title="Ajustes del mapa"><svg class="ic"><use href="#i-gear"/></svg></button>' : ''));
     palette(mp, dm, sh); popover(mp, dm, sh, admin); hud(mp, dm, sh, scene); initStrip(mp);
-    var sb = $('#mapSel'); if (sb) { var bh = mode === 'dibujar' && !pop ? MapEd.barHtml(mp) : ''; put(sb, bh); sb.hidden = !bh; }
+    var sb = $('#mapSel'); if (sb) { var bh = mode === 'dibujar' && !pop ? (tool.k === 'wall' ? wallBar(mp) : MapEd.barHtml(mp)) : ''; put(sb, bh); sb.hidden = !bh; }
   }
   /* Paleta flotante de dibujo (a la izquierda, como en los VTT) */
   function palette(mp, dm, sh){
@@ -256,6 +367,7 @@ var Mapas = (function(){
       + '<button type="button" class="icon-btn pen-btn" data-act="mappen" aria-expanded="' + (pop === 'pen') + '" aria-pressed="' + (tool.k === 'pen') + '" aria-label="Lápiz: grosor y color" title="Lápiz"><svg class="ic"><use href="#i-pencil"/></svg><i class="pen-dot" style="background:' + attr(tool.c) + ';--w:' + (tool.w === 0.06 ? 4 : tool.w === 0.14 ? 7 : 11) + 'px"></i></button>'
       + tb('line', 'Línea', 'i-line') + tb('rect', 'Rectángulo', 'i-rect') + tb('text', 'Texto', 'i-text')
       + '<button type="button" class="icon-btn" data-act="mapassets" aria-expanded="' + (pop === 'assets') + '" aria-pressed="' + (tool.k === 'asset') + '" aria-label="Objetos: puertas, escaleras, muebles…" title="Objetos"><svg class="ic"><use href="#i-chest"/></svg></button>'
+      + (canAdmin(mp) ? '<button type="button" class="icon-btn wall-btn" data-act="mapwalls" aria-expanded="' + (pop === 'walls') + '" aria-pressed="' + (tool.k === 'wall') + '" aria-label="Paredes y puertas" title="Paredes y puertas" style="--wc:' + WCOL[tool.wt] + '"><svg class="ic"><use href="#' + wallT(tool.wt)[2] + '"/></svg></button>' : '')
       + tb('erase', 'Borrar', 'i-eraser')
       + '<span class="pal-sep"></span><button type="button" class="icon-btn" data-act="maplayers" aria-expanded="' + (pop === 'layers') + '" aria-label="Capas" title="Capas"><svg class="ic"><use href="#i-layers"/></svg></button>'
       + '<button type="button" class="icon-btn" data-act="mapundo" aria-label="Deshacer" title="Deshacer (Ctrl+Z)"' + (MapEd.canUndo(mp) ? '' : ' disabled') + '><svg class="ic"><use href="#i-undo"/></svg></button>'
@@ -265,6 +377,28 @@ var Mapas = (function(){
     return '<div class="penpop"><span class="label">trazo</span><div class="pen-ws" role="group" aria-label="Grosor">' + WIDTHS.map(function(x, i){ return '<button type="button" data-act="mapw" data-v="' + x[0] + '" aria-pressed="' + (tool.w === x[0]) + '" aria-label="' + x[1] + '" title="' + x[1] + '"><svg viewBox="0 0 60 20" aria-hidden="true"><path d="M6 14 Q20 2 32 10 T54 6" stroke="' + attr(tool.c) + '" stroke-width="' + [2, 4.5, 8][i] + '" fill="none" stroke-linecap="round"/></svg></button>'; }).join('') + '</div>'
       + '<span class="label">color</span><div class="swatches" role="group" aria-label="Color">' + COLORS.map(function(c){ return '<button type="button" class="sw" data-act="mapcolor" data-v="' + c[0] + '" style="background:' + c[0] + '" aria-pressed="' + (tool.c === c[0]) + '" aria-label="' + c[1] + '"></button>'; }).join('') + '</div>'
       + '<label class="toggle"><input type="checkbox" id="mapSnap"' + (tool.snap ? ' checked' : '') + '> Ajustar a la cuadrícula</label><label class="toggle"><input type="checkbox" id="mapFill"' + (tool.fill ? ' checked' : '') + '> Rellenar rectángulos</label></div>';
+  }
+  function wallT(k){ return WALLT.filter(function(x){ return x[0] === k; })[0] || WALLT[0]; }
+  /* Paredes: el tipo que vas a trazar y si es un tramo o una habitación entera */
+  function wallsHtml(mp){
+    var dm = master(mp);
+    return '<div class="wallpop"><div class="row"><span class="label">paredes · arrastra para trazar</span><button class="icon-btn sm" type="button" data-act="mappopx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>'
+      + '<div class="wall-types" role="group" aria-label="Tipo de pared">' + WALLT.filter(function(x){ return !x[4] || dm; }).map(function(x){ return '<button type="button" class="wall-t" data-act="mapwallt" data-v="' + x[0] + '" aria-pressed="' + (tool.wt === x[0]) + '" style="--wc:' + WCOL[x[0]] + '"><svg class="ic"><use href="#' + x[2] + '"/></svg><span><b>' + x[1] + '</b><small>' + x[3] + '</small></span></button>'; }).join('') + '</div>'
+      + '<div class="row wall-opts"><div class="seg sm" role="group" aria-label="Forma"><button type="button" data-act="mapwallroom" data-v="0" aria-pressed="' + !tool.wroom + '"><svg class="ic"><use href="#i-line"/></svg>Tramo</button><button type="button" data-act="mapwallroom" data-v="1" aria-pressed="' + !!tool.wroom + '"><svg class="ic"><use href="#i-room"/></svg>Habitación</button></div>'
+      + '<label class="toggle"><input type="checkbox" id="mapSnap"' + (tool.snap ? ' checked' : '') + '> A la cuadrícula</label></div>'
+      + '<p class="note">Empieza en la punta de otra pared para seguirla. Toca una pared para cambiarla y arrastra sus puntas para moverla. Con Puerta, Puerta secreta o Ventana, toca una pared para abrirle un hueco.' + (mp.walls.length ? ' Hay ' + mp.walls.length + ' en este mapa.' : '') + '</p></div>';
+  }
+  /* Barra de la pared elegida: tipo, abrir/cerrar, llave, encontrada, lado, borrar */
+  function wallBar(mp){
+    var w = selWall && wallById(mp, selWall); if (!w) return '';
+    var dm = master(mp), T = wallT(w.t), door = isDoorT(w), len = Math.round(Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) * 1.5 * 10) / 10;
+    return '<div class="sel-bar wall-bar" role="toolbar" aria-label="Pared elegida" style="--wc:' + WCOL[w.t] + '"><svg class="ic wc"><use href="#' + T[2] + '"/></svg>'
+      + '<select class="field" id="mapWallType" aria-label="Tipo de pared">' + WALLT.filter(function(x){ return !x[4] || dm || x[0] === w.t; }).map(function(x){ return '<option value="' + x[0] + '"' + (x[0] === w.t ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>'
+      + (door ? '<button class="btn sm" type="button" data-act="mapwallopen">' + (w.open ? 'Cerrar' : 'Abrir') + '</button><button class="icon-btn sm" type="button" data-act="mapwalllock" aria-pressed="' + !!w.lock + '" aria-label="' + (w.lock ? 'Quitar la llave' : 'Cerrar con llave') + '" title="' + (w.lock ? 'Con llave: los jugadores no la abren' : 'Sin llave') + '"><svg class="ic"><use href="#i-lock"/></svg></button>' : '')
+      + (w.t === 'secret' ? '<button class="btn sm" type="button" data-act="mapwallfound" aria-pressed="' + !!w.found + '" title="Encontrada: los jugadores la ven como puerta">' + (w.found ? 'Encontrada' : 'Sin encontrar') + '</button>' : '')
+      + (w.t === 'oneway' ? '<button class="icon-btn sm" type="button" data-act="mapwallflip" aria-label="Cambiar el lado desde el que se ve" title="Cambiar el lado"><svg class="ic"><use href="#i-flip"/></svg></button>' : '')
+      + '<small class="wall-len">' + String(len).replace('.', ',') + ' m</small>'
+      + '<button class="icon-btn sm del" type="button" data-act="mapwalldel" aria-label="Borrar la pared" title="Borrar (Supr)"><svg class="ic"><use href="#i-trash"/></svg></button><button class="icon-btn sm" type="button" data-act="mapwallx" aria-label="Soltar" title="Soltar (Esc)"><svg class="ic"><use href="#i-x"/></svg></button></div>';
   }
   /* Capas: arriba la que se dibuja encima. Se reordenan arrastrando la manija; el ojo y el candado son de tu vista. */
   function layersHtml(mp, dm, sh, admin){
@@ -302,8 +436,8 @@ var Mapas = (function(){
   function popover(mp, dm, sh, admin){
     var p = $('#mapPop'); if (!p) return;
     if (pop === 'pen' && mode !== 'dibujar') pop = null;
-    if ((pop === 'layers' || pop === 'assets') && mode !== 'dibujar') pop = null;
-    var h = pop === 'set' && admin ? setHtml(mp, dm, sh) : pop === 'layers' ? layersHtml(mp, dm, sh, admin) : pop === 'pen' ? penHtml() : pop === 'add' ? addHtml(mp, dm) : pop === 'assets' && window.Assets ? Assets.pickerHtml(tool.k === 'asset' ? tool.asset : null) : '';
+    if ((pop === 'layers' || pop === 'assets' || pop === 'walls') && mode !== 'dibujar') pop = null;
+    var h = pop === 'set' && admin ? setHtml(mp, dm, sh) : pop === 'layers' ? layersHtml(mp, dm, sh, admin) : pop === 'pen' ? penHtml() : pop === 'add' ? addHtml(mp, dm) : pop === 'assets' && window.Assets ? Assets.pickerHtml(tool.k === 'asset' ? tool.asset : null) : pop === 'walls' && admin ? wallsHtml(mp) : '';
     p.className = 'map-pop' + (pop ? ' p-' + pop : ''); put(p, h); p.hidden = !h;
   }
   function setHtml(mp, dm, sh){
@@ -360,12 +494,18 @@ var Mapas = (function(){
     var el = $('#vttHud'); if (!el) return;
     var r = room(), h = '';
     if (mode === 'niebla') {
-      var fo = mp.fog && mp.fog.on;
-      h = '<div class="hud-row"><label class="toggle big"><input type="checkbox" id="mapFogOn"' + (fo ? ' checked' : '') + '> Niebla</label><div class="seg sm" role="group" aria-label="Al arrastrar"><button type="button" data-act="mapfogv" data-v="1" aria-pressed="' + (tool.fogV === 1) + '">Descubrir</button><button type="button" data-act="mapfogv" data-v="0" aria-pressed="' + (tool.fogV === 0) + '">Cubrir</button></div><button class="btn sm" type="button" data-act="mapfogall" data-v="1">Todo visible</button><button class="btn sm" type="button" data-act="mapfogall" data-v="0">Todo cubierto</button></div>'
-        + '<p class="hud-hint">' + (fo ? 'Arrastra sobre el mapa para ' + (tool.fogV ? 'descubrir' : 'cubrir') + '. Tú la ves translúcida; los jugadores, negra.' : 'Actívala para que los jugadores solo vean lo descubierto.') + '</p>';
+      var fo = mp.fog && mp.fog.on, vo = mp.vis && mp.vis.on, rg = mp.vis ? mp.vis.range || 0 : 0, ln = mp.vis && mp.vis.lines || 'auto';
+      h = '<div class="hud-row"><label class="toggle big"><input type="checkbox" id="mapFogOn"' + (fo ? ' checked' : '') + '> Niebla</label>'
+        + '<label class="toggle big vis-on"><input type="checkbox" id="mapVisOn"' + (vo ? ' checked' : '') + '> <svg class="ic"><use href="#i-vision"/></svg>Visión de los personajes</label>'
+        + (vo ? '<label class="toggle"><input type="checkbox" id="mapViewAs"' + (viewAs ? ' checked' : '') + '> Ver como jugador</label>' : '') + '</div>'
+        + (vo ? '<div class="hud-row vis-row"><label class="fl sm">Alcance de la vista<select class="field" id="mapVisRange">' + RANGES.map(function(x){ return '<option value="' + x[0] + '"' + (rg === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + (RANGES.some(function(x){ return x[0] === rg; }) ? '' : '<option value="' + rg + '" selected>' + String(rg * 1.5).replace('.', ',') + ' m</option>') + '</select></label>'
+          + '<label class="fl sm">Líneas de pared<select class="field" id="mapVisLines">' + [['auto','Si no hay imagen de fondo'],['yes','Los jugadores las ven'],['no','Solo tú las ves']].map(function(x){ return '<option value="' + x[0] + '"' + (ln === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label></div>' : '')
+        + '<div class="hud-row"><div class="seg sm" role="group" aria-label="Al arrastrar"><button type="button" data-act="mapfogv" data-v="1" aria-pressed="' + (tool.fogV === 1) + '">Descubrir</button><button type="button" data-act="mapfogv" data-v="0" aria-pressed="' + (tool.fogV === 0) + '">Cubrir</button></div><button class="btn sm" type="button" data-act="mapfogall" data-v="1">Todo visible</button><button class="btn sm" type="button" data-act="mapfogall" data-v="0">Todo cubierto</button></div>'
+        + '<p class="hud-hint">' + (vo ? 'Se descubre solo lo que ven las fichas del grupo al moverse; las paredes tapan la vista.' + (mp.walls.length ? '' : ' Todavía no hay paredes: ponlas en Dibujar → Paredes.') + ' Tú ves en penumbra lo que ellos no ven ahora.'
+          : fo ? 'Arrastra sobre el mapa para ' + (tool.fogV ? 'descubrir' : 'cubrir') + '. Tú la ves translúcida; los jugadores, negra.' : 'Actívala para que los jugadores solo vean lo descubierto.') + '</p>';
     } else if (mode === 'jugar') {
-      var f = fight(), mt = myTok(mp), canPut = !(isDm() && sh) && (!!(window.Sala && Sala.summary && Sala.summary()) || !sh);
-      var tokBtns = (canPut ? '<button class="btn main sm" type="button" data-act="mapputme"><svg class="ic"><use href="#i-token"/></svg>' + (mt ? 'Traer mi ficha' : 'Poner mi ficha') + '</button>' + (mt ? '<button class="icon-btn sm" type="button" data-act="mapfindme" aria-label="Ir a mi ficha" title="Ir a mi ficha"><svg class="ic"><use href="#i-target"/></svg></button>' : '') : '')
+      var f = fight(), mt = myTok(mp), canPut = !(isDm() && sh) && (!!(window.Sala && Sala.summary && Sala.summary()) || !sh), noTp = mt && sh && mp.vis && mp.vis.on; // con la visión, tu ficha camina: no se trae
+      var tokBtns = (canPut ? (noTp ? '' : '<button class="btn main sm" type="button" data-act="mapputme"><svg class="ic"><use href="#i-token"/></svg>' + (mt ? 'Traer mi ficha' : 'Poner mi ficha') + '</button>') + (mt ? '<button class="icon-btn sm" type="button" data-act="mapfindme" aria-label="Ir a mi ficha" title="Ir a mi ficha"><svg class="ic"><use href="#i-target"/></svg></button>' : '') : '')
         + '<button class="icon-btn sm" type="button" data-act="mapadd" aria-expanded="' + (pop === 'add') + '" aria-label="' + (dm ? 'Agregar ficha' : 'Otra ficha (familiar, montura)') + '" title="' + (dm ? 'Agregar ficha' : 'Otra ficha') + '"><svg class="ic"><use href="#i-plus"/></svg></button>';
       if (r && isDm() && sh) {
         var missing = f ? combatants(f).filter(function(x){ return !mp.tokens.some(function(t){ return t.ref === x.id && !t.comp; }); }).length : 0;
@@ -504,17 +644,21 @@ var Mapas = (function(){
   }
   /* Lo que se ve, ya resuelto, para el motor WebGL (las mismas reglas que draw()/overlay()) */
   function scene(mp, v, W, H){
-    var hid = hidden[mp.id] || {}, dmView = master(mp), toks = [];
-    (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; toks.push(tokScene(t, v, !dmView && mine(t))); });
+    var hid = hidden[mp.id] || {}, dmView = master(mp) && !viewAs, vs = visOf(mp), toks = [], now = Date.now(), lvl = window.Gfx ? Gfx.level() : 'media';
+    (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; if (viewAs && t.hidden) return; if (!tokShown(mp, t, vs, dmView)) return; toks.push(tokScene(t, v, !dmView && (ownT(t) || (!!vs && t.kind === 'pc')))); });
+    var anim = Object.keys(doorAnim).length || (wop && wop.prev);
     var sc = {W:W, H:H, v:v, tokens:toks,
       map:{id:mp.id, cols:mp.cols, rows:mp.rows, grid:mp.grid, layers:mp.layers, strokes:MapEd.strokes(mp), rev:MapEd.rev(), hid:hid, asset:window.Assets ? Assets.imageFor : null, bgUrl:mp.bg ? (mp.bg.img ? Mesa.imgUrl(mp.bg.img) : mp.bg.data) : null, bgOp:mp.bg ? mp.bg.op : 1},
-      fog:mp.fog && mp.fog.on ? {on:true, dm:dmView, bits:fogBits(mp), key:fogCache[mp.id].n} : null,
+      walls:{ink:wallInk(mp, dmView, now), key:[mp.id, mp.wrev, dmView ? 1 : 0, linesOn(mp) ? 1 : 0, anim ? now : 0].join('|'), tech:mode === 'dibujar' && canAdmin(mp) ? wallTech(mp, tool.k === 'wall') : null},
+      fog:mp.fog && mp.fog.on ? {on:true, dm:dmView, bits:fogBits(mp), key:fogCache[mp.id].n, vis:vs ? {polys:vs.polys, key:vs.n} : null, un:dmView ? 0.5 : 1, mem:vs ? (dmView ? 0.22 : 0.62) : 0, k:lvl === 'baja' ? 6 : lvl === 'alta' ? 16 : 12, soft:lvl !== 'baja'} : null,
       edit:mode === 'dibujar' ? MapEd.overlay(mp) : null, drawing:drawing, erase:erasing ? mp.strokes.filter(function(k){ return erasing.hits[k.id]; }) : null, fogRect:fogDrag ? {a:fogDrag.a, b:fogDrag.b, v:tool.fogV} : null, pings:[]};
     if (drag && drag.moved) {
-      var t = drag.tok, s = t.s || 1, cells = Math.max(Math.abs(Math.round(drag.x - drag.sx)), Math.abs(Math.round(drag.y - drag.sy)));
-      sc.ghost = Object.assign(tokScene(Object.assign({}, t, {x:drag.x, y:drag.y}), v, false), {ghost:true});
-      sc.ruler = {ax:drag.sx + s / 2, ay:drag.sy + s / 2, bx:drag.x + s / 2, by:drag.y + s / 2, half:s * 0.5, text:(cells * 1.5).toString().replace('.', ',') + ' m · ' + cells + ' casilla' + (cells === 1 ? '' : 's')};
+      var t = drag.tok, s = t.s || 1, rr = ruler(mp);
+      sc.ghost = Object.assign(tokScene(Object.assign({}, t, {x:drag.x, y:drag.y}), v, false), {ghost:true, bad:rr.bad && !master(mp)});
+      sc.ruler = {ax:drag.sx + s / 2, ay:drag.sy + s / 2, bx:drag.x + s / 2, by:drag.y + s / 2, half:s * 0.5, text:rr.text, path:rr.path, bad:rr.bad};
+      if (drag.pv) sc.preview = {polys:[drag.pv]};
     }
+    var wl = wallLabel(); if (wl) sc.label = wl;
     var now = Date.now(); pings = pings.filter(function(p){ return now - p.t < 2400; });
     sc.pings = pings.map(function(p){ return {x:p.x, y:p.y, k:(now - p.t) / 2400, color:p.color, name:p.name}; });
     return sc;
@@ -522,6 +666,84 @@ var Mapas = (function(){
   function tokScene(t, v, late){
     var info = tokInfo(t);
     return {id:t.id, x:t.x, y:t.y, s:t.s || 1, color:t.color || '#8c2626', img:tokImg(t) ? Mesa.imgUrl(tokImg(t)) : null, ini:ini(info.name), name:info.name, pct:info.pct, turn:info.turn, down:info.down, hidden:!!t.hidden, sel:selTok === t.id, late:late, label:v.s >= 40 || selTok === t.id || info.turn};
+  }
+  /* La regla de la ficha que arrastras: en recto o rodeando paredes; si no hay camino, avisa */
+  function ruler(mp){
+    var rt = drag.route, bad = !!(rt && !rt.ok), steps = rt && rt.cells ? rt.steps : Math.max(Math.abs(Math.round(drag.x - drag.sx)), Math.abs(Math.round(drag.y - drag.sy)));
+    var text = bad ? (master(mp) ? 'Atraviesa paredes (solo el DM)' : 'Hay una pared en medio') : (steps * 1.5).toString().replace('.', ',') + ' m · ' + steps + ' casilla' + (steps === 1 ? '' : 's') + (rt && rt.cells ? ' · rodeando' : '');
+    return {bad:bad, text:text, path:rt && rt.cells ? drag.path : null};
+  }
+  /* Largo de la pared que trazas */
+  function wallLabel(){
+    if (!wop || wop.k !== 'new' || !wop.moved || !wop.b) return null;
+    var dx = Math.abs(wop.b[0] - wop.a[0]), dy = Math.abs(wop.b[1] - wop.a[1]), m = function(x){ return String(Math.round(x * 15) / 10).replace('.', ','); };
+    return {x:wop.b[0], y:wop.b[1], text:tool.wroom ? m(dx) + ' × ' + m(dy) + ' m' : m(Math.hypot(dx, dy)) + ' m'};
+  }
+  /* ---------- Paredes en el mapa ----------
+     Se describen con figuras sencillas que dibujan igual Canvas 2D y WebGL:
+       seg {a, b, w, c, o, d (guiones), px (ancho en píxeles)} · door {a, b, r (grados abierta), w, c, s, o, dash} · dot {x, y, r, c} · lock {x, y} · arrow {a, b, c}
+     wallInk: lo que forma parte del mapa (debajo de la niebla). wallTech: las líneas de colores para editar (encima de todo). */
+  function wallsShown(mp){ if (!wop || !wop.prev) return mp.walls; return mp.walls.map(function(w){ return wop.prev[w.id] || w; }); }
+  function doorAng(w, now){
+    var a = doorAnim[w.id], tg = w.open ? 1 : 0; if (!a) return tg;
+    var k = Math.min(1, (now - a.t0) / 280); if (k >= 1) { delete doorAnim[w.id]; return tg; }
+    k = 1 - Math.pow(1 - k, 3); return a.to ? k : 1 - k;
+  }
+  function wallInk(mp, dmView, now){
+    var out = [], lines = linesOn(mp);
+    wallsShown(mp).forEach(function(w){
+      var t = w.t;
+      if (t === 'door' || t === 'secret') {
+        if (t === 'secret' && !dmView) return;
+        var r = doorAng(w, now) * 80;
+        if (r > 1) out.push({p:'seg', a:w.a, b:w.b, w:0.05, c:'#2b1d12', o:0.4, d:0.12});
+        out.push({p:'door', a:w.a, b:w.b, r:r, w:0.22, c:t === 'secret' ? '#7a3f86' : '#8a5a2b', s:'#2b1d12', o:1, dash:t === 'secret'});
+        if (w.lock && dmView) out.push({p:'lock', x:(w.a[0] + w.b[0]) / 2, y:(w.a[1] + w.b[1]) / 2});
+        return;
+      }
+      if (t === 'barrier') { if (dmView) out.push({p:'seg', a:w.a, b:w.b, w:0.06, c:'#5b9cf0', o:0.55, d:0.3}); return; }
+      if (!lines) { if (dmView) out.push({p:'seg', a:w.a, b:w.b, w:0.07, c:t === 'window' ? '#2f6f8a' : '#2b1d12', o:0.45, d:t === 'low' || t === 'curtain' ? 0.25 : 0}); return; }
+      if (t === 'window') { out.push({p:'seg', a:w.a, b:w.b, w:0.22, c:'#2b1d12', o:1}); out.push({p:'seg', a:w.a, b:w.b, w:0.1, c:'#bfe6f2', o:1}); return; }
+      if (t === 'low') { out.push({p:'seg', a:w.a, b:w.b, w:0.12, c:'#5a4630', o:0.9, d:0.18}); return; }
+      if (t === 'curtain') { out.push({p:'seg', a:w.a, b:w.b, w:0.12, c:'#6a3fa0', o:0.85, d:0.12}); return; }
+      out.push({p:'seg', a:w.a, b:w.b, w:0.18, c:'#2b1d12', o:1});
+    });
+    return out;
+  }
+  function wallTech(mp, full){
+    var out = [], er = erasing && erasing.walls || {};
+    wallsShown(mp).forEach(function(w){
+      var col = WCOL[w.t] || WCOL.wall, sel = full && w.id === selWall, dash = w.t === 'secret' || w.t === 'barrier' || w.t === 'low' ? 8 : w.t === 'curtain' ? 3 : 0;
+      if (sel) out.push({p:'seg', a:w.a, b:w.b, w:11, px:1, c:'#fff3c4', o:0.35});
+      out.push({p:'seg', a:w.a, b:w.b, w:full ? (sel ? 5 : 3.5) : 2, px:1, c:er[w.id] ? '#ff3b30' : col, o:full ? 1 : 0.6, d:dash});
+      if (w.t === 'oneway') { var dx = w.b[0] - w.a[0], dy = w.b[1] - w.a[1], L = Math.hypot(dx, dy) || 1, sg = w.side < 0 ? -1 : 1, nx = dy / L * sg, ny = -dx / L * sg, mx = (w.a[0] + w.b[0]) / 2, my = (w.a[1] + w.b[1]) / 2; out.push({p:'arrow', a:[mx + nx * 0.6, my + ny * 0.6], b:[mx + nx * 0.08, my + ny * 0.08], c:col, o:full ? 1 : 0.6}); }
+      if (isDoorT(w) && full) out.push({p:'door', a:w.a, b:w.b, r:w.open ? 80 : 0, w:0.16, c:col, s:'#2b1d12', o:0.75, dash:w.t === 'secret'});
+      if (full) { out.push({p:'dot', x:w.a[0], y:w.a[1], r:sel ? 6 : 3.5, c:sel ? '#fff8e6' : col}); out.push({p:'dot', x:w.b[0], y:w.b[1], r:sel ? 6 : 3.5, c:sel ? '#fff8e6' : col}); }
+    });
+    if (wop && wop.k === 'new' && wop.moved && wop.b) {
+      var c = WCOL[tool.wt] || WCOL.wall, a = wop.a, b = wop.b;
+      var segs = tool.wroom ? [[a, [b[0], a[1]]], [[b[0], a[1]], b], [b, [a[0], b[1]]], [[a[0], b[1]], a]] : [[a, b]];
+      segs.forEach(function(q){ out.push({p:'seg', a:q[0], b:q[1], w:4, px:1, c:c, o:0.95}); });
+      out.push({p:'dot', x:a[0], y:a[1], r:5, c:'#fff8e6'}); out.push({p:'dot', x:b[0], y:b[1], r:5, c:'#fff8e6'});
+    }
+    return out;
+  }
+  /* Canvas 2D: las mismas figuras */
+  function primsOn(c, list, v){
+    list.forEach(function(q){
+      c.save(); c.globalAlpha = q.o == null ? 1 : q.o; var X = function(p){ return [v.x + p[0] * v.s, v.y + p[1] * v.s]; };
+      if (q.p === 'seg') { var a = X(q.a), b = X(q.b); c.strokeStyle = q.c; c.lineWidth = q.px ? q.w : Math.max(1, q.w * v.s); c.lineCap = q.d ? 'butt' : 'round'; if (q.d) { var dd = q.px ? q.d : Math.max(2, q.d * v.s); c.setLineDash([dd, dd * 0.8]); } c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); }
+      else if (q.p === 'door') {
+        var h = X(q.a), L = Math.hypot(q.b[0] - q.a[0], q.b[1] - q.a[1]) * v.s * 0.97, an = Math.atan2(q.b[1] - q.a[1], q.b[0] - q.a[0]) + q.r * Math.PI / 180, w = Math.max(3, q.w * v.s);
+        c.translate(h[0], h[1]); c.rotate(an); c.fillStyle = q.c; c.strokeStyle = q.s; c.lineWidth = Math.max(1, w * 0.16);
+        if (q.dash) { c.globalAlpha *= 0.6; c.setLineDash([w * 0.7, w * 0.45]); }
+        c.beginPath(); c.rect(0, -w / 2, L, w); c.fill(); c.stroke(); c.setLineDash([]); c.beginPath(); c.arc(0, 0, w * 0.32, 0, Math.PI * 2); c.fillStyle = q.s; c.fill();
+      }
+      else if (q.p === 'dot') { var d = X([q.x, q.y]); c.beginPath(); c.arc(d[0], d[1], q.r, 0, Math.PI * 2); c.fillStyle = q.c; c.fill(); c.strokeStyle = '#2b1d12'; c.lineWidth = 1.5; c.stroke(); }
+      else if (q.p === 'lock') { var l = X([q.x, q.y]), z = Math.max(5, v.s * 0.16); c.fillStyle = '#ffd66e'; c.strokeStyle = '#2b1d12'; c.lineWidth = 1.5; c.beginPath(); c.rect(l[0] - z, l[1] - z * 0.2, z * 2, z * 1.5); c.fill(); c.stroke(); c.beginPath(); c.arc(l[0], l[1] - z * 0.2, z * 0.65, Math.PI, 0); c.stroke(); }
+      else if (q.p === 'arrow') { var ta = X(q.a), tb = X(q.b), ang = Math.atan2(tb[1] - ta[1], tb[0] - ta[0]), k = 7; c.strokeStyle = q.c; c.lineWidth = 2.5; c.lineCap = 'round'; c.beginPath(); c.moveTo(ta[0], ta[1]); c.lineTo(tb[0], tb[1]); c.moveTo(tb[0] - k * Math.cos(ang - 0.5), tb[1] - k * Math.sin(ang - 0.5)); c.lineTo(tb[0], tb[1]); c.lineTo(tb[0] - k * Math.cos(ang + 0.5), tb[1] - k * Math.sin(ang + 0.5)); c.stroke(); }
+      c.restore();
+    });
   }
   function bgImage(mp){
     if (!mp.bg) return null; var key = mp.bg.img || ('d:' + (mp.bg.data || '').length);
@@ -536,17 +758,37 @@ var Mapas = (function(){
     gridOn(c, mp, v, W, H);
     var list = window.MapEd ? MapEd.strokes(mp) : mp.strokes;
     mp.layers.forEach(function(l){ if (hid[l.id]) return; list.forEach(function(k){ if (k.l === l.id) strokeOn(c, k, v); }); });
-    var dmView = master(mp), meId = me(), late = [];
-    (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; if (!dmView && mine(t)) late.push(t); else tokOn(c, t, v, mp); });
-    if (mp.fog && mp.fog.on) fogOn(c, mp, v, W, H, dmView);
+    var dmView = master(mp) && !viewAs, vs = visOf(mp), late = [];
+    primsOn(c, wallInk(mp, dmView, Date.now()), v);
+    (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; if (viewAs && t.hidden) return; if (!tokShown(mp, t, vs, dmView)) return; if (!dmView && (ownT(t) || (vs && t.kind === 'pc'))) late.push(t); else tokOn(c, t, v, mp); });
+    if (mp.fog && mp.fog.on) fogOn(c, mp, v, W, H, dmView, vs);
     late.forEach(function(t){ tokOn(c, t, v, mp); });
     c.strokeStyle = 'rgba(60,40,20,.6)'; c.lineWidth = 1.5; c.strokeRect(v.x, v.y, mp.cols * v.s, mp.rows * v.s);
   }
-  function fogOn(c, mp, v, W, H, dmView){
+  /* Niebla en Canvas 2D. Con la visión: negro lo no descubierto, penumbra lo descubierto y limpio lo que el grupo ve ahora
+     (se compone en un lienzo aparte y se recortan los polígonos de vista) */
+  var fogOff = null;
+  function fogOn(c, mp, v, W, H, dmView, vs){
     var bits = fogBits(mp), x0 = Math.max(0, Math.floor(-v.x / v.s)), x1 = Math.min(mp.cols - 1, Math.ceil((W - v.x) / v.s)), y0 = Math.max(0, Math.floor(-v.y / v.s)), y1 = Math.min(mp.rows - 1, Math.ceil((H - v.y) / v.s));
-    c.save(); c.fillStyle = dmView ? 'rgba(12,8,6,.5)' : '#0b0806';
-    for (var y = y0; y <= y1; y++) { var run = -1; for (var x = x0; x <= x1 + 1; x++) { var dark = x <= x1 && !seen(bits, mp, x, y); if (dark && run < 0) run = x; else if (!dark && run >= 0) { c.fillRect(v.x + run * v.s - 0.5, v.y + y * v.s - 0.5, (x - run) * v.s + 1, v.s + 1); run = -1; } } }
-    c.restore();
+    var g = c, un = dmView ? 'rgba(12,8,6,.5)' : '#0b0806', mem = vs ? (dmView ? 'rgba(12,8,6,.22)' : 'rgba(11,8,6,.62)') : null;
+    if (vs) {
+      if (!fogOff) fogOff = document.createElement('canvas');
+      if (fogOff.width !== c.canvas.width || fogOff.height !== c.canvas.height) { fogOff.width = c.canvas.width; fogOff.height = c.canvas.height; }
+      g = fogOff.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, fogOff.width, fogOff.height); if (c.getTransform) g.setTransform(c.getTransform());
+    } else c.save();
+    for (var y = y0; y <= y1; y++) {
+      var run = -1, st = -1;
+      for (var x = x0; x <= x1 + 1; x++) {
+        var k = x <= x1 ? (seen(bits, mp, x, y) ? 1 : 0) : -1;
+        // bordes redondeados al píxel: las franjas no se enciman (si no, se ven rayas más oscuras con la niebla translúcida)
+        if (k !== st) { if (run >= 0 && (st === 0 || mem)) { var rx0 = Math.round(v.x + run * v.s), rx1 = Math.round(v.x + x * v.s), ry0 = Math.round(v.y + y * v.s), ry1 = Math.round(v.y + (y + 1) * v.s); g.fillStyle = st === 0 ? un : mem; g.fillRect(rx0, ry0, rx1 - rx0, ry1 - ry0); } run = x; st = k; }
+      }
+    }
+    if (!vs) { c.restore(); return; }
+    g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000'; g.beginPath();
+    vs.polys.forEach(function(P){ for (var i = 0; i < P.length; i += 2) { var px = v.x + P[i] * v.s, py = v.y + P[i + 1] * v.s; if (i) g.lineTo(px, py); else g.moveTo(px, py); } g.closePath(); });
+    g.fill(); g.globalCompositeOperation = 'source-over';
+    c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(fogOff, 0, 0); c.restore();
   }
   function tokOn(c, t, v, mp, ghost){
     var info = tokInfo(t), s = t.s || 1, cx = v.x + (t.x + s / 2) * v.s, cy = v.y + (t.y + s / 2) * v.s, rad = Math.max(5, s * v.s * 0.44);
@@ -556,7 +798,7 @@ var Mapas = (function(){
     var tid = tokImg(t), im = tid && tokImage(tid);
     if (im) { c.save(); c.beginPath(); c.arc(cx, cy, rad - 1.5, 0, Math.PI * 2); c.clip(); var k = Math.max(rad * 2 / im.naturalWidth, rad * 2 / im.naturalHeight); c.drawImage(im, cx - im.naturalWidth * k / 2, cy - im.naturalHeight * k / 2, im.naturalWidth * k, im.naturalHeight * k); c.restore(); }
     else { c.fillStyle = '#fff'; c.font = '700 ' + Math.max(8, rad * 0.8) + 'px Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ini(info.name), cx, cy + 1); }
-    c.lineWidth = Math.max(1.5, v.s * 0.06); c.strokeStyle = selTok === t.id ? '#ffd66e' : 'rgba(20,12,8,.85)'; if (t.hidden) c.setLineDash([4, 3]); c.stroke(); c.setLineDash([]);
+    c.lineWidth = Math.max(1.5, v.s * (ghost === 'bad' ? 0.1 : 0.06)); c.strokeStyle = ghost === 'bad' ? '#ff4b3a' : selTok === t.id ? '#ffd66e' : 'rgba(20,12,8,.85)'; if (t.hidden) c.setLineDash([4, 3]); c.stroke(); c.setLineDash([]);
     if (info.pct != null && v.s >= 10) { var p = Math.max(0, Math.min(1, info.pct)); c.beginPath(); c.arc(cx, cy, rad + c.lineWidth, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); c.strokeStyle = p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a'; c.lineWidth = Math.max(2, v.s * 0.08); c.stroke(); }
     if (info.down) { c.strokeStyle = '#d24a3a'; c.lineWidth = Math.max(2, rad * 0.18); c.beginPath(); c.moveTo(cx - rad * 0.6, cy - rad * 0.6); c.lineTo(cx + rad * 0.6, cy + rad * 0.6); c.moveTo(cx + rad * 0.6, cy - rad * 0.6); c.lineTo(cx - rad * 0.6, cy + rad * 0.6); c.stroke(); }
     if (v.s >= 40 || selTok === t.id || info.turn) { var fs = Math.max(10, Math.min(15, v.s * 0.38)); var lbl = info.name.length > 14 ? info.name.slice(0, 13) + '…' : info.name; c.font = '600 ' + fs + 'px Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'top'; c.lineWidth = 3; c.strokeStyle = 'rgba(243,233,210,.9)'; var ly = cy + rad + 3; c.strokeText(lbl, cx, ly); c.fillStyle = '#2b1d12'; c.fillText(lbl, cx, ly); }
@@ -565,20 +807,27 @@ var Mapas = (function(){
   /* Encima de todo: la ficha que arrastras con su regla, el área de niebla y las señales */
   function overlay(c, mp, v){
     if (drag && drag.moved) {
-      var t = drag.tok, s = t.s || 1, ax = v.x + (drag.sx + s / 2) * v.s, ay = v.y + (drag.sy + s / 2) * v.s, bx = v.x + (drag.x + s / 2) * v.s, by = v.y + (drag.y + s / 2) * v.s;
-      c.save(); c.strokeStyle = 'rgba(255,214,110,.95)'; c.lineWidth = 3; c.setLineDash([8, 6]); c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke(); c.restore();
-      tokOn(c, Object.assign({}, t, {x:drag.x, y:drag.y}), v, mp, true);
-      var cells = Math.max(Math.abs(Math.round(drag.x - drag.sx)), Math.abs(Math.round(drag.y - drag.sy))), m = (cells * 1.5).toString().replace('.', ',');
-      var label = m + ' m · ' + cells + ' casilla' + (cells === 1 ? '' : 's');
-      c.save(); c.font = '700 15px Georgia, serif'; var w = c.measureText(label).width + 16, lx = Math.min(canvas.clientWidth - w - 4, Math.max(4, bx - w / 2)), ly = Math.max(4, by - s * v.s * 0.5 - 34);
-      c.fillStyle = 'rgba(18,13,11,.88)'; c.fillRect(lx, ly, w, 26); c.strokeStyle = '#ffd66e'; c.lineWidth = 1; c.strokeRect(lx, ly, w, 26); c.fillStyle = '#ffd66e'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(label, lx + 8, ly + 13); c.restore();
+      var t = drag.tok, s = t.s || 1, ax = v.x + (drag.sx + s / 2) * v.s, ay = v.y + (drag.sy + s / 2) * v.s, bx = v.x + (drag.x + s / 2) * v.s, by = v.y + (drag.y + s / 2) * v.s, rr = ruler(mp), gold = rr.bad ? '#ff6b5a' : '#ffd66e';
+      if (drag.pv) { c.save(); c.beginPath(); for (var pi = 0; pi < drag.pv.length; pi += 2) { var qx = v.x + drag.pv[pi] * v.s, qy = v.y + drag.pv[pi + 1] * v.s; if (pi) c.lineTo(qx, qy); else c.moveTo(qx, qy); } c.closePath(); c.fillStyle = 'rgba(255,214,110,.08)'; c.fill(); c.strokeStyle = 'rgba(255,214,110,.6)'; c.lineWidth = 1.5; c.stroke(); c.restore(); }
+      c.save(); c.strokeStyle = gold; c.globalAlpha = 0.95; c.lineWidth = 3; c.setLineDash([8, 6]); c.beginPath(); c.moveTo(ax, ay);
+      if (rr.path) rr.path.forEach(function(q, i){ if (i) c.lineTo(v.x + q[0] * v.s, v.y + q[1] * v.s); }); else c.lineTo(bx, by);
+      c.stroke(); c.restore();
+      tokOn(c, Object.assign({}, t, {x:drag.x, y:drag.y}), v, mp, rr.bad && !master(mp) ? 'bad' : true);
+      tag(c, rr.text, bx, by - s * v.s * 0.5 - 21, gold);
     }
+    if (mode === 'dibujar' && canAdmin(mp)) primsOn(c, wallTech(mp, tool.k === 'wall'), v);
+    var wl = wallLabel(); if (wl) tag(c, wl.text, v.x + wl.x * v.s, v.y + wl.y * v.s - 26, '#ffd66e');
     if (mode === 'dibujar' && window.MapEd) editOn(c, MapEd.overlay(mp), v);
     if (fogDrag) { var r = fogDrag; c.save(); c.fillStyle = tool.fogV ? 'rgba(95,184,90,.28)' : 'rgba(10,6,4,.55)'; c.strokeStyle = tool.fogV ? '#5fb85a' : '#ffd66e'; c.lineWidth = 2; var x0 = Math.min(r.a[0], r.b[0]), y0 = Math.min(r.a[1], r.b[1]); c.fillRect(v.x + x0 * v.s, v.y + y0 * v.s, (Math.abs(r.a[0] - r.b[0]) + 1) * v.s, (Math.abs(r.a[1] - r.b[1]) + 1) * v.s); c.strokeRect(v.x + x0 * v.s, v.y + y0 * v.s, (Math.abs(r.a[0] - r.b[0]) + 1) * v.s, (Math.abs(r.a[1] - r.b[1]) + 1) * v.s); c.restore(); }
     var now = Date.now(); pings = pings.filter(function(p){ return now - p.t < 2400; });
     pings.forEach(function(p){ var k = (now - p.t) / 2400, px = v.x + p.x * v.s, py = v.y + p.y * v.s; c.save(); c.globalAlpha = 1 - k; c.strokeStyle = p.color || '#ffd66e'; c.lineWidth = 4; for (var i = 0; i < 2; i++) { c.beginPath(); c.arc(px, py, 8 + ((k * 2 + i * 0.5) % 1) * v.s * 2.2, 0, Math.PI * 2); c.stroke(); } c.fillStyle = p.color || '#ffd66e'; c.beginPath(); c.arc(px, py, 5, 0, Math.PI * 2); c.fill(); if (p.name) { c.font = '700 14px Georgia, serif'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = 'rgba(18,13,11,.9)'; c.strokeText(p.name, px, py - 16); c.fillStyle = '#fff'; c.fillText(p.name, px, py - 16); } c.restore(); });
   }
-  function animate(){ if (raf) return; var step = function(){ raf = 0; paint(); if (pings.length) raf = requestAnimationFrame(step); }; raf = requestAnimationFrame(step); }
+  /* Etiqueta oscura con letras doradas (regla, largo de una pared) */
+  function tag(c, text, cx, cy, col){
+    c.save(); c.font = '700 15px Georgia, serif'; var w = c.measureText(text).width + 16, lx = Math.min((canvas.clientWidth || 300) - w - 4, Math.max(4, cx - w / 2)), ly = Math.max(4, cy - 13);
+    c.fillStyle = 'rgba(18,13,11,.88)'; c.fillRect(lx, ly, w, 26); c.strokeStyle = col; c.lineWidth = 1; c.strokeRect(lx, ly, w, 26); c.fillStyle = col; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(text, lx + 8, ly + 13); c.restore();
+  }
+  function animate(){ if (raf) return; var step = function(){ raf = 0; paint(); if (pings.length || Object.keys(doorAnim).length) raf = requestAnimationFrame(step); }; raf = requestAnimationFrame(step); }
   function gridOn(c, mp, v, W, H){
     if (mp.grid === 'none' || v.s < 5) return;
     c.save(); c.beginPath(); c.rect(v.x, v.y, mp.cols * v.s, mp.rows * v.s); c.clip(); c.strokeStyle = mp.bg ? 'rgba(30,20,10,.35)' : GRID; c.lineWidth = 1; c.beginPath();
@@ -631,7 +880,8 @@ var Mapas = (function(){
   function clampPt(p){ var mp = maps[cur]; return [Math.round(Math.max(0, Math.min(mp.cols, p[0])) * 100) / 100, Math.round(Math.max(0, Math.min(mp.rows, p[1])) * 100) / 100]; }
   function local(ev){ var r = canvas.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; }
   function tokAt(mp, m){
-    for (var i = mp.tokens.length - 1; i >= 0; i--) { var t = mp.tokens[i], s = t.s || 1, cx = t.x + s / 2, cy = t.y + s / 2; if (Math.hypot(m[0] - cx, m[1] - cy) <= Math.max(s * 0.5 + 0.15, 24 / V().s)) { if (!master(mp) && mp.fog && mp.fog.on && !mine(t)) { var b = fogBits(mp); if (!seen(b, mp, Math.floor(cx), Math.floor(cy))) continue; } return t; } }
+    var dmView = master(mp) && !viewAs, vs = dmView ? null : visOf(mp);
+    for (var i = mp.tokens.length - 1; i >= 0; i--) { var t = mp.tokens[i], s = t.s || 1, cx = t.x + s / 2, cy = t.y + s / 2; if (Math.hypot(m[0] - cx, m[1] - cy) <= Math.max(s * 0.5 + 0.15, 24 / V().s)) { if (viewAs && t.hidden) continue; if (vs && !tokShown(mp, t, vs, false)) continue; if (!dmView && mp.fog && mp.fog.on && !ownT(t) && !(vs && t.kind === 'pc')) { var b = fogBits(mp); if (!seen(b, mp, Math.floor(cx), Math.floor(cy)) && !(vs && Vision.inAny(vs.polys, cx, cy))) continue; } return t; } }
     return null;
   }
   function bind(){
@@ -640,29 +890,32 @@ var Mapas = (function(){
       ptr[ev.pointerId] = local(ev);
       var ids = Object.keys(ptr), mp = maps[cur];
       clearTimeout(press && press.t); press = null;
-      if (ids.length === 2) { drawing = null; erasing = null; drag = null; fogDrag = null; if (edOn) { MapEd.cancel(); edOn = false; } var a = ptr[ids[0]], b = ptr[ids[1]]; gesture = {d:Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, cx:(a[0] + b[0]) / 2, cy:(a[1] + b[1]) / 2}; paint(); return; }
+      if (ids.length === 2) { drawing = null; erasing = null; drag = null; fogDrag = null; wop = null; if (edOn) { MapEd.cancel(); edOn = false; } var a = ptr[ids[0]], b = ptr[ids[1]]; gesture = {d:Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, cx:(a[0] + b[0]) / 2, cy:(a[1] + b[1]) / 2}; paint(); return; }
       if (ids.length > 2) return;
       var p = local(ev), m = toMap(p[0], p[1]);
       if (ev.button === 1 || ev.button === 2) { gesture = {pan:true, px:p[0], py:p[1]}; return; }
       if (mode === 'jugar') {
-        var t = tokAt(mp, m);
+        var t = tokAt(mp, m), dw = doorAt(mp, m);
+        // junto a una puerta, la ficha solo se toma si tocas su círculo (si no, se toca la puerta)
+        if (t && dw) { var tc = Vision.center(t); if (Math.hypot(m[0] - tc[0], m[1] - tc[1]) > (t.s || 1) * 0.44) t = null; }
         if (t) { drag = {tok:t, ox:m[0] - t.x, oy:m[1] - t.y, sx:t.x, sy:t.y, x:t.x, y:t.y, moved:false, can:mine(t), px:p[0], py:p[1]}; return; }
-        gesture = {pan:true, px:p[0], py:p[1], tap:true, x0:p[0], y0:p[1]};
-        press = {t:setTimeout(function(){ if (gesture && gesture.tap) { gesture.tap = false; ping(mp, clampPt(m)); } }, 550)};
+        gesture = {pan:true, px:p[0], py:p[1], tap:true, x0:p[0], y0:p[1], door:dw};
+        if (!dw) press = {t:setTimeout(function(){ if (gesture && gesture.tap) { gesture.tap = false; ping(mp, clampPt(m)); } }, 550)};
         return;
       }
       if (mode === 'niebla') { var cell = [Math.max(0, Math.min(mp.cols - 1, Math.floor(m[0]))), Math.max(0, Math.min(mp.rows - 1, Math.floor(m[1])))]; fogDrag = {a:cell, b:cell}; paint(); return; }
       if (tool.k === 'select') { MapEd.down(mp, m[0], m[1], ev); edOn = true; return; }
+      if (tool.k === 'wall') { if (canAdmin(mp)) wallDown(mp, m, ev); return; }
       if (tool.k === 'asset') { if (MapEd.onHandle(mp, m[0], m[1], ev.pointerType === 'touch')) { MapEd.down(mp, m[0], m[1], ev); edOn = true; } else placeAsset(mp, m); return; }
       if (tool.k === 'pan') { gesture = {pan:true, px:p[0], py:p[1]}; return; }
       if (tool.k === 'text') { var tx = clampPt(snapPt(m, 'text')); askText(tx, p); return; }
-      if (tool.k === 'erase') { erasing = {hits:{}}; eraseAt(m); return; }
+      if (tool.k === 'erase') { erasing = {hits:{}, walls:{}}; eraseAt(m); return; }
       var s = clampPt(snapPt(m, tool.k));
       drawing = {k:tool.k, l:tool.layer, c:tool.c, w:tool.w, pts: tool.k === 'pen' ? [s[0], s[1]] : [s[0], s[1], s[0], s[1]]}; if (tool.k === 'rect' && tool.fill) drawing.f = 1;
       paint();
     });
     canvas.addEventListener('pointermove', function(ev){
-      if (!ptr[ev.pointerId]) return;
+      if (!ptr[ev.pointerId]) { if (ev.pointerType === 'mouse' && mode === 'jugar' && maps[cur]) { var hp = local(ev), hv = doorAt(maps[cur], toMap(hp[0], hp[1])); canvas.style.cursor = hv ? 'pointer' : ''; } return; }
       var p = local(ev); ptr[ev.pointerId] = p;
       var ids = Object.keys(ptr), mp = maps[cur];
       if (gesture && !gesture.pan && ids.length === 2) { var a = ptr[ids[0]], b = ptr[ids[1]], d = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2, v = V(); v.x += cx - gesture.cx; v.y += cy - gesture.cy; zoomAt(d / gesture.d, cx, cy); gesture.d = d; gesture.cx = cx; gesture.cy = cy; return; }
@@ -672,8 +925,10 @@ var Mapas = (function(){
         if (!drag.can) return;
         if (!drag.moved && Math.hypot(p[0] - drag.px, p[1] - drag.py) < 6) return;
         drag.moved = true; var s = drag.tok.s || 1;
-        drag.x = Math.max(0, Math.min(mp.cols - s, m[0] - drag.ox)); drag.y = Math.max(0, Math.min(mp.rows - s, m[1] - drag.oy)); paint(); return;
+        drag.x = Math.max(0, Math.min(mp.cols - s, m[0] - drag.ox)); drag.y = Math.max(0, Math.min(mp.rows - s, m[1] - drag.oy));
+        dragRoute(mp); paint(); return;
       }
+      if (wop) { wallMove(mp, m, ev, p); return; }
       if (fogDrag) { fogDrag.b = [Math.max(0, Math.min(mp.cols - 1, Math.floor(m[0]))), Math.max(0, Math.min(mp.rows - 1, Math.floor(m[1])))]; paint(); return; }
       if (edOn) { MapEd.move(mp, m[0], m[1], ev); return; }
       if (erasing) { eraseAt(m); return; }
@@ -685,16 +940,22 @@ var Mapas = (function(){
     var end = function(ev){
       delete ptr[ev.pointerId]; clearTimeout(press && press.t);
       var mp = maps[cur];
-      if (gesture) { var tap = gesture.tap; if (!Object.keys(ptr).length) gesture = null; if (tap && selTok) { selTok = null; tokPanel(); paint(); } return; }
+      if (gesture) { var tap = gesture.tap, door = gesture.door; if (!Object.keys(ptr).length) gesture = null; if (tap && door) { doorClick(mp, door); return; } if (tap && selTok) { selTok = null; tokPanel(); paint(); } return; }
+      if (wop) { wallUp(mp); return; }
       if (drag) {
         var d = drag; drag = null;
-        if (d.moved) { var s = d.tok.s || 1, nx = d.x, ny = d.y; if (mp.grid !== 'none') { nx = Math.round(nx); ny = Math.round(ny); } nx = Math.max(0, Math.min(mp.cols - s, nx)); ny = Math.max(0, Math.min(mp.rows - s, ny)); tokMove(mp, d.tok, nx, ny); selTok = d.tok.id; }
+        if (d.moved) {
+          var s = d.tok.s || 1, nx = d.x, ny = d.y; if (mp.grid !== 'none') { nx = Math.round(nx); ny = Math.round(ny); } nx = Math.max(0, Math.min(mp.cols - s, nx)); ny = Math.max(0, Math.min(mp.rows - s, ny));
+          var rt = mp.walls.length && window.Vision ? Vision.route(mp, d.tok, nx, ny) : {ok:true};
+          if (!rt.ok && !master(mp)) { Sala.toast('Hay una pared en medio: por ahí no se llega.'); if (window.Sfx) Sfx.play('locked'); selTok = d.tok.id; tokPanel(); paint(); return; }
+          tokMove(mp, d.tok, nx, ny, rt.cells); selTok = d.tok.id;
+        }
         else selTok = selTok === d.tok.id ? null : d.tok.id;
         tokPanel(); paint(); return;
       }
       if (fogDrag) { var f = fogDrag; fogDrag = null; if (!mp.fog || !mp.fog.on) { fogDo(mp, {t:'fog.on', value:true}); } fogDo(mp, {t:'fog.rect', rect:[f.a[0], f.a[1], f.b[0], f.b[1]], value:tool.fogV ? 1 : 0}); paint(); return; }
       if (edOn) { edOn = false; var mm = toMap(local(ev)[0], local(ev)[1]); MapEd.up(mp, mm[0], mm[1], ev); toolbar(); return; }
-      if (erasing) { var ids = Object.keys(erasing.hits); erasing = null; rmStrokes(mp, ids); paint(); return; }
+      if (erasing) { var ids = Object.keys(erasing.hits), wids = Object.keys(erasing.walls || {}); erasing = null; rmStrokes(mp, ids); if (wids.length) wallsDel(mp, wids); paint(); return; }
       if (!drawing) return; var k = drawing; drawing = null;
       if (k.k !== 'pen' && k.pts[0] === k.pts[2] && k.pts[1] === k.pts[3]) { paint(); return; }
       addStroke(mp, k); paint();
@@ -707,7 +968,92 @@ var Mapas = (function(){
   function eraseAt(m){
     var mp = maps[cur], hid = hidden[mp.id] || {}, lk = locked[mp.id] || {}, tol = Math.max(0.35, 10 / V().s), changed = false;
     mp.strokes.forEach(function(k){ if (hid[k.l] || lk[k.l] || erasing.hits[k.id]) return; if (MapEd.hit(k, m[0], m[1], tol)) { erasing.hits[k.id] = 1; changed = true; } });
+    if (canAdmin(mp) && window.Vision) mp.walls.forEach(function(w){ if (erasing.walls[w.id]) return; if (Vision.segDist(m[0], m[1], w.a, w.b) < tol) { erasing.walls[w.id] = 1; changed = true; } });
     if (changed) paint();
+  }
+  /* La ruta de la ficha que arrastras (solo cuando cambia de casilla) y, para el DM, lo que vería desde ahí */
+  function dragRoute(mp){
+    if (!window.Vision) return; var t = drag.tok, s = t.s || 1, rx = mp.grid !== 'none' ? Math.round(drag.x) : drag.x, ry = mp.grid !== 'none' ? Math.round(drag.y) : drag.y, ck = rx + ',' + ry;
+    if (drag.ck === ck) return; drag.ck = ck;
+    drag.route = mp.walls.length ? Vision.route(mp, t, rx, ry) : null;
+    drag.path = drag.route && drag.route.cells ? Vision.smooth(Vision.moveOf(mp), drag.route.cells, s) : null;
+    drag.pv = master(mp) && !viewAs && mp.vis && mp.vis.on && Vision.isViewer(t, charOf(mp, t)) ? Vision.poly(Vision.sightOf(mp), rx + s / 2, ry + s / 2, mp.vis.range, mp.cols, mp.rows) : null;
+  }
+  /* ---------- Herramienta de paredes ----------
+     Arrastrar traza una pared (o las cuatro de una habitación); las puntas se pegan a otras puntas y a la cuadrícula.
+     Tocar una pared la elige; con una elegida, arrastrar una de sus puntas la mueve junto con las que comparten esa punta
+     (con Alt o Mayús, solo esa). */
+  function wallSnap(mp, m, skip){
+    var tol = 14 / V().s, best = null, bd = tol;
+    mp.walls.forEach(function(w){ if (skip && skip[w.id]) return; [w.a, w.b].forEach(function(p){ var d = Math.hypot(p[0] - m[0], p[1] - m[1]); if (d < bd) { bd = d; best = p; } }); });
+    if (best) return [best[0], best[1]];
+    var p = tool.snap && mp.grid !== 'none' ? [Math.round(m[0]), Math.round(m[1])] : m;
+    return [Math.round(Math.max(0, Math.min(mp.cols, p[0])) * 100) / 100, Math.round(Math.max(0, Math.min(mp.rows, p[1])) * 100) / 100];
+  }
+  function wallAt(mp, m, tol){ var best = null, bd = tol; mp.walls.forEach(function(w){ var d = Vision.segDist(m[0], m[1], w.a, w.b); if (d < bd) { bd = d; best = w; } }); return best; }
+  function wallDown(mp, m, ev){
+    var touch = ev.pointerType === 'touch', tol = (touch ? 22 : 12) / V().s, sw = selWall && wallById(mp, selWall);
+    if (sw) {
+      var end = Math.hypot(m[0] - sw.a[0], m[1] - sw.a[1]) < tol ? 'a' : Math.hypot(m[0] - sw.b[0], m[1] - sw.b[1]) < tol ? 'b' : null;
+      if (end) {
+        var at = sw[end].slice(), same = function(p){ return p[0] === at[0] && p[1] === at[1]; };
+        var linked = mp.walls.filter(function(w){ return w.id !== sw.id && (same(w.a) || same(w.b)); });
+        wop = {k:'end', at:at, list:[sw].concat(linked).map(cloneW), prev:null, moved:false, m0:m}; return;
+      }
+    }
+    wop = {k:'new', a:wallSnap(mp, m), b:null, hit:wallAt(mp, m, (touch ? 14 : 8) / V().s), moved:false, m0:m};
+  }
+  function wallMove(mp, m, ev, p){
+    if (!wop.moved && Math.hypot(m[0] - wop.m0[0], m[1] - wop.m0[1]) * V().s < 6) return;
+    wop.moved = true;
+    if (wop.k === 'new') wop.b = wallSnap(mp, m);
+    else {
+      var skip = {}, only = ev.altKey || ev.shiftKey; wop.list.forEach(function(w){ skip[w.id] = 1; });
+      var q = wallSnap(mp, m, skip), prev = {};
+      wop.list.forEach(function(w, i){ if (only && i) return; var n = cloneW(w); ['a', 'b'].forEach(function(e){ if (n[e][0] === wop.at[0] && n[e][1] === wop.at[1]) n[e] = q.slice(); }); prev[w.id] = n; });
+      wop.prev = prev;
+    }
+    paint();
+  }
+  function opening(mp, w, m, t){
+    var dx = w.b[0] - w.a[0], dy = w.b[1] - w.a[1], L = Math.hypot(dx, dy); if (!L) return;
+    var ux = dx / L, uy = dy / L, s = Math.max(0, Math.min(L, (m[0] - w.a[0]) * ux + (m[1] - w.a[1]) * uy));
+    var grid = tool.snap && mp.grid !== 'none' && (dx === 0 || dy === 0), s0 = grid ? Math.floor(s) : s - 0.5; s0 = Math.max(0, Math.min(L - 1, s0));
+    var P = function(k){ return [Math.round((w.a[0] + ux * k) * 100) / 100, Math.round((w.a[1] + uy * k) * 100) / 100]; };
+    var before = [cloneW(w)], after = [];
+    if (L <= 1) after.push(Object.assign(cloneW(w), {t:t}));
+    else {
+      var p0 = P(s0), p1 = P(s0 + 1);
+      if (s0 > 0.01) after.push({id:w.id, a:w.a.slice(), b:p0, t:'wall'});
+      var dr = mkWall(p0, p1, t); if (s0 <= 0.01) dr.id = w.id; after.push(dr);
+      if (s0 + 1 < L - 0.01) after.push(mkWall(p1, w.b, 'wall'));
+    }
+    var door = after.filter(function(x){ return x.t === t; })[0];
+    var gone = before.filter(function(x){ return !after.some(function(y){ return y.id === x.id; }); }).map(function(x){ return x.id; });
+    if (gone.length) wrm(mp, gone); wput(mp, after); MapEd.record(mp, {wset:{b:before, a:after.map(cloneW)}});
+    selWall = door ? door.id : null; if (window.Sfx) Sfx.play('click'); toolbar(); paint();
+  }
+  function mkWall(a, b, t){ var w = {id:newWid(), a:a.slice(), b:b.slice(), t:t}; if (t === 'oneway') w.side = 1; return w; }
+  function wallUp(mp){
+    var o = wop; wop = null;
+    if (o.k === 'new') {
+      if (!o.moved || !o.b) {
+        // con Puerta, Puerta secreta o Ventana, tocar una pared le abre un hueco de una casilla
+        if (o.hit && o.hit.t === 'wall' && /^(door|secret|window)$/.test(tool.wt)) { opening(mp, o.hit, o.m0, tool.wt); return; }
+        selWall = o.hit ? o.hit.id : null; toolbar(); paint(); return;
+      }
+      if (o.a[0] === o.b[0] && o.a[1] === o.b[1]) { paint(); return; }
+      var t = tool.wt, list = [];
+      if (tool.wroom) {
+        if (o.a[0] === o.b[0] || o.a[1] === o.b[1]) { paint(); return; }
+        var rt = isDoorT({t:t}) ? 'wall' : t, x0 = o.a[0], y0 = o.a[1], x1 = o.b[0], y1 = o.b[1];
+        [[x0, y0, x1, y0], [x1, y0, x1, y1], [x1, y1, x0, y1], [x0, y1, x0, y0]].forEach(function(q){ list.push(mkWall([q[0], q[1]], [q[2], q[3]], rt)); });
+      } else list.push(mkWall(o.a, o.b, t));
+      wallsAdd(mp, list); selWall = list.length === 1 ? list[0].id : null; if (window.Sfx) Sfx.play('click'); toolbar(); paint(); return;
+    }
+    if (!o.moved || !o.prev) { paint(); return; }
+    var before = o.list.filter(function(w){ return o.prev[w.id]; }), after = before.map(function(w){ return o.prev[w.id]; });
+    wallsUpd(mp, before, after); paint();
   }
   /* Objetos: se ponen centrados donde tocas (ajustados a la cuadrícula) y quedan elegidos para girarlos o escalarlos */
   function placeAsset(mp, m){
@@ -786,7 +1132,7 @@ var Mapas = (function(){
       else { delete maps[b.dataset.id]; idbDel('map:' + b.dataset.id); setIndex(index().filter(function(x){ return x.id !== b.dataset.id; })); render(); }
     }
     else if (!mp) return;
-    else if (a === 'mapmode') { MapEd.clear(mp); mode = b.dataset.v; if (mode === 'dibujar' && (tool.k === 'pan' || !tool.k)) tool.k = 'pen'; pop = null; toolbar(); paint(); }
+    else if (a === 'mapmode') { MapEd.clear(mp); selWall = null; wop = null; mode = b.dataset.v; if (mode === 'dibujar' && (tool.k === 'pan' || !tool.k)) tool.k = 'pen'; pop = null; toolbar(); paint(); }
     else if (a === 'mapset') { pop = pop === 'set' ? null : 'set'; toolbar(); }
     else if (a === 'mapadd') { pop = pop === 'add' ? null : 'add'; toolbar(); }
     else if (a === 'mappen') { if (tool.k !== 'pen') { tool.k = 'pen'; pop = 'pen'; } else pop = pop === 'pen' ? null : 'pen'; toolbar(); }
@@ -794,14 +1140,25 @@ var Mapas = (function(){
     else if (a === 'maplayeredit') { layersOpen = !layersOpen; toolbar(); }
     else if (a === 'mapplaceall') placeAll(mp);
     else if (a === 'mapsheet') { if (window.Mesa) Mesa.show('combate'); if (window.Diario) Diario.renderCombat(); }
-    else if (a === 'mapchip') { var tc = mp.tokens.filter(function(t){ return t.ref === b.dataset.id && !t.comp; })[0]; if (tc) { focus(mp, tc); selTok = tc.id; paint(); tokPanel(); } else Sala.toast(isDm() ? 'No tiene ficha en este mapa: usa «Poner en el mapa».' : 'No está en este mapa.'); }
+    else if (a === 'mapchip') { var tc = mp.tokens.filter(function(t){ return t.ref === b.dataset.id && !t.comp; })[0], vsc = !(master(mp) && !viewAs) && visOf(mp); if (tc && vsc && !tokShown(mp, tc, vsc, false)) { Sala.toast('Ahora nadie del grupo lo ve.'); return; } if (tc) { focus(mp, tc); selTok = tc.id; paint(); tokPanel(); } else Sala.toast(isDm() ? 'No tiene ficha en este mapa: usa «Poner en el mapa».' : 'No está en este mapa.'); }
     else if (a === 'mapputme') {
       var s = Sala.summary ? Sala.summary() : null, t = myTok(mp), c = center(mp);
       if (t) { tokMove(mp, t, c[0], c[1]); selTok = t.id; tokPanel(); }
       else tokAdd(mp, {kind:'pc', name: s ? s.name : 'Yo', x:c[0], y:c[1], s:1, color:TOKCOL[1], mine:!shared(mp.id)});
     }
     else if (a === 'mapfindme') { var me2 = myTok(mp); if (me2) { focus(mp, me2); selTok = me2.id; paint(); tokPanel(); } }
-    else if (a === 'maptool') { tool.k = b.dataset.v; if (pop === 'pen') pop = null; toolbar(); }
+    else if (a === 'maptool') { tool.k = b.dataset.v; selWall = null; if (pop === 'pen' || pop === 'walls') pop = null; toolbar(); paint(); }
+    else if (a === 'mapwalls') { MapEd.clear(mp); if (tool.k !== 'wall') { tool.k = 'wall'; pop = 'walls'; } else pop = pop === 'walls' ? null : 'walls'; toolbar(); paint(); }
+    else if (a === 'mapwallt') { tool.wt = b.dataset.v; tool.k = 'wall'; pop = null; toolbar(); paint(); Sala.toast('Arrastra sobre el mapa para trazar: ' + wallT(tool.wt)[1].toLowerCase() + '.'); }
+    else if (a === 'mapwallroom') { tool.wroom = b.dataset.v === '1'; toolbar(); }
+    else if (a === 'mapviewas') { viewAs = false; toolbar(); paint(); }
+    else if (a.indexOf('mapwall') === 0) {
+      var w = selWall && wallById(mp, selWall); if (!w) return;
+      if (a === 'mapwallx') { selWall = null; toolbar(); paint(); }
+      else if (a === 'mapwalldel') wallsDel(mp, [w.id]);
+      else if (a === 'mapwallopen') doorToggle(mp, w);
+      else { var n = cloneW(w); if (a === 'mapwalllock') { if (n.lock) delete n.lock; else n.lock = true; } else if (a === 'mapwallfound') { if (n.found) delete n.found; else n.found = true; } else if (a === 'mapwallflip') n.side = n.side < 0 ? 1 : -1; wallsUpd(mp, [w], [n]); }
+    }
     else if (a === 'mapcolor') { tool.c = b.dataset.v; if (tool.k === 'pan' || tool.k === 'erase') tool.k = 'pen'; toolbar(); }
     else if (a === 'mapw') { tool.w = +b.dataset.v; toolbar(); }
     else if (a === 'maplayer') { tool.layer = b.dataset.v; var hd = hidden[mp.id] = hidden[mp.id] || {}; delete hd[tool.layer]; toolbar(); paint(); }
@@ -873,6 +1230,11 @@ var Mapas = (function(){
     else if (t.id === 'mapName' && t.value.trim()) setMeta(mp, {name:t.value.trim()});
     else if (t.id === 'mapGrid') setMeta(mp, {grid:t.value});
     else if (t.id === 'mapFogOn') fogDo(mp, {t:'fog.on', value:t.checked});
+    else if (t.id === 'mapVisOn') { visDo(mp, {on:t.checked}); if (t.checked && !mp.walls.length) Sala.toast('Pon paredes en Dibujar → Paredes para que tapen la vista.'); }
+    else if (t.id === 'mapVisRange') visDo(mp, {range:+t.value || 0});
+    else if (t.id === 'mapVisLines') visDo(mp, {lines:t.value});
+    else if (t.id === 'mapViewAs') { viewAs = t.checked; selTok = null; toolbar(); tokPanel(); paint(); }
+    else if (t.id === 'mapWallType') { var w0 = selWall && wallById(mp, selWall); if (w0 && t.value !== w0.t) { var nw = {id:w0.id, a:w0.a.slice(), b:w0.b.slice(), t:t.value}; if (t.value === 'oneway') nw.side = 1; if (isDoorT(nw) && isDoorT(w0)) { if (w0.open) nw.open = true; if (w0.lock) nw.lock = true; } wallsUpd(mp, [w0], [nw]); } }
     else if (t.id === 'mapHide') Sala.send({t:'map.hide', id:mp.id, value:t.checked});
     else if (t.id === 'mapBgFile' && t.files && t.files[0]) { setBg(mp, t.files[0]); t.value = ''; }
     else if (t.id === 'mapBgOp' && mp.bg) { if (shared(mp.id)) Sala.send({t:'map.bg', id:mp.id, op:+t.value}); else { mp.bg.op = +t.value; keep(mp); paint(); } }
@@ -888,17 +1250,26 @@ var Mapas = (function(){
   document.addEventListener('keydown', function(ev){
     if (ev.key !== 'Escape' || !cur || !visible()) return;
     var tb = $('#mapTxt'); if (tb && !tb.hidden) { tb.hidden = true; pendingText = null; ev.stopPropagation(); ev.preventDefault(); return; }
-    if (pop) { pop = null; toolbar(); ev.stopPropagation(); ev.preventDefault(); }
+    if (pop) { pop = null; toolbar(); ev.stopPropagation(); ev.preventDefault(); return; }
+    if (wop) { wop = null; paint(); ev.stopPropagation(); ev.preventDefault(); return; }
+    if (selWall) { selWall = null; toolbar(); paint(); ev.stopPropagation(); ev.preventDefault(); }
   }, true);
+  /* Supr borra la pared elegida */
+  document.addEventListener('keydown', function(ev){
+    if ((ev.key !== 'Delete' && ev.key !== 'Backspace') || !cur || !visible() || mode !== 'dibujar' || tool.k !== 'wall' || !selWall) return;
+    var t = ev.target; if (t && /INPUT|TEXTAREA|SELECT/.test(t.tagName)) return;
+    var mp = maps[cur]; if (mp && wallById(mp, selWall)) { wallsDel(mp, [selWall]); ev.preventDefault(); }
+  });
   /* El editor (editor.js) trabaja sobre el mapa abierto con estas piezas */
   function initEd(){
     if (!window.MapEd || initEd.done) return; initEd.done = true;
     MapEd.init({map:function(){ return cur && maps[cur]; }, V:V, paint:paint, toolbar:function(){ if (cur) toolbar(); }, shared:function(m){ return shared(m.id); }, isDm:isDm, me:me,
       hidden:function(m){ return hidden[m.id] || {}; }, locked:function(m){ return locked[m.id] || {}; }, snap:function(){ return tool.snap && maps[cur] && maps[cur].grid !== 'none'; }, layer:function(){ return tool.layer; },
-      add:addMany, rm:rmIds, upd:updMany, askText:function(k){ askText(k); }, esc:esc, attr:attr, colors:function(){ return COLORS; }, active:function(){ return !!cur && !!canvas && visible() && mode === 'dibujar'; }});
+      add:addMany, rm:rmIds, upd:updMany, wput:wput, wrm:wrm, askText:function(k){ askText(k); }, esc:esc, attr:attr, colors:function(){ return COLORS; }, active:function(){ return !!cur && !!canvas && visible() && mode === 'dibujar'; }});
   }
   setTimeout(initEd, 0);
   window.addEventListener('resize', function(){ if (cur && canvas && visible()) { fit(); paint(); } });
 
-  return {refreshPop:function(){ if (cur) toolbar(); }, render:render, png:png, open:openMap, _maps:function(){ return maps; }, _open:openMap, _tool:tool, _mode:function(v){ if (v) { mode = v; toolbar(); } return mode; }, _sel:function(){ return selTok; }};
+  return {refreshPop:function(){ if (cur) toolbar(); }, render:render, png:png, open:openMap, _maps:function(){ return maps; }, _open:openMap, _tool:tool, _mode:function(v){ if (v) { mode = v; toolbar(); } return mode; }, _sel:function(){ return selTok; },
+    _view:function(){ return V(); }, _wall:function(){ return selWall; }, _shown:function(tid){ var mp = maps[cur], t = mp && mp.tokens.filter(function(x){ return x.id === tid; })[0]; if (!t) return null; var dv = master(mp) && !viewAs; return tokShown(mp, t, visOf(mp), dv); }, _vis:function(id){ var mp = maps[id || cur]; return mp ? visOf(mp) : null; }, _viewAs:function(v){ if (v != null) { viewAs = !!v; if (cur) { toolbar(); paint(); } } return viewAs; }};
 })();
