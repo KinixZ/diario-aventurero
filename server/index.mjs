@@ -14,7 +14,7 @@ import { createTranslator } from './translate.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DIST = normalize(join(here, '..', 'web', 'dist'));
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.webp': 'image/webp' };
 const MAX_MSG = 2 * 1024 * 1024; // alcanza para subir un mapa grande con sus trazos
 const SAVE_EVERY = 4000, SWEEP_EVERY = 60000;
 

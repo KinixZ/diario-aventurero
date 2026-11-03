@@ -1,0 +1,25 @@
+/* ==================== AJUSTES: ANIMACIONES, SONIDO Y AMBIENTE ==================== */
+.fx-modes,.gfx-q{margin-top:8px}
+.fx-table{width:100%;border-collapse:collapse;margin:10px 0 6px;font-size:14px}
+.fx-table th{font-family:var(--display);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);text-align:left;padding:4px 6px;border-bottom:1px solid var(--card-rule)}
+.fx-table td{padding:6px;border-bottom:1px solid color-mix(in srgb, var(--rule-2) 70%, transparent);vertical-align:top}
+.fx-table td:first-child{font-weight:600;width:42%}
+.fx-try,.sfx-try{flex-wrap:wrap;gap:6px;justify-content:flex-start;margin-top:6px}
+.sfx-vols{margin-top:6px}
+.sfx-vols[hidden]{display:none}
+.sfx-vol{display:grid;grid-template-columns:minmax(0,1fr) minmax(110px,1.3fr) 34px;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid color-mix(in srgb, var(--rule-2) 70%, transparent)}
+.sfx-vol span{display:flex;flex-direction:column;min-width:0}
+.sfx-vol small{font-size:12.5px;color:var(--ink-2);line-height:1.2}
+.sfx-vol output{font-family:var(--display);font-size:13px;text-align:right;color:var(--ink-2)}
+/* Deslizador de latón */
+input[type="range"]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer}
+input[type="range"]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.12));box-shadow:0 0 0 1px var(--gild-lo)}
+input[type="range"]::-moz-range-track{height:6px;border-radius:3px;background:linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.12));box-shadow:0 0 0 1px var(--gild-lo)}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6px;border-radius:50%;background:radial-gradient(circle at 38% 32%, var(--gild-hi), var(--gild) 55%, var(--gild-lo));box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 2px color-mix(in srgb, var(--parch-3) 60%, transparent)}
+input[type="range"]::-moz-range-thumb{width:18px;height:18px;border:0;border-radius:50%;background:radial-gradient(circle at 38% 32%, var(--gild-hi), var(--gild) 55%, var(--gild-lo));box-shadow:0 1px 3px rgba(0,0,0,.5)}
+input[type="range"]:focus-visible{outline:2px solid var(--gild);outline-offset:2px}
+/* Panel de ambiente del DM */
+.amb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px;margin:6px 0 4px}
+.amb-b{min-height:40px;border-radius:3px;border:1px solid var(--card-rule);background:linear-gradient(180deg, var(--parch-3), var(--parch-2));color:var(--ink);font-family:var(--display);font-size:12.5px;letter-spacing:.03em;box-shadow:var(--lift)}
+.amb-b.on{background:var(--enamel-grad);border-color:var(--gild);color:var(--on-accent);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 0 0 2px var(--glow-soft)}
+.amb-vol{grid-template-columns:auto minmax(110px,1fr) 34px;border:0;margin-top:6px}

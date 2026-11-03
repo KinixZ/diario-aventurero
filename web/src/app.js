@@ -25,7 +25,9 @@
     ['desierto','Desierto','Arena y turquesa', ['#6b4a2b','#f5ead2','#1f8a86','#c49a4a']],
     ['fae','Feérico','Rosa y verde hada', ['#4a2a3c','#f8eef1','#b5476f','#8fb47a']],
     ['brasas','Brasas','Oscuro y fuego infernal', ['#1f0f0a','#1c1210','#d2491e','#f29a4a']],
-    ['abismo','Abismo','Oscuro y verde marino', ['#0c2422','#0f1e1d','#36b3a0','#7fe0cf']]
+    ['abismo','Abismo','Oscuro y verde marino', ['#0c2422','#0f1e1d','#36b3a0','#7fe0cf']],
+    ['medianoche','Medianoche','Oscuro, azul noche y plata', ['#111a2e','#141c2f','#4a76d1','#dfe8ff']],
+    ['jade','Jade','Oscuro, jade y oro', ['#0e2219','#12221b','#2f9e74','#ecd585']]
   ];
   var SLOTS = [['head','Cabeza','i-helm'],['cloak','Capa','i-cloak'],['back','Espalda','i-bag'],['armor','Armadura','i-armor'],['bracers','Brazales','i-bracer'],['gloves','Guantes','i-glove'],['boots','Botas','i-boot'],['main','Mano principal','i-sword'],['off','Mano secundaria','i-shield'],['acc','Accesorios','i-ring']];
   var SRC = {XPHB:'Manual del jugador 2024', PHB:'Manual del jugador 2014', XDMG:'Guía del DM 2024', DMG:'Guía del DM 2014', XGE:'Guía de Xanathar', TCE:'Caldero de Tasha', EFA:'Forge of the Artificer', FTD:'Tesoro de dragones de Fizban', ERLW:'Eberron: Rising from the Last War', BGG:'Gloria de los gigantes de Bigby', DSotDQ:'Dragonlance', SatO:'Sigil and the Outlands', BMT:'Book of Many Things', MTF:'Mordenkainen: Tome of Foes', SCC:'Strixhaven', FRHoF:'Heroes of Faerûn', SCAG:'Guía de la Costa de la Espada'};
@@ -56,8 +58,15 @@
 
   /* ---------- Estado ---------- */
   var S = {skin:'carmesi', chars:[], active:null, tab:'personaje', left:'personaje', v:4};
+  var lastHp = {}; // última vida vista por personaje, para animar daño y curación
   try { var sv = JSON.parse(localStorage.getItem('diario-v4') || 'null'); if (sv && sv.v === 4) Object.assign(S, sv); else { var old = JSON.parse(localStorage.getItem('diario-paladin') || 'null'); if (old && old.skin) S.skin = old.skin; } } catch(e){}
-  function save(){ try { localStorage.setItem('diario-v4', JSON.stringify(S)); } catch(e){} if (window.Sala) Sala.sync(); }
+  function save(){
+    try { localStorage.setItem('diario-v4', JSON.stringify(S)); } catch(e){}
+    if (window.Sala) Sala.sync();
+    // la vida cambió (daño, curación, descanso): efecto y sonido, una vez por cambio
+    var C = cur(), r = C && C.rt;
+    if (C && r && r.hp != null) { var prev = lastHp[C.id]; lastHp[C.id] = r.hp; if (prev != null && prev !== r.hp && window.Fx) Fx.hp(prev, r.hp, D && D.hp ? D.hp.max : null); }
+  }
   function cur(){ return S.chars.filter(function(c){ return c.id === S.active; })[0] || null; }
   function rt(C){
     C.rt = C.rt || {};
@@ -66,11 +75,14 @@
     return C.rt;
   }
   var D = null, libReady = false;
-  function recompute(){ var C = cur(); D = C && Lib5e.has() ? R.derive(C) : null; if (D && D.ok) { var r = rt(C); if (r.hp == null || r.hp > D.hp.max) r.hp = D.hp.max; } }
+  function recompute(){ var C = cur(); D = C && Lib5e.has() ? R.derive(C) : null; if (D && D.ok) { var r = rt(C); if (r.hp == null || r.hp > D.hp.max) r.hp = D.hp.max; if (lastHp[C.id] == null) lastHp[C.id] = r.hp; } }
   var G = {sec:'reglas', q:'', sub:'*', hideOld:true, view:null, hist:[], from:null};
 
   var book = $('#book'), cover = $('#cover'), veil = $('#veil');
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (window.Fx) Fx.motes(cover);
+  /* Sin movimiento: lo decide Fx (Ajustes → Animaciones); sin Fx, lo que pida el sistema */
+  function still(){ return window.Fx ? !Fx.on() : !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  function coverMs(){ return still() ? 0 : window.Fx && Fx.drama() ? 1300 : 800; }
   var mq = window.matchMedia('(min-width: 900px)');
   function wide(){ return mq.matches; }
   function sgn(n){ return R.sgn(n); }
@@ -84,7 +96,7 @@
     if (!SKINS.some(function(k){ return k[0] === S.skin; })) S.skin = 'carmesi';
     if (S.skin === 'carmesi') document.documentElement.removeAttribute('data-skin');
     else document.documentElement.setAttribute('data-skin', S.skin);
-    if (/^(obsidiana|brasas|abismo)$/.test(S.skin)) document.documentElement.setAttribute('data-tone', 'dark'); else document.documentElement.removeAttribute('data-tone');
+    if (/^(obsidiana|brasas|abismo|medianoche|jade)$/.test(S.skin)) document.documentElement.setAttribute('data-tone', 'dark'); else document.documentElement.removeAttribute('data-tone');
     var tc = document.querySelector('meta[name="theme-color"]'); if (tc) tc.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--night').trim() || '#24130f');
     $('#skins').innerHTML = SKINS.map(function(k){
       return '<button type="button" class="skin" data-act="skin" data-v="'+k[0]+'" aria-pressed="'+(S.skin===k[0])+'"><span class="sw">' + k[3].map(function(c){ return '<i style="background:'+c+'"></i>'; }).join('') + '</span><b>'+k[1]+'</b><small>'+k[2]+'</small></button>';
@@ -127,7 +139,7 @@
     if (wide()) { personaje.hidden = showLeftGrim; grim.hidden = !showLeftGrim; }
     $$('#scroll > .panel').forEach(function(p){
       var on = p.dataset.panel === S.tab; p.hidden = !on;
-      if (on && animate && !reduce) { p.classList.remove('enter'); void p.offsetWidth; p.classList.add('enter'); }
+      if (on && animate && !still()) { p.classList.remove('enter'); void p.offsetWidth; p.classList.add('enter'); }
     });
     $('#folio').textContent = TABS.filter(function(x){ return x[0] === S.tab; })[0][3];
     renderHead();
@@ -190,7 +202,7 @@
     return '<span class="chip">' + esc(t) + '</span><span class="chip">' + esc(rg) + '</span>' + (/Concentración/.test(du) ? '<span class="tag conc">C</span>' : '') + (e.meta && e.meta.ritual ? '<span class="tag cls">R</span>' : '');
   }
   function spellCard(e, tag, tagCls){
-    return '<div class="card light spell"><div class="row" style="align-items:baseline"><h3>' + spellLink(e) + '</h3><span class="tag ' + (tagCls || 'cls') + '">' + esc(tag) + '</span></div><div class="chips">' + spellChips(e) + '</div></div>';
+    return '<div class="card light spell gi-card">' + (window.Iconos ? Iconos.spellTile(e) : '') + '<div class="gi-body"><div class="row" style="align-items:baseline"><h3>' + spellLink(e) + '</h3><span class="tag ' + (tagCls || 'cls') + '">' + esc(tag) + '</span></div><div class="chips">' + spellChips(e) + '</div></div></div>';
   }
   function allSpells(){
     var out = [], seen = {};
@@ -419,10 +431,10 @@
     return p.filter(Boolean).join(' · ');
   }
   function quickRow(key, r){
-    var t = key.slice(0, key.indexOf(':')), v = key.slice(key.indexOf(':') + 1), cost = '', name = '', info = '', btns = '', sub = '';
+    var t = key.slice(0, key.indexOf(':')), v = key.slice(key.indexOf(':') + 1), cost = '', name = '', info = '', btns = '', sub = '', gi = '';
     if (t === 'sp') {
       var e = R.findSpell(v); if (!e) return '';
-      cost = R.spellCost(e); name = spellLink(e); info = spellInfo(e); sub = e.level ? 'nivel ' + e.level : 'truco';
+      cost = R.spellCost(e); name = spellLink(e); info = spellInfo(e); sub = e.level ? 'nivel ' + e.level : 'truco'; gi = window.Iconos ? Iconos.spellTile(e, 'sm') : '';
       if (!e.level) btns = '<button class="btn sm" type="button" data-act="quse" data-q="' + attr(key) + '">Lanzar</button>';
       else {
         D.slots.forEach(function(n, i){ var lv = i + 1, left = n - (r.slotsUsed[i] || 0); if (n > 0 && lv >= e.level) btns += '<button class="slotbtn" type="button" data-act="quse" data-q="' + attr(key) + '" data-lv="' + lv + '"' + (left > 0 ? '' : ' disabled') + ' title="' + left + ' de ' + n + ' libres"><b>' + lv + '</b><i>' + left + '</i></button>'; });
@@ -442,7 +454,7 @@
       btns = '<button class="btn sm" type="button" data-act="quse" data-q="' + attr(key) + '">Usar</button><span class="q-left">×' + (it.q || 1) + '</span>';
     } else return '';
     var spent = cost && r.econ[cost];
-    return '<div class="q-row' + (spent ? ' spent' : '') + '">' + '<div class="q-h">' + costBadge(cost, true) + '<h4>' + name + '</h4>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>' + (info ? '<p class="q-i">' + info + '</p>' : '') + '<div class="q-b">' + btns + '</div></div>';
+    return '<div class="q-row' + (spent ? ' spent' : '') + '">' + '<div class="q-h">' + (gi || '') + costBadge(cost, true) + '<h4>' + name + '</h4>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>' + (info ? '<p class="q-i">' + info + '</p>' : '') + '<div class="q-b">' + btns + '</div></div>';
   }
   function quickCard(r){
     var keys = quickKeys(r), rows = keys.map(function(k){ return quickRow(k, r); }).filter(Boolean);
@@ -509,7 +521,7 @@
   /* ==================== CHISPAS ==================== */
   var fxLayer = $('#fx');
   function sparkBurst(x, y, n, opt){
-    if (reduce || !fxLayer || !fxLayer.animate) return;
+    if (still() || !fxLayer || !fxLayer.animate) return;
     opt = opt || {};
     var spread = opt.spread || 70;
     for (var i = 0; i < n; i++) {
@@ -522,7 +534,7 @@
     }
   }
   function fxAt(id, n, el){
-    if (reduce) return;
+    if (still()) return;
     requestAnimationFrame(function(){
       var t = el || (id && (grid.querySelector('[data-id="' + id + '"]') || $('#bodySlots [data-id="' + id + '"]'))); if (!t || !fxLayer) return;
       var r = t.getBoundingClientRect(), f = fxLayer.getBoundingClientRect();
@@ -1351,7 +1363,7 @@
     var body;
     if (isSp && G.mode === 'table') body = spellRowsHtml(shown.map(function(r){ return r[1]; }), {sort:G.sort});
     else if (isSp) {
-      var lv = -1; body = '<div class="glist">' + shown.map(function(r){ var e = r[1], h = ''; if (e.level !== lv) { lv = e.level; h += '<div class="group-h" style="margin:12px 0 2px">' + (lv ? 'Nivel ' + lv : 'Trucos') + '</div>'; } var ss = Render5e.spellShort(e); return h + '<button type="button" class="gitem" data-act="gopen" data-ref="' + attr('spell|' + e.name + '|' + e.source) + '"><b>' + nm(e.name) + '</b><small>' + esc(ss.school.toLowerCase()) + (ss.conc ? ' · C' : '') + (ss.rit ? ' · R' : '') + ' · ' + esc(e.source) + '</small></button>'; }).join('') + '</div>';
+      var lv = -1; body = '<div class="glist">' + shown.map(function(r){ var e = r[1], h = ''; if (e.level !== lv) { lv = e.level; h += '<div class="group-h" style="margin:12px 0 2px">' + (lv ? 'Nivel ' + lv : 'Trucos') + '</div>'; } var ss = Render5e.spellShort(e); return h + '<button type="button" class="gitem gi-item" data-act="gopen" data-ref="' + attr('spell|' + e.name + '|' + e.source) + '">' + (window.Iconos ? Iconos.spellTile(e, 'sm') : '') + '<b>' + nm(e.name) + '</b><small>' + esc(ss.school.toLowerCase()) + (ss.conc ? ' · C' : '') + (ss.rit ? ' · R' : '') + ' · ' + esc(e.source) + '</small></button>'; }).join('') + '</div>';
     } else body = '<div class="glist">' + shown.map(function(r){ var e = r[1], sub = (r[0] === 'item' || r[0] === 'baseitem') ? Render5e.itemType(e).toLowerCase() + ' · ' : ''; return '<button type="button" class="gitem" data-act="gopen" data-ref="' + attr(r[0] + '|' + e.name + '|' + e.source) + '"><b>' + nm(e.name) + '</b><small>' + esc(sub) + esc(e.source) + '</small></button>'; }).join('') + '</div>';
     grim.innerHTML = (showSecs ? grimSecs() : '<div class="folio"><span>Grimorio · ' + secName + '</span></div>') + fil
       + '<p class="note" style="margin:10px 0 4px">' + total + ' resultados' + (total > cap ? '; se muestran ' + cap + ', afina con los filtros' : '') + '.</p>' + body;
@@ -1982,15 +1994,16 @@
   function openBook(){
     if (busy || cover.hidden) return; busy = true;
     var cl = cover.querySelector('.clasp'), f = fxLayer.getBoundingClientRect(), r = cl.getBoundingClientRect();
-    sparkBurst(r.left - f.left + r.width / 2, r.top - f.top + r.height / 2, 26, {spread:110});
+    if (window.Fx && Fx.drama()) sparkBurst(r.left - f.left + r.width / 2, r.top - f.top + r.height / 2, 26, {spread:110});
+    if (window.Sfx) Sfx.play('open');
     cover.classList.remove('dragging'); cover.style.transform = ''; veil.style.opacity = '';
     book.classList.add('opening');
     setTimeout(function(){
       cover.hidden = true; veil.hidden = true; busy = false;
       var pg = $('#pageRight'); pg.classList.remove('glowpage'); void pg.offsetWidth; pg.classList.add('glowpage');
       var pr = pg.getBoundingClientRect(), f2 = fxLayer.getBoundingClientRect();
-      sparkBurst(pr.left - f2.left + pr.width / 2, pr.top - f2.top + 60, 18, {spread:140, up:false});
-    }, reduce ? 0 : 1300);
+      if (window.Fx && Fx.drama()) sparkBurst(pr.left - f2.left + pr.width / 2, pr.top - f2.top + 60, 18, {spread:140, up:false});
+    }, coverMs());
   }
   /* Abrir deslizando la tapa */
   var sw = null;
@@ -2016,7 +2029,7 @@
   }
   cover.addEventListener('pointerup', endSwipe);
   cover.addEventListener('pointercancel', endSwipe);
-  function closeBook(){ if (busy) return; busy = true; closeSheets(); $('#combat').hidden = true; cover.hidden = false; veil.hidden = false; void cover.offsetWidth; requestAnimationFrame(function(){ book.classList.remove('opening'); }); setTimeout(function(){ busy = false; }, reduce ? 0 : 1300); }
+  function closeBook(){ if (busy) return; busy = true; closeSheets(); $('#combat').hidden = true; cover.hidden = false; veil.hidden = false; void cover.offsetWidth; requestAnimationFrame(function(){ book.classList.remove('opening'); }); if (window.Sfx) Sfx.play('close'); setTimeout(function(){ busy = false; }, coverMs()); }
 
   /* ---------- Gasto de rombos ---------- */
   function setUsed(key, used){
@@ -2037,7 +2050,7 @@
     switch (a) {
       case 'open': openBook(); break;
       case 'close': closeBook(); break;
-      case 'tab': closeSheets(); S.tab = b.dataset.tab; if (S.tab === 'grimorio') G.from = null; render(true); renderGrim(); $('#scroll').scrollTop = 0; if (S.tab === 'grimorio' || S.tab === 'equipo') fxAt(null, 10, b); break;
+      case 'tab': if (window.Sfx && S.tab !== b.dataset.tab) Sfx.play('page'); closeSheets(); S.tab = b.dataset.tab; if (S.tab === 'grimorio') G.from = null; render(true); renderGrim(); $('#scroll').scrollTop = 0; if (S.tab === 'grimorio' || S.tab === 'equipo') fxAt(null, 10, b); break;
       case 'left': S.left = b.dataset.v; if (S.left !== 'personaje') { G.sec = S.left; G.view = null; G.hist = []; G.q = ''; G.sub = '*'; } render(true); renderGrim(); break;
       case 'gsec': G.sec = b.dataset.v; G.view = null; G.hist = []; G.q = ''; G.sub = '*'; renderGrim(); break;
       case 'gopen': openRef(b.dataset.ref); break;
@@ -2104,7 +2117,7 @@
       case 'hp': r.hp = Math.max(0, Math.min(D.hp.max, r.hp + (+b.dataset.v))); save(); renderCombat(); break;
       case 'econ': r.econ[b.dataset.k] = !r.econ[b.dataset.k]; save(); renderCombat(); break;
       case 'newturn': r.econ = {a:false,b:false,r:false,m:false}; save(); renderCombat(); break;
-      case 'crit': r.crit = !r.crit; save(); renderCombat(); break;
+      case 'crit': r.crit = !r.crit; save(); renderCombat(); if (r.crit && window.Fx) Fx.crit(); break;
       case 'smite': r.smite = +b.dataset.v; save(); renderCombat(); break;
       case 'endconc': r.conc = null; save(); renderCombat(); break;
       case 'condoff': r.conds = (r.conds || []).filter(function(k){ return k !== b.dataset.v; }); save(); renderCombat(); break;

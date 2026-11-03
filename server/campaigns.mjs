@@ -66,6 +66,16 @@ export function cleanChar(c = {}) {
 }
 
 /* ---------- Niebla de guerra: un bit por casilla (1 = descubierta) ---------- */
+/* Ambiente de la mesa que pone el DM: un sonido de fondo, una música y una pista propia (enlace http/https) */
+const AMB_KEYS = ['lluvia', 'tormenta', 'viento', 'fuego', 'mazmorra', 'bosque', 'mar', 'taberna'];
+const MUS_KEYS = ['calma', 'combate', 'taberna', 'misterio'];
+export function cleanAmb(a) {
+  if (!a || typeof a !== 'object') return null;
+  const k = AMB_KEYS.includes(a.k) ? a.k : null, m = MUS_KEYS.includes(a.m) ? a.m : null;
+  const url = typeof a.url === 'string' && /^https?:\/\/\S{3,500}$/.test(a.url.trim()) ? a.url.trim() : null;
+  const v = Math.round(Math.max(0, Math.min(1, Number(a.v ?? 1) || 0)) * 100) / 100;
+  return k || m || url ? { k, m, url, v } : null;
+}
 function fogNew(map, revealed) { const b = Buffer.alloc(Math.ceil(map.cols * map.rows / 8), revealed ? 255 : 0); return b; }
 function fogRect(map, x0, y0, x1, y1, v) {
   const a = Math.max(0, Math.min(x0, x1)), b = Math.min(map.cols - 1, Math.max(x0, x1)), c = Math.max(0, Math.min(y0, y1)), d = Math.min(map.rows - 1, Math.max(y0, y1));
@@ -90,7 +100,7 @@ export class Campaigns {
     const t = this.now();
     return { code, name: str(name, 60) || 'Campaña sin nombre', dmHash, created: t, touched: t, dirty: false, members: new Map(), npcs: new Map(), order: [], turn: -1, round: 0, hidePc: false, log: [],
       npcHp: 'state', pcInit: {}, maps: new Map(), scene: null, chat: [], board: [], strokes: [], pages: [], images: new Map(), imgBytes: 0,
-      live: false, session: { n: 0, title: '', started: null, ended: null }, beasts: [], autoBeasts: true };
+      live: false, session: { n: 0, title: '', started: null, ended: null }, beasts: [], autoBeasts: true, amb: null };
   }
 
   /* El DM crea la campaña: queda guardada de inmediato */
@@ -171,7 +181,7 @@ export class Campaigns {
       members: [...c.members.values()].map((m) => ({ id: m.id, token: m.token, role: m.role, name: m.name, init: m.init, char: m.char, seen: m.seen })),
       npcs: [...c.npcs.values()], order: c.order, turn: c.turn, round: c.round, log: c.log, chat: c.chat, board: c.board, strokes: c.strokes, pages: c.pages,
       maps: [...c.maps.values()].map((mp) => ({ ...mp, fog: { on: mp.fog.on, cells: mp.fog.cells.toString('base64') } })), scene: c.scene,
-      images: [...c.images.values()], beasts: c.beasts, autoBeasts: c.autoBeasts };
+      images: [...c.images.values()], beasts: c.beasts, autoBeasts: c.autoBeasts, amb: c.amb || null };
   }
   fromDoc(d) {
     const c = this.blank(str(d.code, 8), d.name, d.dmHash);
@@ -186,7 +196,7 @@ export class Campaigns {
     for (const mp of d.maps || []) { const m = { ...mp, layers: mp.layers || [], strokes: mp.strokes || [], tokens: mp.tokens || [], bg: mp.bg || null }; m.fog = { on: !!(mp.fog && mp.fog.on), cells: mp.fog && mp.fog.cells ? Buffer.from(mp.fog.cells, 'base64') : null }; if (!m.fog.cells || m.fog.cells.length !== Math.ceil(m.cols * m.rows / 8)) m.fog.cells = fogNew(m, false); c.maps.set(m.id, m); }
     c.scene = d.scene && c.maps.has(d.scene) ? d.scene : null;
     for (const im of d.images || []) { c.images.set(im.id, im); c.imgBytes += im.size || 0; }
-    c.beasts = Array.isArray(d.beasts) ? d.beasts : []; c.autoBeasts = d.autoBeasts !== false;
+    c.beasts = Array.isArray(d.beasts) ? d.beasts : []; c.autoBeasts = d.autoBeasts !== false; c.amb = cleanAmb(d.amb);
     c.dirty = false;
     return c;
   }
@@ -311,6 +321,7 @@ export class Campaigns {
       }
       case 'npc.reveal': { dmOnly(); const n = c.npcs.get(msg.id); if (n) { n.hidden = !n.hidden; if (!n.hidden) this.autoBeast(c, n); } break; }
       case 'hidepc': dmOnly(); c.hidePc = !!msg.value; break;
+      case 'amb.set': dmOnly(); c.amb = cleanAmb(msg.amb); break;
       case 'npchp': dmOnly(); if (!NPC_HP.includes(msg.value)) throw err('bad_msg', 'Opción desconocida.'); c.npcHp = msg.value; break;
       case 'enc.load': {
         dmOnly('Solo el DM carga encuentros.');
@@ -652,7 +663,7 @@ export class Campaigns {
     const maps = [...c.maps.values()].filter((mp) => dm || !mp.hidden).map((mp) => ({ id: mp.id, name: mp.name, cols: mp.cols, rows: mp.rows, grid: mp.grid, n: mp.strokes.length, tokens: mp.tokens.length, by: mp.by, updated: mp.updated, hidden: !!mp.hidden, bg: !!mp.bg }));
     const beasts = c.beasts.filter((b) => dm || !b.hidden).map((b) => ({ id: b.id, name: b.name, kind: b.kind, img: b.img, info: b.info, hasStat: !!b.stat, ref: dm || b.manual ? b.ref : undefined, manual: !!(b.manual && b.ref), hidden: !!b.hidden, auto: !!b.auto, seen: b.seen, ses: b.ses, notes: b.notes.length }));
     return { code: c.code, name: c.name, you: forId, role: me ? me.role : null, live: c.live, session: c.session, members, npcs, npcHp: c.npcHp, maps, scene: c.scene && (dm || !c.maps.get(c.scene)?.hidden) ? c.scene : null, board: c.board, pages: c.pages.length,
-      beasts, autoBeasts: c.autoBeasts, order: c.order.filter(x => dm || !c.npcs.get(x)?.hidden), turnId: c.order[c.turn] || null, round: c.round, hidePc: c.hidePc, log: c.log.slice(-25) };
+      beasts, autoBeasts: c.autoBeasts, amb: c.amb || null, order: c.order.filter(x => dm || !c.npcs.get(x)?.hidden), turnId: c.order[c.turn] || null, round: c.round, hidePc: c.hidePc, log: c.log.slice(-25) };
   }
   /* Lo que se ve de una campaña en el selector, sin entrar */
   peek(c) { return { code: c.code, name: c.name, live: c.live, session: c.session.n, title: c.session.title, online: this.online(c), players: [...c.members.values()].filter((m) => m.role === 'player').length }; }

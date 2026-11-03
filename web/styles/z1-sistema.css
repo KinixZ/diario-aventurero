@@ -1,0 +1,137 @@
+/* ==================== SISTEMA VISUAL: COMPONENTES ====================
+   Va después de todos los estilos viejos y les pone encima el acabado tipo videojuego de rol:
+   pergamino con esquinas art déco doradas, botones forjados, esmalte, hierro con remaches, cintas de seda.
+   Los ornamentos son máscaras (a0-ornamentos.css), así se pintan con el oro de cada estilo. */
+
+/* ---------- Tipografía ---------- */
+.label{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2)}
+.label a.ref{color:inherit}
+.num,.big{font-variant-numeric:lining-nums tabular-nums}
+.note{color:var(--ink-2)}
+
+/* ---------- Título de folio: florones en vez de rayas ---------- */
+.folio::before,.folio::after{height:16px!important;border:0!important;background:var(--gild-grad)!important;opacity:.9}
+.folio::before{-webkit-mask:var(--orn-fleur-l) right center/60px 16px no-repeat,linear-gradient(#000,#000) left center/calc(100% - 56px) 1px no-repeat;mask:var(--orn-fleur-l) right center/60px 16px no-repeat,linear-gradient(#000,#000) left center/calc(100% - 56px) 1px no-repeat}
+.folio::after{-webkit-mask:var(--orn-fleur-r) left center/60px 16px no-repeat,linear-gradient(#000,#000) right center/calc(100% - 56px) 1px no-repeat;mask:var(--orn-fleur-r) left center/60px 16px no-repeat,linear-gradient(#000,#000) right center/calc(100% - 56px) 1px no-repeat}
+.folio span{font-family:var(--display);font-weight:600;letter-spacing:.22em;text-transform:uppercase;font-size:12px;color:var(--ink-2)}
+
+/* ---------- Tarjetas de pergamino con esquinas doradas ---------- */
+.card{position:relative;background:var(--card-bg);border:1px solid var(--card-rule);border-radius:3px;
+  box-shadow:inset 0 0 0 3px color-mix(in srgb, var(--parch-3) 55%, transparent),inset 0 0 0 4px color-mix(in srgb, var(--gold) 30%, transparent),0 1px 0 rgba(255,255,255,.25),0 3px 8px -4px rgba(0,0,0,.35)}
+.card:not(.light):not(.ses-list)::before{content:"";position:absolute;inset:2px;pointer-events:none;background:var(--gild-grad);opacity:.92;
+  -webkit-mask:var(--orn-c-tl) top left/20px 20px no-repeat,var(--orn-c-tr) top right/20px 20px no-repeat,var(--orn-c-bl) bottom left/20px 20px no-repeat,var(--orn-c-br) bottom right/20px 20px no-repeat;
+  mask:var(--orn-c-tl) top left/20px 20px no-repeat,var(--orn-c-tr) top right/20px 20px no-repeat,var(--orn-c-bl) bottom left/20px 20px no-repeat,var(--orn-c-br) bottom right/20px 20px no-repeat}
+.card.light{border-radius:3px;border-color:color-mix(in srgb, var(--gold) 40%, var(--rule));box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 2px 5px -3px rgba(0,0,0,.35)}
+.card .card{box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 1px 3px -2px rgba(0,0,0,.3)}
+.card .card::before{display:none}
+
+/* ---------- Botones forjados ---------- */
+.btn{border-radius:3px;border:1px solid var(--gild-lo);background:linear-gradient(180deg, var(--parch-3) 0%, var(--parch-2) 62%, color-mix(in srgb, var(--parch-2) 88%, #000) 100%);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--gold-hi) 30%, transparent),var(--lift);
+  font-family:var(--display);font-weight:600;font-size:13.5px;letter-spacing:.03em;color:var(--ink);height:auto;min-height:44px;line-height:1.15;padding-top:6px;padding-bottom:6px;
+  transition:transform .08s ease,box-shadow .15s ease,filter .15s ease,background-color .15s}
+.btn.sm{font-size:12px;letter-spacing:.02em;height:auto;min-height:36px;padding-top:4px;padding-bottom:4px}
+.btn:hover:not(:disabled){filter:brightness(1.06) saturate(1.05)}
+.btn:active:not(:disabled){transform:translateY(1px);box-shadow:var(--sink)}
+.btn.main,.btn.dmg{background:var(--enamel-grad);border-color:var(--gild);color:var(--on-accent);text-shadow:0 1px 0 rgba(0,0,0,.35);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 0 0 1px color-mix(in srgb, var(--gold-hi) 45%, transparent),0 3px 8px -3px color-mix(in srgb, var(--oath) 70%, #000)}
+.btn.main:hover:not(:disabled),.btn.dmg:hover:not(:disabled){box-shadow:inset 0 1px 0 rgba(255,255,255,.28),inset 0 0 0 1px var(--gold-hi),0 0 0 3px var(--glow-soft),0 3px 10px -3px color-mix(in srgb, var(--oath) 70%, #000)}
+.btn.heal{background:linear-gradient(180deg, color-mix(in srgb, var(--ok) 70%, #fff) 0%, var(--ok) 45%, color-mix(in srgb, var(--ok) 65%, #000) 100%);border-color:var(--gild);color:#fff;text-shadow:0 1px 0 rgba(0,0,0,.35)}
+.btn:disabled{filter:grayscale(.6);opacity:.55}
+.btn .ic{width:18px;height:18px}
+
+/* Botones de icono: engaste de metal */
+.icon-btn{border-radius:5px;border:1px solid var(--gild-lo);background:radial-gradient(circle at 50% 28%, var(--parch-3) 0%, var(--parch-2) 70%);
+  box-shadow:inset 0 0 0 2px color-mix(in srgb, var(--parch-3) 70%, transparent),inset 0 0 0 3px var(--gild-soft),var(--lift);transition:transform .08s,filter .15s,box-shadow .15s}
+.icon-btn:hover{filter:brightness(1.07)}
+.icon-btn:active{transform:translateY(1px);box-shadow:var(--sink)}
+.icon-btn.war,.icon-btn.on,.icon-btn[aria-pressed="true"]{background:var(--enamel-grad);color:var(--on-accent);border-color:var(--gild);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),inset 0 0 0 1px color-mix(in srgb, var(--gold-hi) 45%, transparent),0 2px 6px -2px rgba(0,0,0,.5)}
+
+/* ---------- Campos: tinta sobre pergamino hundido ---------- */
+.field{border-radius:3px;border-color:var(--card-rule);background:var(--parch-3);box-shadow:var(--sink);transition:border-color .15s,box-shadow .15s}
+.field:focus{outline:none;border-color:var(--gild);box-shadow:var(--sink),0 0 0 3px var(--glow-soft)}
+textarea.field,.notes{border-radius:3px}
+select.field{background-image:linear-gradient(45deg,transparent 50%,var(--gild) 50%),linear-gradient(135deg,var(--gild) 50%,transparent 50%);background-position:calc(100% - 15px) 52%,calc(100% - 10px) 52%;background-size:5px 5px;background-repeat:no-repeat;-webkit-appearance:none;appearance:none;padding-right:28px}
+
+/* ---------- Casillas y opciones ----------
+   Sin ::before: Chrome no transforma los pseudo-elementos de un <input>. La palomita, el punto y la perilla
+   son fondos de la propia casilla (y la perilla se desliza con background-position). */
+input[type="checkbox"],input[type="radio"]{-webkit-appearance:none;appearance:none;flex:none;width:20px;height:20px;margin:0;border:1.5px solid var(--gild-lo);background-color:var(--parch-3);box-shadow:var(--sink);cursor:pointer;vertical-align:middle;background-repeat:no-repeat;transition:background-color .15s,border-color .15s,background-position .18s cubic-bezier(.5,1.5,.5,1)}
+input[type="checkbox"]{border-radius:3px}
+input[type="radio"]{border-radius:50%}
+input[type="checkbox"]:checked{border-color:var(--gild);background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3.2 3.2L13 4.8' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/13px 13px no-repeat,var(--enamel-grad)}
+input[type="radio"]:checked{border-color:var(--gild);background:radial-gradient(circle, var(--on-accent) 0 3.5px, transparent 4.2px),var(--enamel-grad)}
+input[type="checkbox"]:disabled,input[type="radio"]:disabled{opacity:.5;cursor:not-allowed}
+input[type="checkbox"]:focus-visible,input[type="radio"]:focus-visible{outline:2px solid var(--gild);outline-offset:2px}
+/* En los ajustes y filtros, las casillas sueltas son interruptores de palanca */
+.toggle>input[type="checkbox"]{width:40px;height:22px;border-radius:12px;
+  background:radial-gradient(circle at 40% 35%, var(--gild-hi), var(--gild) 50%, var(--gild-lo) 68%, transparent 72%) left 1px center/18px 18px no-repeat,linear-gradient(180deg, color-mix(in srgb, var(--parch-2) 80%, #000) 0%, var(--parch-2) 100%)}
+.toggle>input[type="checkbox"]:checked{background:radial-gradient(circle at 40% 35%, #fff, var(--gild-hi) 45%, var(--gild) 62%, transparent 72%) right 1px center/18px 18px no-repeat,var(--enamel-grad)}
+.toggle.big>input[type="checkbox"]{width:46px;height:26px;background-size:22px 22px,auto}
+.toggle.big>input[type="checkbox"]:checked{background-size:22px 22px,auto}
+
+/* ---------- Grupos de opciones: placas grabadas ---------- */
+.seg button{border-radius:3px;border-color:var(--card-rule);background:linear-gradient(180deg, var(--parch-3), var(--parch-2));font-family:var(--display);font-size:13px;letter-spacing:.04em;box-shadow:var(--lift);transition:background .15s,color .15s,box-shadow .15s}
+.seg button[aria-pressed="true"],.seg button[aria-selected="true"]{background:var(--enamel-grad);border-color:var(--gild);color:var(--on-accent);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),inset 0 0 0 1px color-mix(in srgb, var(--gold-hi) 40%, transparent)}
+
+/* ---------- Fichas, etiquetas y sellos ---------- */
+.chip{border-radius:2px;border-color:var(--card-rule);background:var(--parch-3);font-size:13px;box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+.tag{border-radius:2px;font-family:var(--display);font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+
+/* ---------- Hojas (paneles que se abren): barra de hierro con remaches ---------- */
+.sheet{background:var(--parch)}
+.sheet-h{position:relative;background:var(--iron-grad);color:var(--on-dark);border-bottom:0!important;padding:12px 16px;box-shadow:0 2px 0 var(--gild-lo),0 3px 0 var(--gild),0 6px 12px -4px rgba(0,0,0,.5);z-index:1}
+.sheet-h::before,.sheet-h::after{content:"";position:absolute;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:radial-gradient(circle at 35% 30%, var(--gild-hi), var(--gild) 45%, var(--gild-lo) 90%);box-shadow:0 1px 1px rgba(0,0,0,.6)}
+.sheet-h::before{left:6px}
+.sheet-h::after{right:6px}
+.sheet-h h2{font-family:var(--display);letter-spacing:.06em;color:var(--on-dark);text-shadow:0 1px 0 rgba(0,0,0,.6),0 0 14px color-mix(in srgb, var(--gold-hi) 25%, transparent)}
+.sheet-h .icon-btn{background:radial-gradient(circle at 50% 30%, var(--iron-3), var(--iron-1));color:var(--gold-hi);border-color:var(--gild)}
+
+/* ---------- Avisos: estandarte ---------- */
+.sala-toast{border-radius:3px!important;background:var(--iron-grad)!important;color:var(--on-dark)!important;border:1px solid var(--gild)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--gold-hi) 25%, transparent),var(--drop)!important;font-size:15px}
+
+/* ---------- Separadores del libro: cintas de seda bordadas ---------- */
+.ribbon{background:linear-gradient(90deg, rgba(0,0,0,.28) 0%, transparent 18%, transparent 82%, rgba(0,0,0,.28) 100%),repeating-linear-gradient(180deg, rgba(255,255,255,.035) 0 2px, transparent 2px 4px),var(--leather-3);
+  box-shadow:inset 3px 0 0 -1px transparent;position:relative}
+.ribbon::before{content:"";position:absolute;left:4px;right:4px;top:0;bottom:14%;border-left:1px dashed color-mix(in srgb, var(--gold) 45%, transparent);border-right:1px dashed color-mix(in srgb, var(--gold) 45%, transparent);pointer-events:none}
+.ribbon span{font-family:var(--display);font-size:9.5px;letter-spacing:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px}
+.ribbon[aria-pressed="true"]{background:linear-gradient(90deg, rgba(0,0,0,.25) 0%, transparent 20%, transparent 80%, rgba(0,0,0,.25) 100%),repeating-linear-gradient(180deg, rgba(255,255,255,.05) 0 2px, transparent 2px 4px),var(--oath)}
+.ribbon[aria-pressed="true"]::before{border-color:color-mix(in srgb, var(--gold-hi) 70%, transparent)}
+.ribbon[aria-pressed="true"] .ic{filter:drop-shadow(0 0 4px color-mix(in srgb, var(--gold-hi) 70%, transparent))}
+.ribbon::after{content:"";position:absolute;left:10%;right:10%;top:0;height:3px;background:var(--gild-grad);opacity:.85}
+
+/* ---------- Cabecera: medallón de nivel y placa del nombre ---------- */
+.head{position:relative}
+.head::after{content:"";position:absolute;left:12px;right:12px;bottom:-2px;height:14px;background:var(--gild-grad);pointer-events:none;
+  -webkit-mask:var(--orn-rule) center/100% 100% no-repeat;mask:var(--orn-rule) center/100% 100% no-repeat;opacity:.85}
+.lvl{position:relative;background:radial-gradient(circle at 50% 30%, var(--iron-3) 0%, var(--iron-1) 70%)!important;color:var(--on-dark)!important;border:0!important;
+  box-shadow:0 0 0 2px var(--gild-lo),0 0 0 4px var(--gild),0 0 0 5px var(--gild-lo),0 4px 10px -2px rgba(0,0,0,.6),inset 0 2px 6px rgba(0,0,0,.6)!important}
+.lvl b{font-family:var(--display);color:var(--gold-hi);text-shadow:0 0 10px color-mix(in srgb, var(--gold-hi) 50%, transparent)}
+.lvl span{font-family:var(--display);letter-spacing:.12em;text-transform:uppercase;font-size:9px!important;color:var(--on-dark-2)}
+.who h1{font-family:var(--deco)!important;font-weight:700!important;font-size:25px!important;letter-spacing:.02em;line-height:1.05!important;color:var(--ink);text-shadow:0 1px 0 color-mix(in srgb, var(--parch-3) 80%, transparent)}
+.who p{font-family:var(--display);font-size:11px!important;letter-spacing:.06em;line-height:1.35;color:var(--ink-2)}
+
+/* ---------- Portada: cuero repujado, esquinas de metal y broche ---------- */
+.cover{background:radial-gradient(ellipse 80% 60% at 50% 40%, color-mix(in srgb, var(--leather) 93%, #fff) 0%, var(--leather) 55%, var(--leather-2) 100%)!important}
+.cover::before{inset:16px!important;border:1.5px solid var(--gild)!important;border-radius:3px!important;box-shadow:inset 0 0 0 4px transparent,inset 0 0 0 5px var(--gild-soft),inset 0 0 40px rgba(0,0,0,.35)}
+.cover::after{inset:10px!important;border:0!important;background:var(--gild-grad);opacity:.95;
+  -webkit-mask:var(--orn-big-tl) top left/76px 76px no-repeat,var(--orn-big-tr) top right/76px 76px no-repeat,var(--orn-big-bl) bottom left/76px 76px no-repeat,var(--orn-big-br) bottom right/76px 76px no-repeat;
+  mask:var(--orn-big-tl) top left/76px 76px no-repeat,var(--orn-big-tr) top right/76px 76px no-repeat,var(--orn-big-bl) bottom left/76px 76px no-repeat,var(--orn-big-br) bottom right/76px 76px no-repeat}
+.cover .eyebrow{letter-spacing:.42em;text-transform:uppercase;font-size:11px}
+.cover h2{font-family:var(--deco);background:var(--gild-grad);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 2px 0 rgba(0,0,0,.55)) drop-shadow(0 0 14px color-mix(in srgb, var(--gold-hi) 25%, transparent))}
+.cover .emblem{filter:drop-shadow(0 0 18px color-mix(in srgb, var(--gold-hi) 25%, transparent)) drop-shadow(0 4px 6px rgba(0,0,0,.5))}
+.cover .name{font-family:var(--deco)!important;font-size:26px!important;font-weight:700!important;letter-spacing:.03em;color:var(--on-dark);text-shadow:0 2px 0 rgba(0,0,0,.5)}
+.cover .sub{font-family:var(--display);letter-spacing:.14em;text-transform:uppercase;font-size:12px!important}
+.cover .clasp{background:var(--iron-grad)!important;border-color:var(--gild)!important;box-shadow:inset 0 0 0 1px var(--gild-lo),-4px 0 10px -2px rgba(0,0,0,.5)}
+.cover .clasp span{background:radial-gradient(circle at 35% 30%, #fff 0%, var(--glow) 25%, var(--gold-hi) 60%, var(--gild-lo) 100%)!important;box-shadow:0 0 10px var(--glow-soft)}
+.cover-new{border-radius:3px!important;font-family:var(--display)!important;white-space:nowrap;font-size:13px!important;letter-spacing:.08em!important;background:var(--iron-grad)!important;border-color:var(--gild)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--gold-hi) 25%, transparent),0 4px 12px -4px rgba(0,0,0,.6)}
+
+/* ---------- Barras de desplazamiento finas y doradas ---------- */
+.scroll,.sheet *{scrollbar-width:thin;scrollbar-color:color-mix(in srgb, var(--gold) 70%, transparent) transparent}
+.scroll::-webkit-scrollbar,.sheet ::-webkit-scrollbar{width:8px;height:8px}
+.scroll::-webkit-scrollbar-thumb,.sheet ::-webkit-scrollbar-thumb{background:linear-gradient(90deg, var(--gild-lo), var(--gild), var(--gild-lo));border-radius:4px;border:2px solid transparent;background-clip:padding-box}
+
+/* ---------- Avisos en la página: "Te faltan elecciones" ---------- */
+.banner{color:var(--ink)!important;border-radius:3px!important;border-color:var(--gild)!important;background:linear-gradient(180deg, color-mix(in srgb, var(--oath-tint) 70%, var(--parch-3)), var(--parch-2))!important;box-shadow:inset 0 0 0 3px color-mix(in srgb, var(--parch-3) 50%, transparent),inset 0 0 0 4px var(--gild-soft),0 3px 8px -4px rgba(0,0,0,.35)!important}
+.banner p{font-family:var(--body)}
+.banner.warn{border-color:var(--warn)!important;background:linear-gradient(180deg, color-mix(in srgb, var(--warn) 22%, var(--parch-3)), var(--parch-2))!important}

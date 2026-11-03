@@ -25,6 +25,7 @@ HTTP:
 |---|---|---|---|
 | `camp.name` | `name` | DM | Renombra la campaña. |
 | `camp.key` | `key` | DM | Cambia la clave del DM. |
+| `amb.set` | `amb: {k?, m?, url?, v?}` o `null` | DM | Ambiente de la mesa para todos: `k` sonido de fondo (`lluvia`, `tormenta`, `viento`, `fuego`, `mazmorra`, `bosque`, `mar`, `taberna`), `m` música (`calma`, `combate`, `taberna`, `misterio`), `url` pista propia (http/https) y `v` volumen 0–1. Va en el estado (`amb`) y se guarda con la campaña. |
 | `member.del` | `id` | DM | Quita a un jugador (recibe `kicked`). |
 | `session.start` | `title?` | DM | Empieza la sesión N+1. Todos reciben `live`. |
 | `session.title` | `title` | DM | Título de la sesión en curso. |

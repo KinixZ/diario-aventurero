@@ -76,7 +76,7 @@ var Sala = (function(){
     st.active = code; store();
     connect({t:'join', code:code, token: e && !opts.dmKey ? e.token : null, dmKey: opts.dmKey || null, name: s ? s.name : 'Jugador', char: opts.dmKey ? null : s});
   }
-  function disconnect(keepActive){ manual = true; clearTimeout(retryT); try { if (ws) ws.close(); } catch(e){} ws = null; status = 'off'; if (!keepActive) { st.active = null; store(); room = null; emit('left'); } }
+  function disconnect(keepActive){ manual = true; clearTimeout(retryT); try { if (ws) ws.close(); } catch(e){} ws = null; status = 'off'; if (!keepActive) { st.active = null; store(); room = null; emit('left'); if (window.Sfx) Sfx.ambience(null); } }
   function leaveActive(){ if (status === 'on') { try { ws.send(JSON.stringify({t:'leave'})); } catch(e){} } disconnect(false); draw(); }
   function forgetCampaign(code){ var e = entry(code); if (e && st.active === code && status === 'on' && e.role !== 'dm') { try { ws.send(JSON.stringify({t:'leave', forget:true})); } catch(x){} } if (st.active === code) disconnect(false); forget(code); draw(); emit('list'); }
 
@@ -90,7 +90,7 @@ var Sala = (function(){
       if (m.role !== 'dm') sync(true);
       emit('joined', m); emit('list');
     }
-    else if (m.t === 'state') { room = m.room; status = 'on'; var en = entry(room.code); if (en && (en.name !== room.name || en.live !== room.live)) { en.name = room.name; en.live = room.live; store(); } Object.keys(sel).forEach(function(k){ if (!exists(k)) delete sel[k]; }); emit('state', m.room); }
+    else if (m.t === 'state') { var was = room && room.code === m.room.code ? {turn:room.turnId, round:room.round} : null; room = m.room; status = 'on'; announceTurn(was); if (window.Sfx) Sfx.ambience(room.amb); var en = entry(room.code); if (en && (en.name !== room.name || en.live !== room.live)) { en.name = room.name; en.live = room.live; store(); } Object.keys(sel).forEach(function(k){ if (!exists(k)) delete sel[k]; }); emit('state', m.room); }
     else if (m.t === 'applied') { if (window.Diario) Diario.applyToMe(m); toast(appliedText(m)); }
     else if (m.t === 'yourturn') { toast('¡Es tu turno! Ronda ' + m.round); if (window.Diario && Diario.newTurn) Diario.newTurn(); buzz([120, 60, 120]); }
     else if (m.t === 'live') { if (room && room.role !== 'dm') { toast('El DM empezó la sesión ' + m.n + (m.title ? ': ' + m.title : '') + '.'); buzz([80]); } emit('live', m); }
@@ -148,6 +148,14 @@ var Sala = (function(){
     if (!box || !document.contains(box)) { box = document.getElementById('salaBox'); if (!box) { header(); return; } }
     box.innerHTML = status === 'on' && room ? roomHtml() : lobbyHtml();
     header();
+  }
+  /* Estandarte de turno: tu turno, una ronda nueva o el combate que empieza (Fx decide cómo se ve) */
+  function announceTurn(was){
+    if (!was || !window.Fx || !room) return;
+    var r = room.round || 0, mine = room.turnId && room.turnId === room.you && room.role !== 'dm';
+    if (mine && (was.turn !== room.turnId || was.round !== r)) Fx.announce('¡Tu turno!', 'Ronda ' + r);
+    else if (r > 0 && !was.round) Fx.announce('¡Combate!', room.role === 'dm' ? 'Ronda 1' : 'Prepárate', 'fight');
+    else if (r > 1 && r > (was.round || 0)) Fx.announce('Ronda ' + r, '', 'round');
   }
   /* Ronda y turno en el encabezado: solo con el combate empezado */
   function header(){
