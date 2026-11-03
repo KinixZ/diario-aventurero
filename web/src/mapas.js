@@ -18,6 +18,7 @@ var Mapas = (function(){
   var maps = {}, cur = null, mode = 'jugar', tool = {k:'pen', c:COLORS[0][0], w:0.14, snap:true, fill:false, layer:null, fogV:1}, hidden = {}, views = {}, asked = {};
   var newOpen = false, layersOpen = false, pendingText = null, selTok = null, pings = [], imgs = {}, fogCache = {}, newImg = null, busyUp = false;
   var waitOpen = null, canvas = null, ptr = {}, gesture = null, drawing = null, erasing = null, drag = null, fogDrag = null, press = null, raf = 0;
+  var gl = null, glRaf = 0, fogSeq = 0, preloaded = false; // motor WebGL (mapa-gl.js) cuando el aparato lo permite; si no, Canvas 2D
 
   /* ---------- Guardado en el dispositivo ---------- */
   function idb(){ return new Promise(function(res, rej){ var r = indexedDB.open('diario5e', 2); r.onupgradeneeded = function(){ if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); }; r.onsuccess = function(){ res(r.result); }; r.onerror = function(){ rej(r.error); }; }); }
@@ -51,11 +52,12 @@ var Mapas = (function(){
   function repaintIfCur(id){ if (cur === id) { paint(); tokPanel(); } }
   if (window.Sala) {
     Sala.on('state', function(r){
+      if (!preloaded && window.Gfx) { preloaded = true; setTimeout(Gfx.preload, 1500); } // el motor del mapa se baja en segundo plano al entrar a la campaña
       (r.maps || []).forEach(function(m){
         var have = maps[m.id] || index().filter(function(x){ return x.id === m.id; })[0];
         if ((!have || (have.updated || 0) < m.updated) && asked[m.id] !== m.updated) { asked[m.id] = m.updated; Sala.send({t:'map.get', id:m.id}); }
       });
-      if (cur && maps[cur] && maps[cur].room && !roomMeta(cur) && maps[cur].room === r.code) { var gone = maps[cur]; cur = null; canvas = null; if (visible()) { render(); Sala.toast('El DM ocultó «' + gone.name + '».'); } }
+      if (cur && maps[cur] && maps[cur].room && !roomMeta(cur) && maps[cur].room === r.code) { var gone = maps[cur]; cur = null; canvas = null; dropGL(); if (visible()) { render(); Sala.toast('El DM ocultó «' + gone.name + '».'); } }
       if (visible() && !cur) render();
       if (visible() && cur) { toolbar(); paint(); tokPanel(); }
       badge();
@@ -141,11 +143,12 @@ var Mapas = (function(){
   /* ---------- Niebla: un bit por casilla (1 = descubierta) ---------- */
   function b64(u8){ var s = ''; for (var i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192)); return btoa(s); }
   function fogBits(mp){
-    var n = Math.ceil(mp.cols * mp.rows / 8), c = mp.fog && mp.fog.cells || '', k = mp.id + ':' + c.length + ':' + c.slice(0, 40) + c.slice(-40);
+    // se compara el texto completo: antes solo el principio y el final, y descubrir en medio del mapa no se veía
+    var n = Math.ceil(mp.cols * mp.rows / 8), c = mp.fog && mp.fog.cells || '', k = mp.cols + 'x' + mp.rows + ':' + c;
     if (fogCache[mp.id] && fogCache[mp.id].k === k) return fogCache[mp.id].b;
     var b = new Uint8Array(n);
     if (c) { try { var s = atob(c); for (var i = 0; i < Math.min(n, s.length); i++) b[i] = s.charCodeAt(i); } catch(e){} }
-    fogCache[mp.id] = {k:k, b:b}; return b;
+    fogCache[mp.id] = {k:k, b:b, n:++fogSeq}; return b;
   }
   function seen(bits, mp, x, y){ var i = y * mp.cols + x; return (bits[i >> 3] >> (i & 7)) & 1; }
 
@@ -208,7 +211,7 @@ var Mapas = (function(){
       + '<div class="vtt-init" id="vttInit" hidden></div><div class="map-pal" id="mapPal"></div>'
       + '<div class="map-zoom"><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="1" aria-label="Acercar"><svg class="ic"><use href="#i-plus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="-1" aria-label="Alejar"><svg class="ic"><use href="#i-minus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapfit" aria-label="Encuadrar el mapa" title="Encuadrar"><svg class="ic"><use href="#i-fit"/></svg></button></div>'
       + '<div class="map-pop" id="mapPop" hidden></div><div class="vtt-hud" id="vttHud"></div><div class="map-txt" id="mapTxt" hidden></div><div class="map-tok" id="mapTok" hidden></div></div></div>';
-    canvas = $('#mapCv', box); bind(); toolbar(); fit(); frame(maps[cur]); var mt = !master(maps[cur]) && myTok(maps[cur]); if (mt) focus(maps[cur], mt); paint(); tokPanel(); badge();
+    dropGL(); canvas = $('#mapCv', box); bind(); if (window.Gfx && Gfx.wantGL()) startGL(canvas); toolbar(); fit(); frame(maps[cur]); var mt = !master(maps[cur]) && myTok(maps[cur]); if (mt) focus(maps[cur], mt); paint(); tokPanel(); badge();
   }
   /* No repinta un bloque mientras escribes en él (el estado llega seguido) */
   function put(el, html){ var a = document.activeElement; if (a && el.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && el.innerHTML) return; el.innerHTML = html; }
@@ -397,7 +400,9 @@ var Mapas = (function(){
   function fit(){
     if (!canvas) return; var wrap = canvas.parentNode, w = wrap.clientWidth || 360, top = canvas.getBoundingClientRect().top || 220;
     var hh = Math.max(300, Math.min(1600, (window.innerHeight || 800) - top - (document.querySelector('.app.camp-wide') ? 0 : 12))), dpr = window.devicePixelRatio || 1;
-    canvas.style.width = w + 'px'; canvas.style.height = hh + 'px'; canvas.width = Math.round(w * dpr); canvas.height = Math.round(hh * dpr);
+    canvas.style.width = w + 'px'; canvas.style.height = hh + 'px';
+    if (canvas.dataset.engine === 'gl') { if (gl) gl.resize(w, hh, Gfx.resolution()); return; }
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(hh * dpr);
   }
   function frame(mp){ if (!canvas || !mp) return; var w = canvas.clientWidth || 360, h = canvas.clientHeight || 400, s = Math.max(4, Math.min(80, Math.min((w - 20) / mp.cols, (h - 20) / mp.rows))); views[mp.id] = {s:s, x:(w - mp.cols * s) / 2, y:(h - mp.rows * s) / 2}; }
   /* Acerca y centra la vista en una ficha (para encontrar la tuya en el teléfono) */
@@ -406,12 +411,63 @@ var Mapas = (function(){
   function toMap(px, py){ var v = V(); return [(px - v.x) / v.s, (py - v.y) / v.s]; }
 
   /* ---------- Pintar ---------- */
+  /* paint() solo agenda: varios cambios seguidos (zoom, estado del servidor, arrastre) se dibujan en un cuadro */
   function paint(){
-    if (!canvas || !document.contains(canvas)) return; var c = canvas.getContext && canvas.getContext('2d'); if (!c) return; var mp = maps[cur]; if (!mp) return;
+    if (!canvas || !document.contains(canvas)) { if (gl) dropGL(); return; }
+    if (canvas.dataset.engine === 'gl') { if (gl && !glRaf) glRaf = requestAnimationFrame(glPaint); return; }
+    if (!glRaf) glRaf = requestAnimationFrame(function(){ glRaf = 0; paint2d(); });
+  }
+  function paint2d(){
+    if (!canvas || !document.contains(canvas)) return;
+    var c = canvas.getContext && canvas.getContext('2d'); if (!c) return; var mp = maps[cur]; if (!mp) return;
     var dpr = canvas.width / (canvas.clientWidth || canvas.width); c.setTransform(dpr, 0, 0, dpr, 0, 0);
     draw(c, mp, V(), canvas.clientWidth, canvas.clientHeight, hidden[mp.id] || {}, true);
     if (drawing) strokeOn(c, drawing, V());
+    if (erasing) { var v = V(); mp.strokes.forEach(function(k){ if (erasing.hits[k.id]) { c.save(); c.globalAlpha = 0.25; strokeOn(c, Object.assign({}, k, {c:'#ff3b30'}), v); c.restore(); } }); }
     overlay(c, mp, V());
+  }
+
+  /* ---------- Motor WebGL: arranca aparte y, si falla, el mapa vuelve a Canvas 2D ---------- */
+  function startGL(cv){
+    cv.dataset.engine = 'gl'; cv.closest('.map-wrap') && cv.closest('.map-wrap').classList.add('gl-loading');
+    Gfx.loadGL().then(function(M){
+      if (canvas !== cv) return null;
+      return M.create(cv, {width:cv.clientWidth || 360, height:cv.clientHeight || 400, resolution:Gfx.resolution(), antialias:Gfx.antialias(), onNeed:paint});
+    }).then(function(r){
+      if (!r) return; if (canvas !== cv) { r.destroy(); return; }
+      gl = r; var w = cv.closest('.map-wrap'); if (w) w.classList.remove('gl-loading'); fit(); paint();
+    }).catch(function(e){
+      Gfx.failed(e); if (canvas !== cv) return;
+      // el lienzo pudo quedar con un contexto WebGL a medias: se cambia por uno limpio
+      var n = cv.cloneNode(false); delete n.dataset.engine; cv.replaceWith(n); canvas = n; bind();
+      var w = n.closest('.map-wrap'); if (w) w.classList.remove('gl-loading'); fit(); paint();
+    });
+  }
+  function dropGL(){ if (glRaf) { cancelAnimationFrame(glRaf); glRaf = 0; } if (gl) { gl.destroy(); gl = null; } }
+  function glPaint(){
+    glRaf = 0; var mp = maps[cur]; if (!gl || !mp || !canvas || !document.contains(canvas)) return;
+    gl.render(scene(mp, V(), canvas.clientWidth, canvas.clientHeight));
+  }
+  /* Lo que se ve, ya resuelto, para el motor WebGL (las mismas reglas que draw()/overlay()) */
+  function scene(mp, v, W, H){
+    var hid = hidden[mp.id] || {}, dmView = master(mp), toks = [];
+    (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; toks.push(tokScene(t, v, !dmView && mine(t))); });
+    var sc = {W:W, H:H, v:v, tokens:toks,
+      map:{id:mp.id, cols:mp.cols, rows:mp.rows, grid:mp.grid, layers:mp.layers, strokes:mp.strokes, hid:hid, bgUrl:mp.bg ? (mp.bg.img ? Mesa.imgUrl(mp.bg.img) : mp.bg.data) : null, bgOp:mp.bg ? mp.bg.op : 1},
+      fog:mp.fog && mp.fog.on ? {on:true, dm:dmView, bits:fogBits(mp), key:fogCache[mp.id].n} : null,
+      drawing:drawing, erase:erasing ? mp.strokes.filter(function(k){ return erasing.hits[k.id]; }) : null, fogRect:fogDrag ? {a:fogDrag.a, b:fogDrag.b, v:tool.fogV} : null, pings:[]};
+    if (drag && drag.moved) {
+      var t = drag.tok, s = t.s || 1, cells = Math.max(Math.abs(Math.round(drag.x - drag.sx)), Math.abs(Math.round(drag.y - drag.sy)));
+      sc.ghost = Object.assign(tokScene(Object.assign({}, t, {x:drag.x, y:drag.y}), v, false), {ghost:true});
+      sc.ruler = {ax:drag.sx + s / 2, ay:drag.sy + s / 2, bx:drag.x + s / 2, by:drag.y + s / 2, half:s * 0.5, text:(cells * 1.5).toString().replace('.', ',') + ' m · ' + cells + ' casilla' + (cells === 1 ? '' : 's')};
+    }
+    var now = Date.now(); pings = pings.filter(function(p){ return now - p.t < 2400; });
+    sc.pings = pings.map(function(p){ return {x:p.x, y:p.y, k:(now - p.t) / 2400, color:p.color, name:p.name}; });
+    return sc;
+  }
+  function tokScene(t, v, late){
+    var info = tokInfo(t);
+    return {id:t.id, x:t.x, y:t.y, s:t.s || 1, color:t.color || '#8c2626', img:t.img ? Mesa.imgUrl(t.img) : null, ini:ini(info.name), name:info.name, pct:info.pct, turn:info.turn, down:info.down, hidden:!!t.hidden, sel:selTok === t.id, late:late, label:v.s >= 40 || selTok === t.id || info.turn};
   }
   function bgImage(mp){
     if (!mp.bg) return null; var key = mp.bg.img || ('d:' + (mp.bg.data || '').length);
@@ -578,7 +634,7 @@ var Mapas = (function(){
       else for (var i = 0; i + 3 < p.length; i += 2) if (segDist(m[0], m[1], p[i], p[i + 1], p[i + 2], p[i + 3]) < tol + k.w / 2) { hit = true; break; }
       if (hit) { erasing.hits[k.id] = 1; changed = true; }
     });
-    if (changed) { var c = canvas.getContext && canvas.getContext('2d'); if (c) { paint(); var v = V(); mp.strokes.forEach(function(k){ if (erasing.hits[k.id]) { c.save(); c.globalAlpha = 0.25; strokeOn(c, Object.assign({}, k, {c:'#ff3b30'}), v); c.restore(); } }); } }
+    if (changed) paint();
   }
   function askText(pt, px){
     var box = $('#mapTxt'); if (!box) return; pendingText = pt;
@@ -623,7 +679,7 @@ var Mapas = (function(){
     else if (a === 'mapsrc') { newImg = b.dataset.v === 'img' ? (newImg || {cols:30}) : null; render(); }
     else if (a === 'mapopen') openMap(b.dataset.id);
     else if (a === 'mapgoscene') { if (window.Mesa) { document.getElementById('combat').hidden = false; Mesa.show('mapas'); } openMap(b.dataset.v); }
-    else if (a === 'mapback') { cur = null; canvas = null; selTok = null; render.sceneOpened = room() && room().scene; render(); badge(); }
+    else if (a === 'mapback') { cur = null; canvas = null; dropGL(); selTok = null; render.sceneOpened = room() && room().scene; render(); badge(); }
     else if (a === 'mapscene') { Sala.send({t:'scene.set', id:b.dataset.id}); Sala.toast('Todos ven este mapa ahora.'); }
     else if (a === 'mapshare') load(b.dataset.id).then(function(m){
       if (!m || !room()) return;

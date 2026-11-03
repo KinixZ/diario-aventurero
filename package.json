@@ -15,10 +15,13 @@
     "check": "node --check web/dist/all.js",
     "test": "npm run build && node --check web/dist/all.js && node --test tests/server/*.test.mjs && node tests/web/run.mjs",
     "paquete": "node tools/crear-paquete-diario.mjs",
-    "bestiario": "node tools/crear-bestiario.mjs"
+    "bestiario": "node tools/crear-bestiario.mjs",
+    "test:gl": "node tests/web/gl.pw.mjs"
   },
   "dependencies": {
+    "esbuild": "^0.28.2",
     "pg": "^8.23.1",
+    "pixi.js": "^8.22.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

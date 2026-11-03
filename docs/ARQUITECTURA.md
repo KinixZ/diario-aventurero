@@ -2,12 +2,15 @@
 
 ## Idea general
 
-El diario es una sola página sin framework. `tools/build-web.mjs` concatena estilos, iconos, marcado y scripts en `web/dist/index.html`, que funciona igual servido por el servidor del proyecto, por GitHub Pages o como artefacto de claude.ai.
+El diario es una sola página sin framework. `tools/build-web.mjs` concatena estilos, iconos, marcado y scripts en `web/dist/index.html` y los minifica con esbuild (`npm run build -- --plain` los deja legibles). Funciona igual servido por el servidor del proyecto, por GitHub Pages o como artefacto de claude.ai.
+
+El motor del mapa va aparte: `web/gl/mapa-gl.js` (PixiJS / WebGL) se empaqueta en `web/dist/mapa-gl.js` y se baja solo al abrir un mapa (o en segundo plano al entrar a una campaña). Sin WebGL, en el artefacto o si falla, el mapa usa Canvas 2D con el mismo dibujo. El servidor manda los archivos de texto comprimidos con brotli o gzip.
 
 Los scripts se cargan en este orden y cada uno expone un objeto global:
 
 | Archivo | Global | Depende de | Qué hace |
 |---|---|---|---|
+| `gfx.js` | `Gfx` | — | Calidad gráfica (`localStorage['diario-gfx']`: automática, baja, media, alta), si hay WebGL, resolución y suavizado; carga `mapa-gl.js`. Pone `<html data-gfx>` para que el CSS recorte efectos. Su sección vive en Ajustes (`#gfxBox`). |
 | `lib.js` | `Lib5e` | — | Importa JSON de 5etools o el paquete, resuelve `_copy`, indexa y busca por tipo, nombre y libro (prefiere 2024). Del bestiario solo guarda compañeros. |
 | `render.js` | `Render5e` | `Lib5e` | Convierte `entries` y etiquetas `{@spell …}` en HTML; los enlaces son `a.ref[data-ref="tipo\|nombre\|libro"]`. |
 | `rules.js` | `Rules5e` | `Lib5e` | `derive(C)` toma un personaje guardado y devuelve todo lo calculado (`D`) más la lista de elecciones pendientes. Sin DOM: se puede probar en Node. |
@@ -18,7 +21,8 @@ Los scripts se cargan en este orden y cada uno expone un objeto global:
 | `bestiario.js` | `Bestiario` | `Sala`, `Render5e` | Bestiario del DM (`bestiario-5e.json`, IndexedDB `bestiary`): buscador, ficha y agregar a la iniciativa. |
 | `grupo.js` | `Grupo` | `Sala`, `Bestiario` | Bestiario del grupo: lista, ficha compartida, notas y formulario del DM. |
 | `cronica.js` | `Cronica` | `Sala`, `Bestiario` | Separador Bestiario del diario: encuentros de todas las campañas guardados en IndexedDB `encuentros` y acceso al Manual de Monstruos. |
-| `mapas.js` | `Mapas` | `Sala` | Mesa virtual: lienzo con zoom, cuadrícula, capas, trazos, fondo, fichas, niebla, regla y señales; modos Jugar / Dibujar / Niebla. Copia en IndexedDB `map:<id>` e índice `localStorage['diario-mapas']`. |
+| `mapas.js` | `Mapas` | `Sala`, `Gfx` | Mesa virtual: datos, permisos, herramientas y gestos; zoom, cuadrícula, capas, trazos, fondo, fichas, niebla, regla y señales; modos Jugar / Dibujar / Niebla. `paint()` solo agenda un cuadro: con WebGL arma una escena (`scene()`) para `MapaGL`, si no dibuja en Canvas 2D. Copia en IndexedDB `map:<id>` e índice `localStorage['diario-mapas']`. |
+| `gl/mapa-gl.js` | `MapaGL` | PixiJS | Solo dibuja: recibe la escena ya resuelta y conserva entre cuadros lo que no cambió (papel, cuadrícula, un objeto por trazo, una ficha por id, la niebla como textura de una casilla por píxel). |
 
 ## El personaje
 
