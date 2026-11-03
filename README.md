@@ -42,6 +42,7 @@ El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abra
 - **Bestiario del DM** (archivo aparte, ver abajo): busca entre los monstruos de tu 5etools por nombre, VD, tipo y libro; ve su ficha con los ataques listos para tirar («Tira 1d20 + 6 · 2d8 + 4 contundente») y agrégalos a la iniciativa con su CA, PG y modificador.
 - **Vida de los enemigos a elección del DM**: los jugadores ven nada, cómo se ve («herido»), solo la barra, la barra con porcentaje o los números.
 - **Encuentros guardados**: el DM guarda el combate a la mitad (enemigos con vida y estados, iniciativa de todos, ronda y turno) y lo carga en otra sesión. Si el servidor se reinicia, la mesa vuelve con el combate.
+- **Editor de mapas**: herramienta de selección (tocar o encerrar varios; mover, girar y escalar con manijas; cambiar color o capa; duplicar; editar textos), deshacer y rehacer, capas que se reordenan arrastrando y se bloquean, y **44 objetos** dibujados para el mapa (escaleras, puertas, puerta secreta, ventanas, muebles, antorchas, fogatas, árboles, rocas, telarañas…). Importa tus propios paquetes de imágenes (Forgotten Adventures, 2-Minute Tabletop…): se quedan en tu aparato y se suben a la campaña al usarlos.
 - **Mapas sin campaña**: lienzos con cuadrícula cuadrada o hexagonal, capas, lápiz, líneas, rectángulos, texto y borrador; quedan en el teléfono y se bajan como imagen.
 
 ## Manual de Monstruos (bestiario-5e.json)
