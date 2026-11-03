@@ -197,7 +197,8 @@
     }).join('') + '</div></div>';
     h += '<div class="mini"><div class="stat"><span class="big">' + sgn(D.pb) + '</span><span class="label">competencia</span></div><div class="stat"><span class="big">' + D.passive + '</span><span class="label">perc. pasiva</span></div><div class="stat"><span class="big">' + (SIZE[D.size] || D.size).slice(0, 4) + '.</span><span class="label">tamaño</span></div></div>';
     var prof = [['Armaduras', D.armor.map(function(a){ return {light:'ligeras', medium:'medias', heavy:'pesadas', shield:'escudos'}[a] || a; })], ['Armas', D.weapon.map(function(w){ return {simple:'sencillas', martial:'marciales'}[w] || w; })], ['Herramientas', D.tools], ['Idiomas', D.langs]];
-    if (D.darkvision) prof.push(['Sentidos', ['Visión en la oscuridad ' + (D.darkvision / 5 * 1.5) + ' m']]);
+    var sn = D.senses || {dv:D.darkvision, bs:0}, mt = function(ft){ return String(ft / 5 * 1.5).replace('.', ',') + ' m'; };
+    if (sn.dv || sn.bs) prof.push(['Sentidos', (sn.dv ? ['Visión en la oscuridad ' + mt(sn.dv)] : []).concat(sn.bs ? ['Vista ciega ' + mt(sn.bs)] : [])]);
     if (D.resist.length) prof.push(['Resistencias', D.resist]);
     h += '<div class="card"><span class="label">competencias y rasgos</span>' + prof.filter(function(p){ return p[1].length; }).map(function(p){ return '<div class="line" style="align-items:flex-start;padding:6px 0"><span class="muted" style="min-width:110px">' + p[0] + '</span><span style="flex:1;text-align:right">' + p[1].map(esc).join(', ') + '</span></div>'; }).join('') + '</div>';
     compBodies = {}; h += compSection(false);

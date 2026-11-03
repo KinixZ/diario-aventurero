@@ -172,6 +172,13 @@ var MapEd = (function(){
   function copy(m){ var list = selected(m); if (list.length) clip = list.map(function(k){ return JSON.parse(JSON.stringify(k)); }); return !!clip; }
   function paste(m){ if (!clip || !clip.length) return; var lids = {}; m.layers.forEach(function(l){ lids[l.id] = 1; }); var list = clip.map(function(k){ var n = JSON.parse(JSON.stringify(k)); if (!lids[n.l]) n.l = A.layer(); return n; }); dup(m, list, 1, 1); }
 
+  /* Luz de un objeto: la suya (antorcha, fogata…), apagada, o una de las de siempre */
+  function lightSel(k){
+    if (!window.Vision) return ''; var own = k.k === 'asset' && Vision.LIGHTS[k.a], v = k.lt ? (k.lt.off ? 'off' : k.lt.k || 'otra') : '';
+    var m = function(c){ return String(c * 1.5).replace('.', ',') + ' m'; };
+    return '<select class="field sel-light" id="selLight" aria-label="Luz del objeto" title="Luz"><option value=""' + (!v ? ' selected' : '') + '>' + (own ? 'Luz: la suya (' + m(own.b) + ' + ' + m(own.d) + ')' : 'Sin luz') + '</option>' + (own ? '<option value="off"' + (v === 'off' ? ' selected' : '') + '>Luz apagada</option>' : '')
+      + Vision.PRESETS.map(function(p){ return '<option value="' + p[0] + '"' + (v === p[0] ? ' selected' : '') + '>Luz: ' + p[1] + '</option>'; }).join('') + (v === 'otra' ? '<option value="otra" selected>Luz: otra</option>' : '') + '</select>';
+  }
   /* Barra flotante: aparece con algo elegido */
   function barHtml(m){
     var list = selected(m); if (!list.length) return '';
@@ -181,6 +188,7 @@ var MapEd = (function(){
       + (canColor ? '<div class="sel-sw">' + A.colors().map(function(c){ return '<button type="button" class="sw" data-act="selcolor" data-v="' + c[0] + '" style="background:' + c[0] + '" aria-label="Color ' + c[1] + '"></button>'; }).join('') + '</div>' : '')
       + (m.layers.length > 1 ? '<select class="field sel-layer" id="selLayer" aria-label="Mover a la capa"><option value="">Capa…</option>' + m.layers.map(function(l){ return '<option value="' + A.attr(l.id) + '">' + A.esc(l.name) + '</option>'; }).join('') + '</select>' : '')
       + (one && one.k === 'text' ? '<button class="icon-btn sm" type="button" data-act="seltext" aria-label="Editar texto" title="Editar texto"><svg class="ic"><use href="#i-text"/></svg></button>' : '')
+      + (one && (one.k === 'asset' || one.k === 'img') ? lightSel(one) : '')
       + '<button class="icon-btn sm" type="button" data-act="selrot" aria-label="Girar 90°" title="Girar 90° (R)"><svg class="ic"><use href="#i-undo"/></svg></button>'
       + '<button class="icon-btn sm" type="button" data-act="seldup" aria-label="Duplicar" title="Duplicar (Ctrl+D)"><svg class="ic"><use href="#i-plus"/></svg></button>'
       + '<button class="icon-btn sm del" type="button" data-act="seldel" aria-label="Borrar" title="Borrar (Supr)"><svg class="ic"><use href="#i-trash"/></svg></button>'
@@ -195,7 +203,10 @@ var MapEd = (function(){
     else if (a === 'selx') clear(m);
     else if (a === 'seltext') { var k = selected(m)[0]; if (k && k.k === 'text') A.askText(k); }
   });
-  document.addEventListener('change', function(ev){ if (ev.target && ev.target.id === 'selLayer' && ev.target.value && A) { var m = mp(); if (m) toLayer(m, ev.target.value); } });
+  document.addEventListener('change', function(ev){
+    if (ev.target && ev.target.id === 'selLayer' && ev.target.value && A) { var m = mp(); if (m) toLayer(m, ev.target.value); }
+    if (ev.target && ev.target.id === 'selLight' && A && ev.target.value !== 'otra') { var m2 = mp(), v = ev.target.value; if (m2) updSel(m2, function(k){ if (!v) delete k.lt; else if (v === 'off') k.lt = {off:1}; else k.lt = Vision.preset(v); return k; }); }
+  });
   // en fase de captura: Esc suelta la selección antes de que el diario lo use para cerrar el mapa
   document.addEventListener('keydown', function(ev){
     if (!A || !A.active()) return; var t = ev.target; if (t && /INPUT|TEXTAREA|SELECT/.test(t.tagName)) return;

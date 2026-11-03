@@ -592,6 +592,25 @@ var Rules5e = (function(){
     D.speedFt = spd || 30; D.speed = ((spd || 30) / 5 * 1.5).toString().replace('.', ',') + ' m';
     D.size = ch.size || (race && race.size && race.size[0]) || 'M';
     D.darkvision = race && race.darkvision ? race.darkvision : 0;
+    // sentidos para la luz del mapa (en pies): visión en la oscuridad de la especie, de rasgos que la dan o la amplían
+    // (Explorador de la penumbra, Ojos de la oscuridad, Vista del diablo…) y vista ciega (Combate a ciegas…)
+    (function(){
+      // el texto de un rasgo, siguiendo las referencias a otros rasgos (los de subclase vienen así: «Umbral Sight» dentro de «Gloom Stalker»)
+      var txt = function(e, n){
+        if (e == null || n > 4) return ''; if (typeof e === 'string') return e; if (Array.isArray(e)) return e.map(function(x){ return txt(x, n); }).join(' ');
+        if (e.type === 'refSubclassFeature' && Lib5e.subclassFeature) { var f = Lib5e.subclassFeature(e.subclassFeature); return f ? txt(f.entries, n + 1) : ''; }
+        if (e.type === 'refClassFeature' && Lib5e.classFeature) { var g = Lib5e.classFeature(e.classFeature); return g ? txt(g.entries, n + 1) : ''; }
+        return typeof e === 'object' ? txt(e.entries || e.entry || e.items || '', n) : '';
+      };
+      var dv = D.darkvision, bs = 0, plain = function(e){ return txt(e, 0).replace(/\{@\w+ ([^|}]*)[^}]*\}/g, '$1'); };
+      D.features.forEach(function(f){
+        if (f.from === 'Especie') return; var t = plain(f.e), m;
+        if ((m = /darkvision (?:with a range of|out to a range of|to a range of|of) (\d+) (?:feet|ft)/i.exec(t))) { var inc = /(?:range|it) increases by (\d+) (?:feet|ft)/i.exec(t); dv = dv && inc ? dv + +inc[1] : Math.max(dv, +m[1]); }
+        if ((m = /see normally in (?:dim light and )?darkness.{0,80}?within (\d+) (?:feet|ft)/i.exec(t))) dv = Math.max(dv, +m[1]);
+        if ((m = /blindsight (?:with a range of|out to a range of|to a range of|of) (\d+) (?:feet|ft)/i.exec(t))) bs = Math.max(bs, +m[1]);
+      });
+      D.senses = {dv:dv, bs:bs};
+    })();
     D.resist = [];
     (race && race.resist ? race.resist.filter(function(r){ return typeof r === 'string'; }) : []).concat(fx.resist).forEach(function(t){ var es = DT[t] || DT[String(t).charAt(0).toUpperCase()] || t; var full = {acid:'ácido', bludgeoning:'contundente', cold:'frío', fire:'fuego', force:'fuerza', lightning:'relámpago', necrotic:'necrótico', piercing:'perforante', poison:'veneno', psychic:'psíquico', radiant:'radiante', slashing:'cortante', thunder:'trueno'}[N(t)]; es = full || es; if (D.resist.indexOf(es) < 0) D.resist.push(es); });
 

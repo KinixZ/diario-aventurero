@@ -12,7 +12,11 @@
    La vista es un polígono: se lanzan rayos hacia cada extremo de pared (y un poco a los lados) y se queda el choque
    más cercano. Para que sea barato con cientos de paredes, los segmentos van en cubetas de 4 × 4 casillas y cada rayo
    recorre solo las cubetas que cruza (DDA) hasta el primer choque.
-   El movimiento usa la cuadrícula: de cada casilla se sabe si se puede pasar al este, sur, sureste y suroeste. */
+   El movimiento usa la cuadrícula: de cada casilla se sabe si se puede pasar al este, sur, sureste y suroeste.
+   Luz (módulo 6): ambiente brillante, penumbra u oscuridad (sale de la hora o lo fija el DM), luces de fichas y de objetos
+   (su polígono es el de la vista limitado a su radio, así que las paredes también tapan la luz) y los sentidos de cada ficha
+   (visión en la oscuridad, vista ciega). Una ficha percibe un punto si lo tiene a la vista y el punto está iluminado o dentro
+   del alcance de sus sentidos (o de su propia luz). */
 var Vision = (function(){
   var TYPES = {
     wall:    {n:'Pared', sight:1, move:1},
@@ -141,10 +145,10 @@ var Vision = (function(){
   function inAny(polys, x, y){ for (var i = 0; i < polys.length; i++) if (inPoly(polys[i], x, y)) return true; return false; }
   function bbox(P){ var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (var i = 0; i < P.length; i += 2) { if (P[i] < x0) x0 = P[i]; if (P[i] > x1) x1 = P[i]; if (P[i + 1] < y0) y0 = P[i + 1]; if (P[i + 1] > y1) y1 = P[i + 1]; } return [x0, y0, x1, y1]; }
 
-  /* Marca como descubiertas las casillas que el polígono toca (3 × 3 muestras por casilla). Devuelve cuántas nuevas. */
-  function explore(bits, cols, rows, P){
-    var n = P.length / 2; if (n < 3) return 0;
-    var bb = bbox(P), r0 = Math.max(0, Math.floor(bb[1])), r1 = Math.min(rows - 1, Math.floor(bb[3])), xs = [], added = 0;
+  /* Recorre las casillas que el polígono toca (3 × 3 muestras por casilla; puede llamar más de una vez por casilla) */
+  function cells(P, cols, rows, fn){
+    var n = P.length / 2; if (n < 3) return;
+    var bb = bbox(P), r0 = Math.max(0, Math.floor(bb[1])), r1 = Math.min(rows - 1, Math.floor(bb[3])), xs = [];
     var num = function(a, b){ return a - b; };
     for (var r = r0; r <= r1; r++) for (var q = 0; q < 3; q++) {
       var ys = r + SAMP[q]; xs.length = 0;
@@ -152,9 +156,14 @@ var Vision = (function(){
       if (xs.length < 2) continue; xs.sort(num);
       for (var k = 0; k + 1 < xs.length; k += 2) {
         var c0 = Math.max(0, Math.ceil(xs[k] - SAMP[2])), c1 = Math.min(cols - 1, Math.floor(xs[k + 1] - SAMP[0]));
-        for (var c = c0; c <= c1; c++) { var id = r * cols + c, by = id >> 3, bit = 1 << (id & 7); if (!(bits[by] & bit)) { bits[by] |= bit; added++; } }
+        for (var c = c0; c <= c1; c++) fn(r * cols + c, c, r);
       }
     }
+  }
+  /* Marca como descubiertas las casillas que el polígono toca y que pasan el filtro `ok` (la luz). Devuelve cuántas nuevas. */
+  function explore(bits, cols, rows, P, ok){
+    var added = 0;
+    cells(P, cols, rows, function(id, c, r){ var by = id >> 3, bit = 1 << (id & 7); if (bits[by] & bit) return; if (ok && !ok(id, c, r)) return; bits[by] |= bit; added++; });
     return added;
   }
 
@@ -252,9 +261,74 @@ var Vision = (function(){
     else if (from) { var d = Math.max(Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1])), n = Math.min(8, Math.floor(d / 2)); for (var k = 1; k <= n; k++) pts.push([from[0] + (to[0] - from[0]) * k / (n + 1), from[1] + (to[1] - from[1]) * k / (n + 1)]); }
     pts.push(to); return pts;
   }
+  /* ---------- Luz ---------- */
+  // objetos que alumbran solos (radios en casillas: b brillante, d penumbra más allá; f = parpadea)
+  var LIGHTS = {antorcha:{b:4, d:4, c:'#ffb050', f:1}, brasero:{b:3, d:3, c:'#ff9a40', f:1}, fogata:{b:4, d:4, c:'#ffa040', f:1}, candelabro:{b:2, d:2, c:'#ffd27a', f:1}, vela:{b:1, d:1, c:'#ffd27a', f:1}, farol:{b:3, d:6, c:'#ffcf7a'}, cristal:{b:2, d:4, c:'#8fe0ff'}, luz:{b:4, d:4, c:'#fff1c9'}};
+  // luces para fichas y objetos (reglas 2024; 1 casilla = 1,5 m): [clave, nombre, brillante, penumbra, color, parpadea]
+  var PRESETS = [['vela','Vela',1,1,'#ffd27a',1],['antorcha','Antorcha',4,4,'#ffb050',1],['lampara','Lámpara',3,6,'#ffcf7a',0],['linterna','Linterna con capucha',6,6,'#ffe2a0',0],['luz','Conjuro Luz',4,4,'#fff1c9',0],['llama','Producir llama',4,4,'#ff9a40',1],['fogata','Fogata',4,4,'#ffa040',1],['diurna','Luz del día (conjuro)',12,12,'#fffbe8',0],['feerico','Fuego feérico (solo penumbra)',0,2,'#c79bff',0]];
+  var TIMES = {dia:2, amanecer:1, atardecer:1, noche:0};
+  function preset(k){ for (var i = 0; i < PRESETS.length; i++) if (PRESETS[i][0] === k) { var p = PRESETS[i]; return {k:p[0], b:p[2], d:p[3], c:p[4], f:p[5] ? 1 : 0}; } return null; }
+  /* 2 brillante, 1 penumbra, 0 oscuridad */
+  function ambient(mp){ var L = mp.light || {}; if (L.amb === 'bright') return 2; if (L.amb === 'dim') return 1; if (L.amb === 'dark') return 0; var t = TIMES[L.time]; return t == null ? 2 : t; }
+  /* Alcance de la vista: el del mapa; con niebla espesa no se ve más allá de 9 m (6 casillas) */
+  function effRange(mp){ var r = mp.vis && mp.vis.range || 0, L = mp.light || {}; if (L.wx === 'niebla') r = r ? Math.min(r, 6) : 6; return r; }
+  /* Luces del mapa: fichas con luz (no ocultas) y objetos que alumbran. skipLayer(l) quita las capas que no cuentan. */
+  function lightList(mp, skipLayer){
+    var out = [];
+    (mp.tokens || []).forEach(function(t){ var L = t.lt; if (!L || t.hidden || !((+L.b || 0) + (+L.d || 0) > 0)) return; var s = t.s || 1; out.push({id:'t:' + t.id, x:t.x + s / 2, y:t.y + s / 2, b:+L.b || 0, d:+L.d || 0, c:L.c || '#ffd27a', f:!!L.f, tok:t.id}); });
+    (mp.strokes || []).forEach(function(k){
+      if ((k.k !== 'asset' && k.k !== 'img') || !k.pts || (skipLayer && skipLayer(k.l))) return;
+      var L = k.lt; if (L && L.off) return; if (!L || !((+L.b || 0) + (+L.d || 0) > 0)) L = k.k === 'asset' ? LIGHTS[k.a] : null; if (!L) return;
+      out.push({id:'k:' + k.id, x:k.pts[0], y:k.pts[1], b:+L.b || 0, d:+L.d || 0, c:L.c || '#ffd27a', f:!!L.f});
+    });
+    return out;
+  }
+  /* Iluminación: ambiente y polígonos de cada luz (B brillante, D hasta donde llega la penumbra), con caché por luz */
+  function illum(mp, skipLayer){
+    var amb = ambient(mp), list = lightList(mp, skipLayer), ix = sightOf(mp), c = CACHE && CACHE.get(mp) || {}, lc = c.lights || (c.lights = {}), seen = {}, out = [];
+    if (CACHE && !CACHE.get(mp)) CACHE.set(mp, c);
+    list.forEach(function(L){
+      var key = L.x + ',' + L.y + ',' + L.b + ',' + L.d + '|' + (mp.wrev || 0) + '|' + (mp.walls || []).length + '|' + mp.cols + 'x' + mp.rows, e = lc[L.id];
+      if (!e || e.key !== key) e = lc[L.id] = {key:key, B:L.b > 0 ? poly(ix, L.x, L.y, L.b, mp.cols, mp.rows) : null, D:poly(ix, L.x, L.y, L.b + L.d, mp.cols, mp.rows)};
+      seen[L.id] = 1; L.B = e.B; L.D = e.D; out.push(L);
+    });
+    Object.keys(lc).forEach(function(k){ if (!seen[k]) delete lc[k]; });
+    return {amb:amb, lights:out};
+  }
+  /* Luz de cada casilla (0, 1, 2) contando ambiente y luces */
+  function litMap(mp, il){
+    var g = new Uint8Array(mp.cols * mp.rows); if (il.amb) g.fill(il.amb);
+    if (il.amb < 2) il.lights.forEach(function(L){ if (L.D) cells(L.D, mp.cols, mp.rows, function(id){ if (!g[id]) g[id] = 1; }); if (L.B) cells(L.B, mp.cols, mp.rows, function(id){ g[id] = 2; }); });
+    return g;
+  }
+  /* Luz en un punto (para las reglas: brillante, penumbra u oscuridad) */
+  function levelAt(il, x, y){
+    var lv = il.amb; if (lv >= 2) return 2;
+    for (var i = 0; i < il.lights.length; i++) { var L = il.lights[i]; if (L.B && inPoly(L.B, x, y)) return 2; if (lv < 1 && L.D && inPoly(L.D, x, y)) lv = 1; }
+    return lv;
+  }
+  /* Sentidos de una ficha en casillas: visión en la oscuridad y vista ciega (en pies en la hoja o en la ficha) */
+  function sensesOf(t, ch){ var sn = t.sn || {}, dv = sn.dv != null ? sn.dv : ch && ch.dv || 0, bs = sn.bs != null ? sn.bs : ch && ch.bs || 0; return {dv:Math.max(0, +dv || 0) / 5, bs:Math.max(0, +bs || 0) / 5}; }
+  /* Hasta dónde ve una ficha sin luz: el mayor de sus sentidos y de su propia luz */
+  function reachOf(t, ch){ var sn = sensesOf(t, ch), L = t.lt, own = L ? (+L.b || 0) + (+L.d || 0) : 0; return Math.max(sn.dv, sn.bs, own); }
+  /* Descubre lo que percibe el grupo (o solo `o.toks`, con su camino desde `o.from`). o = {charOf, skipLayer, toks, from, cells} */
+  function exploreParty(mp, bits, o){
+    o = o || {}; if (!mp.vis || !mp.vis.on) return 0;
+    var ix = sightOf(mp), range = effRange(mp), il = illum(mp, o.skipLayer), lit = il.amb >= 1 ? null : litMap(mp, il), n = 0;
+    (o.toks || mp.tokens || []).forEach(function(t){
+      var ch = o.charOf ? o.charOf(t) : null; if (!isViewer(t, ch)) return;
+      var R = reachOf(t, ch) + 0.5, pts = o.toks && o.from ? trail(o.from, center(t), o.cells, t.s) : [center(t)];
+      pts.forEach(function(p){
+        var ok = lit ? function(id, c, r){ if (lit[id]) return true; var dx = c + 0.5 - p[0], dy = r + 0.5 - p[1]; return dx * dx + dy * dy <= R * R; } : null;
+        n += explore(bits, mp.cols, mp.rows, poly(ix, p[0], p[1], range, mp.cols, mp.rows), ok);
+      });
+    });
+    return n;
+  }
   function segDist(px, py, a, b){ var dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy, t = l ? Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / l)) : 0; return Math.hypot(px - (a[0] + t * dx), py - (a[1] + t * dy)); }
 
-  return {TYPES:TYPES, KINDS:KINDS, blocks:blocks, forPlayer:forPlayer, index:index, cast:cast, crosses:crosses, poly:poly, inPoly:inPoly, inAny:inAny, bbox:bbox, explore:explore,
-    moveGrid:moveGrid, stepOk:stepOk, path:path, smooth:smooth, sightOf:sightOf, moveOf:moveOf, gridOf:gridOf, route:route, isViewer:isViewer, center:center, trail:trail, segDist:segDist};
+  return {TYPES:TYPES, KINDS:KINDS, blocks:blocks, forPlayer:forPlayer, index:index, cast:cast, crosses:crosses, poly:poly, inPoly:inPoly, inAny:inAny, bbox:bbox, cells:cells, explore:explore,
+    moveGrid:moveGrid, stepOk:stepOk, path:path, smooth:smooth, sightOf:sightOf, moveOf:moveOf, gridOf:gridOf, route:route, isViewer:isViewer, center:center, trail:trail, segDist:segDist,
+    LIGHTS:LIGHTS, PRESETS:PRESETS, preset:preset, ambient:ambient, effRange:effRange, lightList:lightList, illum:illum, litMap:litMap, levelAt:levelAt, sensesOf:sensesOf, reachOf:reachOf, exploreParty:exploreParty};
 })();
 if (typeof module === 'object' && module && module.exports) module.exports = Vision;

@@ -43,7 +43,8 @@ El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abra
 - **Vida de los enemigos a elección del DM**: los jugadores ven nada, cómo se ve («herido»), solo la barra, la barra con porcentaje o los números.
 - **Encuentros guardados**: el DM guarda el combate a la mitad (enemigos con vida y estados, iniciativa de todos, ronda y turno) y lo carga en otra sesión. Si el servidor se reinicia, la mesa vuelve con el combate.
 - **Paredes, puertas y visión**: ocho tipos de pared (pared, puerta, puerta secreta, ventana, un sentido, muro bajo, cortina y barrera invisible) que se trazan arrastrando, por tramos o habitaciones enteras. Con la visión de los personajes, la niebla se descubre sola con lo que ve el grupo (visión compartida), las paredes tapan la vista y el paso, lo ya explorado queda en penumbra y los enemigos solo se ven si alguien los ve. Los jugadores abren las puertas de cerca (las que tienen llave, no); las secretas son pared hasta que el DM las descubre. El DM puede ver el mapa como jugador.
-- **Editor de mapas**: herramienta de selección (tocar o encerrar varios; mover, girar y escalar con manijas; cambiar color o capa; duplicar; editar textos), deshacer y rehacer, capas que se reordenan arrastrando y se bloquean, y **44 objetos** dibujados para el mapa (escaleras, puertas, puerta secreta, ventanas, muebles, antorchas, fogatas, árboles, rocas, telarañas…). Importa tus propios paquetes de imágenes (Forgotten Adventures, 2-Minute Tabletop…): se quedan en tu aparato y se suben a la campaña al usarlos.
+- **Luz, hora y clima**: cada mapa tiene hora (día, amanecer, atardecer, noche), luz del lugar y clima (lluvia, tormenta, niebla espesa, nieve, viento) que se anima sobre el mapa. Antorchas, fogatas, velas, faroles y luces invisibles alumbran sin atravesar paredes; cada ficha puede llevar su luz (antorcha, lámpara, conjuro Luz…) y la visión en la oscuridad se toma de la hoja. De noche o en una mazmorra, el grupo solo ve lo iluminado o lo que alcanzan sus sentidos, y cada ficha dice si está a plena luz, en penumbra o a oscuras con lo que eso significa en las reglas.
+- **Editor de mapas**: herramienta de selección (tocar o encerrar varios; mover, girar y escalar con manijas; cambiar color o capa; duplicar; editar textos), deshacer y rehacer, capas que se reordenan arrastrando y se bloquean, y **47 objetos** dibujados para el mapa (escaleras, puertas, puerta secreta, ventanas, muebles, antorchas, fogatas, árboles, rocas, telarañas…). Importa tus propios paquetes de imágenes (Forgotten Adventures, 2-Minute Tabletop…): se quedan en tu aparato y se suben a la campaña al usarlos.
 - **Mapas sin campaña**: lienzos con cuadrícula cuadrada o hexagonal, capas, lápiz, líneas, rectángulos, texto y borrador; quedan en el teléfono y se bajan como imagen.
 
 ## Manual de Monstruos (bestiario-5e.json)
@@ -82,7 +83,8 @@ web/                 La aplicación (sin framework)
   src/campana.js     Selector de campañas y panel del DM
   src/mesa.js        Chat, pizarra, tablero y sesiones
   src/gfx.js         Calidad gráfica y carga del motor del mapa
-  src/vision.cjs     Paredes, línea de vista y caminos (también lo usa el servidor)
+  src/vision.cjs     Paredes, línea de vista, luz y caminos (también lo usa el servidor)
+  src/clima.js       Lluvia, tormenta, nieve, niebla y viento sobre el mapa
   src/mapas.js       Mapas, fichas, paredes, niebla y regla
   gl/mapa-gl.js      Motor del mapa en PixiJS (WebGL), archivo aparte
   src/bestiario.js   Bestiario del DM (archivo aparte)

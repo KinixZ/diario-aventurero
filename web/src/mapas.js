@@ -20,7 +20,7 @@ var Mapas = (function(){
   var WALLT = [['wall','Pared','i-wall','Tapa la vista y el paso.'],['door','Puerta','i-door','Se abre y se cierra; cerrada tapa todo.'],['secret','Puerta secreta','i-secret','Para los jugadores es pared hasta que la encuentran.',1],['window','Ventana','i-window','Se ve a través, no se pasa.'],['oneway','Un sentido','i-oneway','Se ve solo desde el lado de la flecha.'],['low','Muro bajo','i-lowwall','No tapa la vista ni el paso; dará cobertura.'],['curtain','Cortina','i-curtain','Tapa la vista; se puede cruzar.'],['barrier','Barrera invisible','i-barrier','Nadie la ve ni tapa la vista; no deja pasar.',1]];
   var WCOL = {wall:'#e8c26a', door:'#e0873a', secret:'#d070e0', window:'#5fc6e8', oneway:'#f0d040', low:'#7cc86a', curtain:'#a98ae8', barrier:'#5b9cf0'};
   var RANGES = [[0,'Sin límite'],[4,'6 m'],[8,'12 m'],[12,'18 m'],[20,'30 m'],[40,'60 m']];
-  var maps = {}, cur = null, mode = 'jugar', tool = {k:'pen', c:COLORS[0][0], w:0.14, snap:true, fill:false, layer:null, fogV:1, wt:'wall', wroom:false}, hidden = {}, views = {}, asked = {};
+  var maps = {}, cur = null, mode = 'jugar', tool = {k:'pen', c:COLORS[0][0], w:0.14, snap:true, fill:false, layer:null, fogV:1, wt:'wall', wroom:false, sc:'niebla'}, hidden = {}, views = {}, asked = {};
   var locked = {}; // capas bloqueadas por mapa (solo en tu vista)
   var newOpen = false, layersOpen = false, pendingText = null, selTok = null, pings = [], imgs = {}, fogCache = {}, newImg = null, busyUp = false;
   var waitOpen = null, canvas = null, ptr = {}, gesture = null, drawing = null, erasing = null, drag = null, fogDrag = null, press = null, raf = 0;
@@ -36,7 +36,7 @@ var Mapas = (function(){
   function index(){ try { return JSON.parse(localStorage.getItem(IDX) || '[]'); } catch(e){ return []; } }
   function setIndex(a){ try { localStorage.setItem(IDX, JSON.stringify(a)); } catch(e){} }
   var saveT = {};
-  function norm(mp){ if (!mp.tokens) mp.tokens = []; if (!mp.fog) mp.fog = {on:false, cells:''}; if (!mp.layers || !mp.layers.length) mp.layers = [{id:'l1', name:'Terreno'}]; if (!mp.strokes) mp.strokes = []; if (!mp.walls) mp.walls = []; if (!mp.vis) mp.vis = {on:false, range:0, lines:'auto'}; if (mp.wrev == null) mp.wrev = 0; return mp; }
+  function norm(mp){ if (!mp.tokens) mp.tokens = []; if (!mp.fog) mp.fog = {on:false, cells:''}; if (!mp.layers || !mp.layers.length) mp.layers = [{id:'l1', name:'Terreno'}]; if (!mp.strokes) mp.strokes = []; if (!mp.walls) mp.walls = []; if (!mp.vis) mp.vis = {on:false, range:0, lines:'auto'}; if (mp.wrev == null) mp.wrev = 0; if (!mp.light) mp.light = {time:'dia', amb:'auto', wx:'despejado'}; return mp; }
   function keep(mp){
     norm(mp); maps[mp.id] = mp;
     var ix = index().filter(function(x){ return x.id !== mp.id; });
@@ -87,6 +87,7 @@ var Mapas = (function(){
       if (m.del && m.del.length) { var set = {}; m.del.forEach(function(x){ set[x] = 1; }); mp.walls = mp.walls.filter(function(w){ return !set[w.id]; }); if (set[selWall]) selWall = null; }
       mp.wrev = (mp.wrev || 0) + 1; mp.updated = m.updated || mp.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); animate(); }
     });
+    Sala.on('map.light', function(m){ var mp = maps[m.id]; if (!mp) return; mp.light = m.light; mp.updated = m.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
     Sala.on('map.vis', function(m){ var mp = maps[m.id]; if (!mp) return; mp.vis = m.vis; if (m.vis.on) mp.fog.on = true; mp.updated = m.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
     Sala.on('tok', function(m){ var mp = maps[m.id]; if (!mp) return; var i = mp.tokens.findIndex(function(t){ return t.id === m.tok.id; }); if (i >= 0) mp.tokens[i] = m.tok; else mp.tokens.push(m.tok); mp.updated = m.updated || mp.updated; keep(mp); if (drag && drag.tok.id === m.tok.id) return; repaintIfCur(m.id); });
     Sala.on('tok.del', function(m){ var mp = maps[m.id]; if (!mp) return; mp.tokens = mp.tokens.filter(function(t){ return t.id !== m.tid; }); if (selTok === m.tid) selTok = null; keep(mp); repaintIfCur(m.id); });
@@ -116,11 +117,12 @@ var Mapas = (function(){
   function addMany(mp, list){
     if (!list.length) return; var sh = shared(mp.id);
     list.forEach(function(k){ if (!k.id) k.id = MapEd.newId(); k.by = sh ? me() : 'yo'; putStroke(mp, k); });
-    if (sh) Sala.send({t:'map.add', id:mp.id, strokes:list}); mp.updated = Date.now(); keep(mp); paint();
+    if (sh) Sala.send({t:'map.add', id:mp.id, strokes:list}); else if (list.some(lightK)) exploreLocal(mp); mp.updated = Date.now(); keep(mp); paint();
   }
+  function lightK(k){ return (k.k === 'asset' || k.k === 'img') && (k.lt ? !k.lt.off : !!(window.Vision && Vision.LIGHTS[k.a])); }
   function updMany(mp, list){
     if (!list.length) return; list.forEach(function(k){ delete k._p; putStroke(mp, k); });
-    if (shared(mp.id)) Sala.send({t:'map.upd', id:mp.id, strokes:list}); mp.updated = Date.now(); keep(mp); paint();
+    if (shared(mp.id)) Sala.send({t:'map.upd', id:mp.id, strokes:list}); else if (list.some(lightK)) exploreLocal(mp); mp.updated = Date.now(); keep(mp); paint();
   }
   function rmIds(mp, ids){
     if (!ids.length) return; var set = {}; ids.forEach(function(x){ set[x] = 1; });
@@ -152,7 +154,7 @@ var Mapas = (function(){
   }
   function tokSet(mp, t, o){
     if (shared(mp.id)) { o.t = 'tok.set'; o.id = mp.id; o.tid = t.id; Sala.send(o); return; }
-    Object.keys(o).forEach(function(k){ t[k] = o[k]; }); mp.updated = Date.now(); keep(mp); paint(); tokPanel();
+    Object.keys(o).forEach(function(k){ t[k] = o[k]; }); if ('lt' in o || 'sn' in o) exploreLocal(mp); mp.updated = Date.now(); keep(mp); paint(); tokPanel();
   }
   function tokDel(mp, t){
     if (shared(mp.id)) { Sala.send({t:'tok.del', id:mp.id, tid:t.id}); selTok = null; return; }
@@ -222,7 +224,7 @@ var Mapas = (function(){
       // con niebla, solo las puertas que el grupo ya conoce (descubierta o a la vista alguna de sus dos caras)
       if (bits) {
         var mx = (w.a[0] + w.b[0]) / 2, my = (w.a[1] + w.b[1]) / 2, L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]) || 1, nx = -(w.b[1] - w.a[1]) / L * 0.4, ny = (w.b[0] - w.a[0]) / L * 0.4;
-        var known = [[mx + nx, my + ny], [mx - nx, my - ny]].some(function(q){ var cx = Math.min(mp.cols - 1, Math.max(0, Math.floor(q[0]))), cy = Math.min(mp.rows - 1, Math.max(0, Math.floor(q[1]))); return seen(bits, mp, cx, cy) || (vs && Vision.inAny(vs.polys, q[0], q[1])); });
+        var known = [[mx + nx, my + ny], [mx - nx, my - ny]].some(function(q){ var cx = Math.min(mp.cols - 1, Math.max(0, Math.floor(q[0]))), cy = Math.min(mp.rows - 1, Math.max(0, Math.floor(q[1]))); return seen(bits, mp, cx, cy) || (vs && seenAt(vs, q[0], q[1])); });
         if (!known) return;
       }
       bd = d; best = w;
@@ -242,18 +244,42 @@ var Mapas = (function(){
   /* Polígonos de lo que ve ahora el grupo (se recalculan solo si algo cambió) */
   function visOf(mp){
     if (!mp.vis || !mp.vis.on || !window.Vision) return null;
-    var key = mp.wrev + '|' + mp.walls.length + '|' + mp.vis.range + '|' + mp.cols + 'x' + mp.rows, toks = [];
-    mp.tokens.forEach(function(t){ if (!Vision.isViewer(t, charOf(mp, t))) return; toks.push(t); key += '|' + t.id + ':' + t.x + ',' + t.y + ',' + (t.s || 1); });
+    var il = illumOf(mp), range = Vision.effRange(mp), key = mp.wrev + '|' + mp.walls.length + '|' + range + '|' + mp.cols + 'x' + mp.rows + '|' + il.key, toks = [];
+    mp.tokens.forEach(function(t){ var ch = charOf(mp, t); if (!Vision.isViewer(t, ch)) return; var R = Vision.reachOf(t, ch), sn = Vision.sensesOf(t, ch); toks.push({t:t, R:R, sn:sn}); key += '|' + t.id + ':' + t.x + ',' + t.y + ',' + (t.s || 1) + ',' + R + ',' + sn.dv + ',' + sn.bs; });
     var c = visCache[mp.id]; if (c && c.key === key) return c;
     var ix = Vision.sightOf(mp);
-    c = visCache[mp.id] = {key:key, n:++visSeq, polys:toks.map(function(t){ var p = Vision.center(t); return Vision.poly(ix, p[0], p[1], mp.vis.range, mp.cols, mp.rows); })};
+    c = visCache[mp.id] = {key:key, n:++visSeq, il:il, vw:toks.map(function(o){ var p = Vision.center(o.t); return {x:p[0], y:p[1], R:o.R, dv:o.sn.dv, bs:o.sn.bs}; }), polys:toks.map(function(o){ var p = Vision.center(o.t); return Vision.poly(ix, p[0], p[1], range, mp.cols, mp.rows); })};
     return c;
+  }
+  /* ¿El grupo percibe este punto? A la vista y con luz, o dentro del alcance de los sentidos (o la luz) de quien lo ve */
+  function seenAt(vs, x, y){
+    for (var i = 0; i < vs.polys.length; i++) {
+      if (!Vision.inPoly(vs.polys[i], x, y)) continue;
+      if (vs.il.amb >= 1) return true; var v = vs.vw[i], dx = x - v.x, dy = y - v.y; if (dx * dx + dy * dy <= v.R * v.R) return true;
+      for (var j = 0; j < vs.il.lights.length; j++) { var L = vs.il.lights[j]; if (L.D && Vision.inPoly(L.D, x, y)) return true; }
+    }
+    return false;
+  }
+  /* Luces del mapa (las de capas solo-DM no alumbran) y su clave para no rehacer lo que no cambió */
+  function skipL(mp){ var s = {}; mp.layers.forEach(function(l){ if (l.dm) s[l.id] = 1; }); return function(l){ return !!s[l]; }; }
+  function illumOf(mp){
+    var il = Vision.illum(mp, skipL(mp));
+    il.key = il.amb + '|' + mp.wrev + '|' + il.lights.map(function(L){ return L.id + ':' + L.x + ',' + L.y + ',' + L.b + ',' + L.d + ',' + L.c; }).join(';');
+    return il;
+  }
+  function levelName(lv){ return lv >= 2 ? 'luz brillante' : lv === 1 ? 'penumbra' : 'oscuridad'; }
+  /* Lo que dicen las reglas de estar ahí (2024): penumbra = ligeramente oscurecido, oscuridad = muy oscurecido */
+  function lightRule(lv, wx){
+    var r = lv >= 2 ? '' : lv === 1 ? 'Ligeramente oscurecido: desventaja en Percepción con la vista.' : 'Muy oscurecido: quien no tenga visión en la oscuridad no lo ve (cegado respecto a esa zona).';
+    var w = wx === 'lluvia' || wx === 'tormenta' || wx === 'nieve' ? 'Con este clima todo está ligeramente oscurecido.' : wx === 'niebla' ? 'Niebla espesa: no se ve más allá de 9 m.' : '';
+    return [r, w].filter(Boolean).join(' ');
   }
   /* Sin campaña (o en tu copia) la niebla la descubres tú mismo al mover las fichas */
   function exploreLocal(mp, toks, from, cells){
     if (shared(mp.id) || !mp.vis || !mp.vis.on || !window.Vision) return 0;
-    var bits = fogBits(mp).slice(), ix = Vision.sightOf(mp), n = 0;
-    (toks || mp.tokens).forEach(function(t){ if (!Vision.isViewer(t, null)) return; var pts = toks && from ? Vision.trail(from, Vision.center(t), cells, t.s) : [Vision.center(t)]; pts.forEach(function(p){ n += Vision.explore(bits, mp.cols, mp.rows, Vision.poly(ix, p[0], p[1], mp.vis.range, mp.cols, mp.rows)); }); });
+    var bits = fogBits(mp).slice(), o = {skipLayer:skipL(mp)};
+    var n = Vision.exploreParty(mp, bits, toks ? {skipLayer:o.skipLayer, toks:toks, from:from, cells:cells} : o);
+    if (toks && toks.some(function(t){ return t.lt; })) n += Vision.exploreParty(mp, bits, o);
     if (n) mp.fog.cells = b64(bits);
     return n;
   }
@@ -262,7 +288,7 @@ var Mapas = (function(){
   function tokShown(mp, t, vs, dmView){
     if (dmView || !vs || t.kind === 'pc' || ownT(t)) return true;
     var s = t.s || 1, pts = [[t.x + s / 2, t.y + s / 2]]; if (s > 1) pts.push([t.x + 0.3, t.y + 0.3], [t.x + s - 0.3, t.y + 0.3], [t.x + 0.3, t.y + s - 0.3], [t.x + s - 0.3, t.y + s - 0.3]);
-    for (var i = 0; i < pts.length; i++) if (Vision.inAny(vs.polys, pts[i][0], pts[i][1])) return true;
+    for (var i = 0; i < pts.length; i++) if (seenAt(vs, pts[i][0], pts[i][1])) return true;
     if (t.kind === 'obj') { var b = fogBits(mp); return !!seen(b, mp, Math.min(mp.cols - 1, Math.floor(pts[0][0])), Math.min(mp.rows - 1, Math.floor(pts[0][1]))); }
     return false;
   }
@@ -334,7 +360,7 @@ var Mapas = (function(){
   /* ---------- Editor: el mapa ocupa todo; las herramientas flotan encima ---------- */
   var pop = null; // 'set' | 'layers' | 'add' | 'pen' | null
   function editor(box){
-    box.innerHTML = '<div class="map-ed vtt"><div class="map-bar" id="mapBar"></div><div class="map-wrap" id="mapWrap"><canvas id="mapCv" aria-label="Mapa: arrastra tu ficha, mantén presionado para señalar; con dos dedos mueves y haces zoom"></canvas>'
+    box.innerHTML = '<div class="map-ed vtt"><div class="map-bar" id="mapBar"></div><div class="map-wrap" id="mapWrap"><canvas id="mapCv" aria-label="Mapa: arrastra tu ficha, mantén presionado para señalar; con dos dedos mueves y haces zoom"></canvas><canvas class="map-wx" id="mapWx" aria-hidden="true" hidden></canvas>'
       + '<div class="vtt-init" id="vttInit" hidden></div><div class="map-pal" id="mapPal"></div>'
       + '<div class="map-zoom"><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="1" aria-label="Acercar"><svg class="ic"><use href="#i-plus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="-1" aria-label="Alejar"><svg class="ic"><use href="#i-minus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapfit" aria-label="Encuadrar el mapa" title="Encuadrar"><svg class="ic"><use href="#i-fit"/></svg></button></div>'
       + '<div class="map-pop" id="mapPop" hidden></div><div class="vtt-hud" id="vttHud"></div><div class="map-txt" id="mapTxt" hidden></div><div class="map-tok" id="mapTok" hidden></div><div class="map-selbar" id="mapSel" hidden></div></div></div>';
@@ -348,13 +374,13 @@ var Mapas = (function(){
     if (!tool.layer || !mp.layers.some(function(l){ return l.id === tool.layer; })) tool.layer = mp.layers[0].id;
     var admin = canAdmin(mp), sh = shared(mp.id), dm = master(mp), r = room(), meta = roomMeta(mp.id), scene = r && r.scene === mp.id;
     if (mode === 'niebla' && !dm) mode = 'jugar';
-    var modes = [['jugar','Jugar','i-token'],['dibujar','Dibujar','i-pencil']]; if (dm) modes.push(['niebla','Niebla','i-fog']);
+    var modes = [['jugar','Jugar','i-token'],['dibujar','Dibujar','i-pencil']]; if (dm) modes.push(['niebla','Escena','i-fog']);
     put(bar, '<button class="icon-btn sm" type="button" data-act="mapback" aria-label="Volver a los mapas" title="Mapas"><svg class="ic"><use href="#i-back"/></svg></button>'
       + (admin ? '<input class="field map-name" id="mapName" value="' + attr(mp.name) + '" aria-label="Nombre del mapa">' : '<b class="map-name ro">' + esc(mp.name) + '</b>')
       + '<span class="map-where">' + (scene ? '<i class="tag new">en pantalla</i>' : '') + (meta && meta.hidden ? '<i class="tag">oculto</i>' : '') + (sh ? '' : '<i class="tag">solo tu copia</i>') + (viewAs && dm ? '<button type="button" class="tag vis-as" data-act="mapviewas" title="Dejar de ver como jugador">como jugador ×</button>' : '') + '</span>'
       + '<div class="seg map-modes" role="tablist" aria-label="Modo">' + modes.map(function(x){ return '<button type="button" data-act="mapmode" data-v="' + x[0] + '" aria-pressed="' + (mode === x[0]) + '" title="' + x[1] + '"><svg class="ic"><use href="#' + x[2] + '"/></svg><span>' + x[1] + '</span></button>'; }).join('') + '</div>'
       + (admin ? '<button class="icon-btn sm" type="button" data-act="mapset" aria-expanded="' + (pop === 'set') + '" aria-label="Ajustes del mapa" title="Ajustes del mapa"><svg class="ic"><use href="#i-gear"/></svg></button>' : ''));
-    palette(mp, dm, sh); popover(mp, dm, sh, admin); hud(mp, dm, sh, scene); initStrip(mp);
+    palette(mp, dm, sh); popover(mp, dm, sh, admin); hud(mp, dm, sh, scene); initStrip(mp); wxSync(mp);
     var sb = $('#mapSel'); if (sb) { var bh = mode === 'dibujar' && !pop ? (tool.k === 'wall' ? wallBar(mp) : MapEd.barHtml(mp)) : ''; put(sb, bh); sb.hidden = !bh; }
   }
   /* Paleta flotante de dibujo (a la izquierda, como en los VTT) */
@@ -493,7 +519,9 @@ var Mapas = (function(){
   function hud(mp, dm, sh, scene){
     var el = $('#vttHud'); if (!el) return;
     var r = room(), h = '';
-    if (mode === 'niebla') {
+    if (mode === 'niebla' && tool.sc === 'luz') h = lightHud(mp);
+    else if (mode === 'niebla' && tool.sc === 'clima') h = wxHud(mp);
+    else if (mode === 'niebla') {
       var fo = mp.fog && mp.fog.on, vo = mp.vis && mp.vis.on, rg = mp.vis ? mp.vis.range || 0 : 0, ln = mp.vis && mp.vis.lines || 'auto';
       h = '<div class="hud-row"><label class="toggle big"><input type="checkbox" id="mapFogOn"' + (fo ? ' checked' : '') + '> Niebla</label>'
         + '<label class="toggle big vis-on"><input type="checkbox" id="mapVisOn"' + (vo ? ' checked' : '') + '> <svg class="ic"><use href="#i-vision"/></svg>Visión de los personajes</label>'
@@ -517,11 +545,41 @@ var Mapas = (function(){
         h = '<div class="hud-row pj' + (myTurn ? ' myturn' : '') + '">' + (c.name ? '<span class="hud-me"><b>' + esc(c.name) + '</b><span class="hud-hp"><i style="width:' + Math.round((p || 0) * 100) + '%;background:' + (p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a') + '"></i></span><small>PG ' + (c.hp != null ? c.hp + '/' + c.hpMax : '–') + (c.temp ? ' +' + c.temp : '') + ' · CA ' + (c.ac || '–') + '</small></span>' : '')
           + (myTurn ? '<span class="hud-turn">¡Tu turno!</span><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Terminar turno</button>'
             : f && meM.init == null ? '<form class="hud-init" data-form="salainit"><input class="field" name="v" inputmode="numeric" autocomplete="off" placeholder="Inic." aria-label="Tu iniciativa"><button class="btn main sm" type="submit">Iniciativa</button></form>' : '')
+          + litChip(mp, mt)
           + '<span class="hud-sp"></span>' + tokBtns + '<button class="icon-btn sm" type="button" data-act="mapsheet" aria-label="Mi hoja de combate" title="Mi hoja de combate"><svg class="ic"><use href="#i-swords"/></svg></button></div>'
           + (c.conds && c.conds.length ? '<div class="hud-conds">' + c.conds.map(function(k){ return '<span class="chip">' + esc((Sala.COND || {})[k] || k) + '</span>'; }).join('') + '</div>' : '');
       } else h = '<div class="hud-row">' + tokBtns + '</div>';
     }
+    if (mode === 'niebla') h = scTabs() + h;
     put(el, h); el.hidden = !h;
+  }
+  /* Escena (solo el DM): pestañas de niebla, luz y clima */
+  function scTabs(){ var t = tool.sc || 'niebla'; return '<div class="seg sm sc-tabs" role="tablist" aria-label="Escena">' + [['niebla','Niebla','i-fog'],['luz','Luz y hora','i-sun'],['clima','Clima','i-rain']].map(function(x){ return '<button type="button" role="tab" data-act="mapsctab" data-v="' + x[0] + '" aria-selected="' + (t === x[0]) + '" aria-pressed="' + (t === x[0]) + '"><svg class="ic"><use href="#' + x[2] + '"/></svg>' + x[1] + '</button>'; }).join('') + '</div>'; }
+  var TIMES = [['dia','Día','i-sun'],['amanecer','Amanecer','i-dawn'],['atardecer','Atardecer','i-dusk'],['noche','Noche','i-moon']];
+  var AMBS = [['auto','Según la hora'],['bright','Luz brillante'],['dim','Penumbra'],['dark','Oscuridad (interior, mazmorra)']];
+  function lightHud(mp){
+    var L = mp.light || {}, il = illumOf(mp), n = il.lights.length, lv = Vision.ambient(mp);
+    return '<div class="hud-row"><div class="seg sm" role="group" aria-label="Hora">' + TIMES.map(function(x){ return '<button type="button" data-act="maptime" data-v="' + x[0] + '" aria-pressed="' + ((L.time || 'dia') === x[0]) + '"><svg class="ic"><use href="#' + x[2] + '"/></svg>' + x[1] + '</button>'; }).join('') + '</div>'
+      + '<label class="fl sm lt-amb">Luz del lugar<select class="field" id="mapAmb">' + AMBS.map(function(x){ return '<option value="' + x[0] + '"' + ((L.amb || 'auto') === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label></div>'
+      + '<p class="hud-hint"><b>Ahora: ' + levelName(lv) + '.</b> ' + (lv >= 2 ? 'Todo se ve.' : lv === 1 ? 'Todo se ve en penumbra (desventaja en Percepción con la vista).' : 'Sin luz no se ve nada, salvo con visión en la oscuridad (se toma de la hoja de cada quien).')
+      + ' Hay ' + n + ' luz' + (n === 1 ? '' : 'es') + ': pon antorchas, velas o fogatas desde Dibujar → Objetos → Luz y fuego, y a cada ficha su luz desde su panel.' + (mp.vis && mp.vis.on ? '' : ' Para que la luz decida qué ven los jugadores, prende la visión en la pestaña Niebla.') + '</p>';
+  }
+  function wxHud(mp){
+    var w = mp.light && mp.light.wx || 'despejado', snd = {lluvia:'lluvia', tormenta:'tormenta', viento:'viento', nieve:'viento'}[w], r = room();
+    return '<div class="hud-row wx-row" role="group" aria-label="Clima">' + Clima.KINDS.map(function(x){ return '<button type="button" class="btn sm wx-b" data-act="mapwx" data-v="' + x[0] + '" aria-pressed="' + (w === x[0]) + '"><svg class="ic"><use href="#' + x[2] + '"/></svg>' + x[1] + '</button>'; }).join('')
+      + (snd && r && isDm() ? '<button type="button" class="btn sm" data-act="mapwxsnd" data-v="' + snd + '"><svg class="ic"><use href="#i-music"/></svg>Poner su sonido</button>' : '') + '</div>'
+      + '<p class="hud-hint">' + (lightRule(2, w) || 'Sin efecto en las reglas.') + ' Se anima sobre el mapa para todos.</p>';
+  }
+  /* Cambiar hora, luz o clima: en la campaña lo confirma el servidor */
+  function lightDo(mp, o){
+    if (shared(mp.id)) { Sala.send({t:'map.light', id:mp.id, light:o}); return; }
+    Object.keys(o).forEach(function(k){ mp.light[k] = o[k]; }); exploreLocal(mp); mp.updated = Date.now(); keep(mp); toolbar(); paint();
+  }
+  /* Dónde está tu ficha: luz brillante, penumbra u oscuridad (con lo que dicen las reglas) */
+  function litChip(mp, t){
+    if (!t || !window.Vision) return ''; var L = mp.light || {}, il = illumOf(mp); if (il.amb >= 2 && !il.lights.length && (!L.wx || L.wx === 'despejado')) return '';
+    var c = Vision.center(t), lv = Vision.levelAt(il, c[0], c[1]), rule = lightRule(lv, L.wx);
+    return '<span class="lit-chip lv' + lv + '" title="' + attr(rule) + '"><svg class="ic"><use href="#' + (lv >= 2 ? 'i-sun' : lv === 1 ? 'i-dusk' : 'i-moon') + '"/></svg>' + (lv >= 2 ? 'A plena luz' : lv === 1 ? 'En penumbra' : 'A oscuras') + '</span>';
   }
   /* Pone en el mapa a quien esté en el combate y no tenga ficha, alrededor del centro */
   function placeAll(mp){
@@ -543,10 +601,25 @@ var Mapas = (function(){
     var can = mine(t), dm = master(mp), info = tokInfo(t), r = room(), cb = r && t.ref && !t.comp ? combatant(r, t.ref) : null;
     var h = '<div class="row map-tok-h">' + avatar(t) + '<span style="flex:1;min-width:0"><b>' + esc(info.name) + '</b><small>' + esc(info.sub) + (cb && cb.init != null ? ' · inic. ' + cb.init : '') + '</small></span><button class="icon-btn sm" type="button" data-act="maptokx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>';
     if (cb) h += combatHtml(t, cb, r);
+    h += tokLightInfo(mp, t);
     if (can) h += '<details class="map-tok-more"' + (cb ? '' : ' open') + '><summary>Ficha en el mapa</summary><div class="map-tok-b"><label>Tamaño<select class="field" data-tokset="s">' + TSIZE.map(function(x){ return '<option value="' + x[0] + '"' + (t.s === x[0] ? ' selected' : '') + '>' + x[1].split(' (')[0] + '</option>'; }).join('') + '</select></label>'
+      + tokLightCtl(mp, t)
       + '<div class="swatches" role="group" aria-label="Color">' + TOKCOL.map(function(c){ return '<button type="button" class="sw" data-act="maptokcol" data-v="' + c + '" style="background:' + c + '" aria-pressed="' + (t.color === c) + '" aria-label="Color ' + c + '"></button>'; }).join('') + '</div>'
       + '<div class="row" style="gap:6px;flex-wrap:wrap">' + (room() ? '<label class="btn sm pickbtn">' + (busyUp ? 'Subiendo…' : t.img ? 'Cambiar retrato' : 'Retrato') + '<input type="file" id="mapTokImg" accept="image/*"></label>' + (t.img ? '<button class="btn sm" type="button" data-act="maptoknoimg">Sin retrato</button>' : '') : '') + (dm && room() ? '<button class="btn sm" type="button" data-act="maptokhide">' + (t.hidden ? 'Mostrar a los jugadores' : 'Ocultar a los jugadores') + '</button>' : '') + '<button class="btn sm" type="button" data-act="maptokdel">Quitar del mapa</button></div></div></details>';
     put(p, h); p.hidden = false;
+  }
+  /* La luz donde está la ficha y lo que dicen las reglas */
+  function tokLightInfo(mp, t){
+    if (!window.Vision) return ''; var L = mp.light || {}, il = illumOf(mp); if (il.amb >= 2 && !il.lights.length && (!L.wx || L.wx === 'despejado')) return '';
+    var c = Vision.center(t), lv = Vision.levelAt(il, c[0], c[1]), rule = lightRule(lv, L.wx);
+    return '<p class="tok-lit lv' + lv + '"><svg class="ic"><use href="#' + (lv >= 2 ? 'i-sun' : lv === 1 ? 'i-dusk' : 'i-moon') + '"/></svg><span><b>En ' + levelName(lv) + '.</b> ' + esc(rule) + '</span></p>';
+  }
+  /* Luz que lleva la ficha y su visión en la oscuridad (la de un personaje sale de su hoja) */
+  function tokLightCtl(mp, t){
+    var P = Vision.PRESETS, k = t.lt ? (t.lt.k || 'otra') : '', ch = charOf(mp, t), sheet = ch && ch.dv ? ch.dv : 0, dv = t.sn && t.sn.dv != null ? String(t.sn.dv) : '';
+    var m = function(ft){ return String(ft / 5 * 1.5).replace('.', ',') + ' m'; };
+    return '<label>Luz<select class="field" data-toklt="1"><option value=""' + (!k ? ' selected' : '') + '>Sin luz</option>' + P.map(function(p){ return '<option value="' + p[0] + '"' + (k === p[0] ? ' selected' : '') + '>' + p[1] + ' · ' + m(p[2] * 5) + (p[3] ? ' + ' + m(p[3] * 5) : '') + '</option>'; }).join('') + (k === 'otra' ? '<option value="otra" selected>Otra</option>' : '') + '</select></label>'
+      + '<label>Visión en la oscuridad<select class="field" data-toksn="dv"><option value=""' + (dv === '' ? ' selected' : '') + '>' + (ch ? 'De la hoja (' + (sheet ? m(sheet) : 'no tiene') + ')' : 'No tiene') + '</option>' + [0, 30, 60, 90, 120].map(function(ft){ return '<option value="' + ft + '"' + (dv === String(ft) ? ' selected' : '') + '>' + (ft ? m(ft) : 'Ninguna') + '</option>'; }).join('') + '</select></label>';
   }
   function combatant(r, id){
     var m = r.members.filter(function(x){ return x.id === id && x.role !== 'dm'; })[0]; if (m) return {pc:true, id:id, init:m.init, m:m};
@@ -595,6 +668,7 @@ var Mapas = (function(){
     if (!canvas) return; var wrap = canvas.parentNode, w = wrap.clientWidth || 360, top = canvas.getBoundingClientRect().top || 220;
     var hh = Math.max(300, Math.min(1600, (window.innerHeight || 800) - top - (document.querySelector('.app.camp-wide') ? 0 : 12))), dpr = window.devicePixelRatio || 1;
     canvas.style.width = w + 'px'; canvas.style.height = hh + 'px';
+    var wx = document.getElementById('mapWx'); if (wx) { wx.style.width = w + 'px'; wx.style.height = hh + 'px'; }
     if (canvas.dataset.engine === 'gl') { if (gl) gl.resize(w, hh, Gfx.resolution()); return; }
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(hh * dpr);
   }
@@ -640,17 +714,102 @@ var Mapas = (function(){
   function dropGL(){ if (glRaf) { cancelAnimationFrame(glRaf); glRaf = 0; } if (gl) { gl.destroy(); gl = null; } }
   function glPaint(){
     glRaf = 0; var mp = maps[cur]; if (!gl || !mp || !canvas || !document.contains(canvas)) return;
-    gl.render(scene(mp, V(), canvas.clientWidth, canvas.clientHeight));
+    var sc = scene(mp, V(), canvas.clientWidth, canvas.clientHeight); gl.render(sc); flicker(sc);
   }
+  /* ---------- Luz: velo, brillos y tinte (los usan los dos motores) ---------- */
+  function hiddenObj(k){ return k.k === 'asset' && k.a === 'luz'; } // la luz invisible solo la ve el DM
+  function canv(c, w, h){ if (!c) c = document.createElement('canvas'); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } return c; }
+  var veil = {c:null, t:null, d:null, s:null, key:'', n:0}, glowC = {c:null, key:'', n:0};
+  /* La niebla por casilla en un píxel por casilla: lo no descubierto con `un`, lo descubierto con `mem` */
+  function fogSmall(mp, un, mem){
+    var bits = fogBits(mp), c = veil.s = canv(veil.s, mp.cols, mp.rows), g = c.getContext('2d'), id = g.createImageData(mp.cols, mp.rows), d = id.data, a = Math.round(un * 255), am = Math.round(mem * 255);
+    for (var i = 0, n = mp.cols * mp.rows; i < n; i++) { var o = i * 4, dark = !((bits[i >> 3] >> (i & 7)) & 1); d[o] = 11; d[o + 1] = 8; d[o + 2] = 6; d[o + 3] = dark ? a : am; }
+    g.putImageData(id, 0, 0); return c;
+  }
+  function pathPoly(g, P){ g.beginPath(); for (var i = 0; i < P.length; i += 2) { if (i) g.lineTo(P[i], P[i + 1]); else g.moveTo(P[i], P[i + 1]); } g.closePath(); }
+  function fillPoly(g, P){ if (P && P.length >= 6) { pathPoly(g, P); g.fill(); } }
+  function fillCircle(g, x, y, r){ if (r > 0) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); } }
+  /* Lo que el viewer i percibe (luz o sentidos) y lo que percibe con luz brillante */
+  function fillSeen(g, vs, i, W, H){ var v = vs.vw[i]; if (vs.il.amb >= 1) { g.fillRect(-1, -1, W, H); return; } vs.il.lights.forEach(function(L){ fillPoly(g, L.D); }); fillCircle(g, v.x, v.y, v.R); }
+  function fillBright(g, vs, i, W, H){
+    var v = vs.vw[i], amb = vs.il.amb; if (amb >= 2) { g.fillRect(-1, -1, W, H); return; }
+    vs.il.lights.forEach(function(L){ fillPoly(g, L.B); });
+    fillCircle(g, v.x, v.y, v.bs);
+    if (v.dv > 0) { g.save(); g.beginPath(); g.arc(v.x, v.y, v.dv, 0, Math.PI * 2); g.clip(); if (amb >= 1) g.fillRect(-1, -1, W, H); else vs.il.lights.forEach(function(L){ fillPoly(g, L.D); }); g.restore(); } // en penumbra, la visión en la oscuridad ve como con luz
+  }
+  /* El velo de la niebla con visión y luz, en el espacio del mapa (un lienzo de (cols+2M)·K × (rows+2M)·K):
+     negro lo no descubierto, penumbra fuerte lo descubierto que no se percibe ahora, limpio lo que se ve con luz
+     y algo oscuro lo que se ve con poca luz (o con visión en la oscuridad). Se rehace solo si algo cambió. */
+  function veilOf(mp, dmView, vs){
+    var lvl = window.Gfx ? Gfx.level() : 'media', M = 2, big = Math.max(mp.cols, mp.rows) + M * 2, K = Math.max(3, Math.min(lvl === 'baja' ? 6 : lvl === 'alta' ? 14 : 10, Math.floor(2048 / big)));
+    fogBits(mp); var key = [mp.id, mp.cols, mp.rows, fogCache[mp.id].n, vs.key, dmView ? 1 : 0, K, lvl].join('|');
+    if (veil.c && veil.key === key) return {cv:veil.c, key:veil.n, M:M};
+    var W = (mp.cols + M * 2) * K, H = (mp.rows + M * 2) * K, un = dmView ? 0.5 : 1, mem = dmView ? 0.22 : 0.62;
+    veil.t = canv(veil.t, W, H); veil.d = canv(veil.d, W, H); veil.c = canv(veil.c, W, H);
+    var g = veil.t.getContext('2d'), e = M * K; g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; g.clearRect(0, 0, W, H);
+    if (!dmView) { g.fillStyle = OUT; g.fillRect(0, 0, W, e); g.fillRect(0, H - e, W, e); g.fillRect(0, e, e, H - 2 * e); g.fillRect(W - e, e, e, H - 2 * e); }
+    g.setTransform(K, 0, 0, K, e, e); g.imageSmoothingEnabled = false; g.drawImage(fogSmall(mp, un, mem), 0, 0, mp.cols, mp.rows); g.imageSmoothingEnabled = true;
+    var MW = mp.cols + 2, MH = mp.rows + 2;
+    // lo que el grupo percibe ahora queda limpio
+    g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000';
+    vs.polys.forEach(function(P, i){ if (P.length < 6) return; g.save(); pathPoly(g, P); g.clip(); fillSeen(g, vs, i, MW, MH); g.restore(); });
+    g.globalCompositeOperation = 'source-over';
+    // con poca luz: un velo azulado (lo que se percibe, menos lo que se percibe con luz brillante)
+    if (vs.il.amb < 2) {
+      var d = veil.d.getContext('2d'); d.setTransform(1, 0, 0, 1, 0, 0); d.globalCompositeOperation = 'source-over'; d.clearRect(0, 0, W, H); d.setTransform(K, 0, 0, K, e, e); d.fillStyle = '#0a0d1c';
+      vs.polys.forEach(function(P, i){ if (P.length < 6) return; d.save(); pathPoly(d, P); d.clip(); fillSeen(d, vs, i, MW, MH); d.restore(); });
+      d.globalCompositeOperation = 'destination-out';
+      vs.polys.forEach(function(P, i){ if (P.length < 6) return; d.save(); pathPoly(d, P); d.clip(); fillBright(d, vs, i, MW, MH); d.restore(); });
+      d.globalCompositeOperation = 'source-over';
+      g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = dmView ? 0.18 : 0.42; g.drawImage(veil.d, 0, 0); g.globalAlpha = 1;
+    }
+    // borde suave (si el navegador sabe desenfocar un lienzo)
+    var o = veil.c.getContext('2d'); o.setTransform(1, 0, 0, 1, 0, 0); o.clearRect(0, 0, W, H);
+    if (lvl !== 'baja' && 'filter' in o) { o.filter = 'blur(' + Math.max(1, K * 0.3).toFixed(1) + 'px)'; o.drawImage(veil.t, 0, 0); o.filter = 'none'; } else o.drawImage(veil.t, 0, 0);
+    veil.key = key; veil.n++;
+    return {cv:veil.c, key:veil.n, M:M};
+  }
+  /* Brillo de las luces (se suma encima del mapa, debajo de la niebla), cortado por las paredes */
+  function rgb(h){ var n = parseInt(String(h || '#ffd27a').slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  function glowOf(mp, il){
+    if (!il.lights.length) return null;
+    var Kg = Math.max(2, Math.min(8, Math.floor(1024 / Math.max(mp.cols, mp.rows)))), key = il.key + '|' + Kg + '|' + mp.cols + 'x' + mp.rows;
+    if (glowC.c && glowC.key === key) return {cv:glowC.c, key:glowC.n};
+    var c = glowC.c = canv(glowC.c, mp.cols * Kg, mp.rows * Kg), g = c.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, c.width, c.height); g.setTransform(Kg, 0, 0, Kg, 0, 0); g.globalCompositeOperation = 'lighter';
+    il.lights.forEach(function(L){
+      var R = L.b + L.d; if (R <= 0 || !L.D) return; var q = rgb(L.c), k = R ? L.b / R : 0;
+      g.save(); pathPoly(g, L.D); g.clip();
+      var gr = g.createRadialGradient(L.x, L.y, 0, L.x, L.y, R); gr.addColorStop(0, 'rgba(' + q + ',.6)'); gr.addColorStop(Math.max(0.05, Math.min(0.95, k)), 'rgba(' + q + ',.32)'); gr.addColorStop(1, 'rgba(' + q + ',0)');
+      g.fillStyle = gr; g.fillRect(L.x - R, L.y - R, R * 2, R * 2); g.restore();
+    });
+    g.globalCompositeOperation = 'source-over'; glowC.key = key; glowC.n++;
+    return {cv:c, key:glowC.n};
+  }
+  var TINT = {amanecer:['#ffb38a', 0.2], atardecer:['#ff8a4c', 0.26], noche:['#1c2650', 0.5]};
+  /* Hora (tinte), brillo de las luces (más fuerte cuanto más oscuro) y si parpadean */
+  function lightScene(mp, dmView, now){
+    var L = mp.light || {}, t = TINT[L.time] || null, il = illumOf(mp), glow = glowOf(mp, il), flick = il.lights.some(function(x){ return x.f; });
+    var base = il.amb >= 2 ? 0.28 : il.amb === 1 ? 0.62 : 0.9, f = 1;
+    if (flick && glow && motionOn()) { var k = now / 1000; f = 0.9 + 0.1 * (Math.sin(k * 9.1) * 0.5 + Math.sin(k * 23.7) * 0.3 + Math.sin(k * 3.3) * 0.2); }
+    return {tint:t ? {c:t[0], a:t[1]} : null, glow:glow ? {cv:glow.cv, key:glow.key, a:base * f} : null, flick:flick && !!glow};
+  }
+  function motionOn(){ return !(window.Fx && Fx.mode && Fx.mode() === 'off') && (!window.Gfx || Gfx.level() !== 'baja'); }
+  /* Las antorchas parpadean: con WebGL se repinta unas 12 veces por segundo mientras se ve el mapa */
+  var flickT = 0;
+  function flicker(sc){ if (!sc.light || !sc.light.flick || !motionOn() || flickT) return; flickT = setTimeout(function(){ flickT = 0; if (cur && visible() && canvas && canvas.dataset.engine === 'gl') paint(); }, 85); }
+  function wxSync(mp){ if (window.Clima) Clima.set(document.getElementById('mapWx'), mp && mp.light ? mp.light.wx : 'despejado'); }
   /* Lo que se ve, ya resuelto, para el motor WebGL (las mismas reglas que draw()/overlay()) */
   function scene(mp, v, W, H){
     var hid = hidden[mp.id] || {}, dmView = master(mp) && !viewAs, vs = visOf(mp), toks = [], now = Date.now(), lvl = window.Gfx ? Gfx.level() : 'media';
     (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; if (viewAs && t.hidden) return; if (!tokShown(mp, t, vs, dmView)) return; toks.push(tokScene(t, v, !dmView && (ownT(t) || (!!vs && t.kind === 'pc')))); });
+    var strokes = MapEd.strokes(mp); if (!dmView && strokes.some(hiddenObj)) strokes = strokes.filter(function(k){ return !hiddenObj(k); });
     var anim = Object.keys(doorAnim).length || (wop && wop.prev);
     var sc = {W:W, H:H, v:v, tokens:toks,
-      map:{id:mp.id, cols:mp.cols, rows:mp.rows, grid:mp.grid, layers:mp.layers, strokes:MapEd.strokes(mp), rev:MapEd.rev(), hid:hid, asset:window.Assets ? Assets.imageFor : null, bgUrl:mp.bg ? (mp.bg.img ? Mesa.imgUrl(mp.bg.img) : mp.bg.data) : null, bgOp:mp.bg ? mp.bg.op : 1},
+      map:{id:mp.id, cols:mp.cols, rows:mp.rows, grid:mp.grid, layers:mp.layers, strokes:strokes, rev:MapEd.rev(), hid:hid, asset:window.Assets ? Assets.imageFor : null, bgUrl:mp.bg ? (mp.bg.img ? Mesa.imgUrl(mp.bg.img) : mp.bg.data) : null, bgOp:mp.bg ? mp.bg.op : 1},
       walls:{ink:wallInk(mp, dmView, now), key:[mp.id, mp.wrev, dmView ? 1 : 0, linesOn(mp) ? 1 : 0, anim ? now : 0].join('|'), tech:mode === 'dibujar' && canAdmin(mp) ? wallTech(mp, tool.k === 'wall') : null},
-      fog:mp.fog && mp.fog.on ? {on:true, dm:dmView, bits:fogBits(mp), key:fogCache[mp.id].n, vis:vs ? {polys:vs.polys, key:vs.n} : null, un:dmView ? 0.5 : 1, mem:vs ? (dmView ? 0.22 : 0.62) : 0, k:lvl === 'baja' ? 6 : lvl === 'alta' ? 16 : 12, soft:lvl !== 'baja'} : null,
+      fog:mp.fog && mp.fog.on ? {on:true, dm:dmView, bits:fogBits(mp), key:fogCache[mp.id].n, un:dmView ? 0.5 : 1, mem:0, veil:vs ? veilOf(mp, dmView, vs) : null} : null,
+      light:lightScene(mp, dmView, now),
       edit:mode === 'dibujar' ? MapEd.overlay(mp) : null, drawing:drawing, erase:erasing ? mp.strokes.filter(function(k){ return erasing.hits[k.id]; }) : null, fogRect:fogDrag ? {a:fogDrag.a, b:fogDrag.b, v:tool.fogV} : null, pings:[]};
     if (drag && drag.moved) {
       var t = drag.tok, s = t.s || 1, rr = ruler(mp);
@@ -756,10 +915,11 @@ var Mapas = (function(){
     c.fillStyle = PAPER; c.fillRect(v.x, v.y, mp.cols * v.s, mp.rows * v.s);
     var bi = bgImage(mp); if (bi) { c.save(); c.globalAlpha = mp.bg.op || 1; c.drawImage(bi, v.x, v.y, mp.cols * v.s, mp.rows * v.s); c.restore(); }
     gridOn(c, mp, v, W, H);
-    var list = window.MapEd ? MapEd.strokes(mp) : mp.strokes;
-    mp.layers.forEach(function(l){ if (hid[l.id]) return; list.forEach(function(k){ if (k.l === l.id) strokeOn(c, k, v); }); });
-    var dmView = master(mp) && !viewAs, vs = visOf(mp), late = [];
+    var list = window.MapEd ? MapEd.strokes(mp) : mp.strokes, dmView = master(mp) && !viewAs, vs = visOf(mp), late = [], ls = lightScene(mp, dmView, Date.now());
+    mp.layers.forEach(function(l){ if (hid[l.id]) return; list.forEach(function(k){ if (k.l === l.id && (dmView || !hiddenObj(k))) strokeOn(c, k, v); }); });
     primsOn(c, wallInk(mp, dmView, Date.now()), v);
+    if (ls.tint) { c.save(); c.globalCompositeOperation = 'multiply'; c.globalAlpha = ls.tint.a; c.fillStyle = ls.tint.c; c.fillRect(v.x, v.y, mp.cols * v.s, mp.rows * v.s); c.restore(); }
+    if (ls.glow) { c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = ls.glow.a; c.drawImage(ls.glow.cv, v.x, v.y, mp.cols * v.s, mp.rows * v.s); c.restore(); }
     (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; if (viewAs && t.hidden) return; if (!tokShown(mp, t, vs, dmView)) return; if (!dmView && (ownT(t) || (vs && t.kind === 'pc'))) late.push(t); else tokOn(c, t, v, mp); });
     if (mp.fog && mp.fog.on) fogOn(c, mp, v, W, H, dmView, vs);
     late.forEach(function(t){ tokOn(c, t, v, mp); });
@@ -767,15 +927,12 @@ var Mapas = (function(){
   }
   /* Niebla en Canvas 2D. Con la visión: negro lo no descubierto, penumbra lo descubierto y limpio lo que el grupo ve ahora
      (se compone en un lienzo aparte y se recortan los polígonos de vista) */
-  var fogOff = null;
   function fogOn(c, mp, v, W, H, dmView, vs){
     var bits = fogBits(mp), x0 = Math.max(0, Math.floor(-v.x / v.s)), x1 = Math.min(mp.cols - 1, Math.ceil((W - v.x) / v.s)), y0 = Math.max(0, Math.floor(-v.y / v.s)), y1 = Math.min(mp.rows - 1, Math.ceil((H - v.y) / v.s));
-    var g = c, un = dmView ? 'rgba(12,8,6,.5)' : '#0b0806', mem = vs ? (dmView ? 'rgba(12,8,6,.22)' : 'rgba(11,8,6,.62)') : null;
-    if (vs) {
-      if (!fogOff) fogOff = document.createElement('canvas');
-      if (fogOff.width !== c.canvas.width || fogOff.height !== c.canvas.height) { fogOff.width = c.canvas.width; fogOff.height = c.canvas.height; }
-      g = fogOff.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, fogOff.width, fogOff.height); if (c.getTransform) g.setTransform(c.getTransform());
-    } else c.save();
+    // con visión, el velo ya compuesto (el mismo que usa WebGL) se estira sobre el mapa
+    if (vs) { var vl = veilOf(mp, dmView, vs), M = vl.M; c.drawImage(vl.cv, v.x - M * v.s, v.y - M * v.s, (mp.cols + M * 2) * v.s, (mp.rows + M * 2) * v.s); return; }
+    var g = c, un = dmView ? 'rgba(12,8,6,.5)' : '#0b0806', mem = null;
+    c.save();
     for (var y = y0; y <= y1; y++) {
       var run = -1, st = -1;
       for (var x = x0; x <= x1 + 1; x++) {
@@ -784,11 +941,7 @@ var Mapas = (function(){
         if (k !== st) { if (run >= 0 && (st === 0 || mem)) { var rx0 = Math.round(v.x + run * v.s), rx1 = Math.round(v.x + x * v.s), ry0 = Math.round(v.y + y * v.s), ry1 = Math.round(v.y + (y + 1) * v.s); g.fillStyle = st === 0 ? un : mem; g.fillRect(rx0, ry0, rx1 - rx0, ry1 - ry0); } run = x; st = k; }
       }
     }
-    if (!vs) { c.restore(); return; }
-    g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000'; g.beginPath();
-    vs.polys.forEach(function(P){ for (var i = 0; i < P.length; i += 2) { var px = v.x + P[i] * v.s, py = v.y + P[i + 1] * v.s; if (i) g.lineTo(px, py); else g.moveTo(px, py); } g.closePath(); });
-    g.fill(); g.globalCompositeOperation = 'source-over';
-    c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(fogOff, 0, 0); c.restore();
+    c.restore();
   }
   function tokOn(c, t, v, mp, ghost){
     var info = tokInfo(t), s = t.s || 1, cx = v.x + (t.x + s / 2) * v.s, cy = v.y + (t.y + s / 2) * v.s, rad = Math.max(5, s * v.s * 0.44);
@@ -881,7 +1034,7 @@ var Mapas = (function(){
   function local(ev){ var r = canvas.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; }
   function tokAt(mp, m){
     var dmView = master(mp) && !viewAs, vs = dmView ? null : visOf(mp);
-    for (var i = mp.tokens.length - 1; i >= 0; i--) { var t = mp.tokens[i], s = t.s || 1, cx = t.x + s / 2, cy = t.y + s / 2; if (Math.hypot(m[0] - cx, m[1] - cy) <= Math.max(s * 0.5 + 0.15, 24 / V().s)) { if (viewAs && t.hidden) continue; if (vs && !tokShown(mp, t, vs, false)) continue; if (!dmView && mp.fog && mp.fog.on && !ownT(t) && !(vs && t.kind === 'pc')) { var b = fogBits(mp); if (!seen(b, mp, Math.floor(cx), Math.floor(cy)) && !(vs && Vision.inAny(vs.polys, cx, cy))) continue; } return t; } }
+    for (var i = mp.tokens.length - 1; i >= 0; i--) { var t = mp.tokens[i], s = t.s || 1, cx = t.x + s / 2, cy = t.y + s / 2; if (Math.hypot(m[0] - cx, m[1] - cy) <= Math.max(s * 0.5 + 0.15, 24 / V().s)) { if (viewAs && t.hidden) continue; if (vs && !tokShown(mp, t, vs, false)) continue; if (!dmView && mp.fog && mp.fog.on && !ownT(t) && !(vs && t.kind === 'pc')) { var b = fogBits(mp); if (!seen(b, mp, Math.floor(cx), Math.floor(cy)) && !(vs && seenAt(vs, cx, cy))) continue; } return t; } }
     return null;
   }
   function bind(){
@@ -1152,6 +1305,10 @@ var Mapas = (function(){
     else if (a === 'mapwallt') { tool.wt = b.dataset.v; tool.k = 'wall'; pop = null; toolbar(); paint(); Sala.toast('Arrastra sobre el mapa para trazar: ' + wallT(tool.wt)[1].toLowerCase() + '.'); }
     else if (a === 'mapwallroom') { tool.wroom = b.dataset.v === '1'; toolbar(); }
     else if (a === 'mapviewas') { viewAs = false; toolbar(); paint(); }
+    else if (a === 'mapsctab') { tool.sc = b.dataset.v; toolbar(); }
+    else if (a === 'maptime') lightDo(mp, {time:b.dataset.v});
+    else if (a === 'mapwx') lightDo(mp, {wx:b.dataset.v});
+    else if (a === 'mapwxsnd') { Sala.send({t:'amb.set', amb:{k:b.dataset.v, v:0.8}}); Sala.toast('Suena: ' + b.textContent.trim().toLowerCase() + '.'); }
     else if (a.indexOf('mapwall') === 0) {
       var w = selWall && wallById(mp, selWall); if (!w) return;
       if (a === 'mapwallx') { selWall = null; toolbar(); paint(); }
@@ -1239,6 +1396,9 @@ var Mapas = (function(){
     else if (t.id === 'mapBgFile' && t.files && t.files[0]) { setBg(mp, t.files[0]); t.value = ''; }
     else if (t.id === 'mapBgOp' && mp.bg) { if (shared(mp.id)) Sala.send({t:'map.bg', id:mp.id, op:+t.value}); else { mp.bg.op = +t.value; keep(mp); paint(); } }
     else if (t.id === 'mapTokImg' && t.files && t.files[0]) { var tk = mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (!tk) return; busyUp = true; tokPanel(); Mesa.upload(t.files[0], 400).then(function(id){ tokSet(mp, tk, {img:id}); }).catch(function(e){ Sala.toast(e.message || 'No se pudo subir.'); }).then(function(){ busyUp = false; tokPanel(); }); }
+    else if (t.dataset && t.dataset.toklt) { var tk3 = mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (tk3 && t.value !== 'otra') tokSet(mp, tk3, {lt:t.value ? Vision.preset(t.value) : null}); }
+    else if (t.dataset && t.dataset.toksn) { var tk4 = mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (tk4) { var sn = Object.assign({}, tk4.sn || {}); if (t.value === '') delete sn[t.dataset.toksn]; else sn[t.dataset.toksn] = +t.value; tokSet(mp, tk4, {sn:Object.keys(sn).length ? sn : null}); } }
+    else if (t.id === 'mapAmb') lightDo(mp, {amb:t.value});
     else if (t.dataset && t.dataset.tokset) { var tk2 = mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (tk2) tokSet(mp, tk2, {s:+t.value}); }
     else if (t.dataset && t.dataset.maplname && t.value.trim()) setMeta(mp, {layers:mp.layers.map(function(l){ return l.id === t.dataset.maplname ? Object.assign({}, l, {name:t.value.trim()}) : l; })});
     else if (t.dataset && t.dataset.maplsecret) setMeta(mp, {layers:mp.layers.map(function(l){ if (l.id !== t.dataset.maplsecret) return l; var o = {id:l.id, name:l.name}; if (t.checked) o.dm = true; return o; })});
