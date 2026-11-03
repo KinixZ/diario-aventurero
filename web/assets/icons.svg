@@ -63,6 +63,11 @@
   <symbol id="i-screen" viewBox="-17 -17 34 34"><path d="M-15 -10 L-6 -13 V11 L-15 13 Z M-6 -13 L6 -13 V11 L-6 11 M6 -13 L15 -10 V13 L6 11"/></symbol>
   <symbol id="i-send" viewBox="-17 -17 34 34"><path d="M-14 -2 L14 -13 L6 14 L1 3 Z M1 3 L14 -13"/></symbol>
   <symbol id="i-music" viewBox="-17 -17 34 34"><path d="M-6 9 L-6 -10 L11 -13 L11 6"/><circle cx="-9" cy="9" r="3.5"/><circle cx="8" cy="6" r="3.5"/><path d="M-6 -4 L11 -7"/></symbol>
+  <symbol id="i-cursor" viewBox="-17 -17 34 34"><path d="M-9 -13 L-9 9 L-3 3 L2 13 L6 11 L1 1 L9 1 Z"/></symbol>
+  <symbol id="i-chest" viewBox="-17 -17 34 34"><path d="M-13 -3 L13 -3 L13 11 L-13 11 Z M-13 -3 Q-13 -12 0 -12 Q13 -12 13 -3 M-3 -1 L3 -1 L3 5 L-3 5 Z M-13 3 L-3 3 M3 3 L13 3"/></symbol>
+  <symbol id="i-redo" viewBox="-17 -17 34 34"><path d="M12 -6 L4 -13 M12 -6 L4 1 M12 -6 L-4 -6 Q-13 -6 -13 3 Q-13 12 -4 12 L4 12"/></symbol>
+  <symbol id="i-lock" viewBox="-17 -17 34 34"><path d="M-10 -2 L10 -2 L10 13 L-10 13 Z M-6 -2 L-6 -7 Q-6 -13 0 -13 Q6 -13 6 -7 L6 -2 M0 4 L0 8"/></symbol>
+  <symbol id="i-grip" viewBox="-17 -17 34 34"><path d="M-8 -8 L8 -8 M-8 0 L8 0 M-8 8 L8 8"/></symbol>
   <symbol id="i-play" viewBox="-17 -17 34 34"><path d="M-8 -12 L11 0 L-8 12 Z"/></symbol>
   <symbol id="i-stop" viewBox="-17 -17 34 34"><path d="M-10 -10 H10 V10 H-10 Z"/></symbol>
   <symbol id="i-target" viewBox="-17 -17 34 34"><path d="M0 -13 A13 13 0 1 0 0.01 -13 M0 -6 A6 6 0 1 0 0.01 -6 M0 -16 V-9 M0 9 V16 M-16 0 H-9 M9 0 H16"/></symbol>

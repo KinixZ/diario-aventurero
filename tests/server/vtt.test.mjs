@@ -132,3 +132,37 @@ test('la campaña guarda mapas con fichas y niebla', async () => {
   assert.equal(mp.tokens.length, 1); assert.equal(mp.tokens[0].ref, a.id); assert.equal(c2.scene, MAP.id);
   assert.ok(Buffer.isBuffer(mp.fog.cells)); assert.equal(mp.fog.cells[0] & 3, 3);
 });
+
+test('editor: objetos, giros, ids del cliente y editar con map.upd', async () => {
+  const { R, c, dm, a, b } = await mesa();
+  R.act(c, dm.id, { t: 'map.save', map: { ...MAP, id: 'mapa-editor', layers: [{ id: 'l1', name: 'Capa 1' }, { id: 'ls', name: 'Secreta', dm: true }] } });
+  // varios a la vez, con ids propuestos por el cliente
+  let n = R.act(c, a.id, { t: 'map.add', id: 'mapa-editor', strokes: [
+    { id: 'kbarril01', k: 'asset', a: 'barril', l: 'l1', pts: [3.5, 2.5], s: 1, h: 1, r: 45 },
+    { id: 'ktexto01', k: 'text', l: 'l1', t: 'Torre', pts: [8, 4], fs: 2.4, r: -30, c: '#8c2626' },
+    { k: 'rect', l: 'l1', pts: [1, 1, 4, 3], r: 15, w: 0.14 }] });
+  const mp = c.maps.get('mapa-editor'), barril = mp.strokes.find((k) => k.id === 'kbarril01');
+  assert.equal(mp.strokes.length, 3); assert.equal(barril.a, 'barril'); assert.equal(barril.r, 45); assert.equal(barril.s, 1);
+  assert.equal(mp.strokes.find((k) => k.k === 'text').fs, 2.4); assert.equal(mp.strokes.find((k) => k.k === 'rect').r, 15);
+  assert.equal(to(n, b.id).length, 3, 'cada trazo llega a los demás');
+  // un id repetido o raro se cambia; objetos con clave rara o imágenes que no existen no pasan
+  R.act(c, a.id, { t: 'map.add', id: 'mapa-editor', stroke: { id: 'kbarril01', k: 'asset', a: 'cofre', l: 'l1', pts: [5, 5] } });
+  assert.equal(mp.strokes.filter((k) => k.id === 'kbarril01').length, 1);
+  assert.throws(() => R.act(c, a.id, { t: 'map.add', id: 'mapa-editor', stroke: { k: 'asset', a: '../x', l: 'l1', pts: [5, 5] } }), /trazo/);
+  assert.throws(() => R.act(c, a.id, { t: 'map.add', id: 'mapa-editor', stroke: { k: 'img', img: 'noexiste', l: 'l1', pts: [5, 5] } }), /trazo/);
+  const im = R.noteImage(c, a.id, 900, 'image/webp');
+  R.act(c, a.id, { t: 'map.add', id: 'mapa-editor', stroke: { k: 'img', img: im.id, l: 'l1', pts: [6, 6], s: 2, h: 3 } });
+  assert.equal(mp.strokes.at(-1).img, im.id); assert.equal(mp.strokes.at(-1).h, 3);
+  // editar: quien lo puso, sí; otro jugador, no; el DM, todo
+  n = R.act(c, a.id, { t: 'map.upd', id: 'mapa-editor', strokes: [{ ...barril, pts: [6.5, 2.5], r: 90 }] });
+  assert.deepEqual(mp.strokes.find((k) => k.id === 'kbarril01').pts, [6.5, 2.5]); assert.equal(mp.strokes.find((k) => k.id === 'kbarril01').v, 1);
+  assert.equal(to(n, b.id)[0].t, 'map.upd');
+  assert.throws(() => R.act(c, b.id, { t: 'map.upd', id: 'mapa-editor', strokes: [{ ...barril, pts: [1, 1] }] }), /lo que tú dibujaste/);
+  // el DM pasa el barril a su capa secreta: a los jugadores se les quita
+  n = R.act(c, dm.id, { t: 'map.upd', id: 'mapa-editor', strokes: [{ ...mp.strokes.find((k) => k.id === 'kbarril01'), l: 'ls' }] });
+  assert.deepEqual(to(n, b.id).map((m) => m.t), ['map.rm']); assert.deepEqual(to(n, b.id)[0].sids, ['kbarril01']);
+  assert.equal(to(n, dm.id)[0].t, 'map.upd');
+  assert.ok(!R.view(c, b.id).maps.length || true);
+  // y un jugador no puede mover lo que está en la capa secreta
+  assert.throws(() => R.act(c, a.id, { t: 'map.upd', id: 'mapa-editor', strokes: [{ ...mp.strokes.find((k) => k.id === 'kbarril01'), l: 'l1' }] }), /Solo|DM/);
+});

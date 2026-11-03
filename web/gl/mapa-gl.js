@@ -31,6 +31,7 @@ async function create(canvas, opts = {}) {
   bg.visible = false; fog.visible = false;
 
   const imgCache = new Map();   // url → {img, tex, circle}
+  const assetTex = new Map();   // imagen de objeto → textura
   const strokeObjs = new Map(); // id → display object
   const layerBoxes = new Map(); // layer id → Container
   const tokObjs = new Map();    // id → {box, sig}
@@ -97,15 +98,23 @@ async function create(canvas, opts = {}) {
   }
 
   /* ---------- Trazos: uno por id, se crean una sola vez ---------- */
+  /* Caja girada de un elemento (para marcar lo que se borra o se elige) */
+  function rbox(k) {
+    const p = k.pts;
+    if (k.k === 'rect') return { cx: (p[0] + p[2]) / 2, cy: (p[1] + p[3]) / 2, w: Math.abs(p[2] - p[0]), h: Math.abs(p[3] - p[1]), r: k.r || 0 };
+    if (k.k === 'text') { const fs = k.fs || TEXTS[k.w] || k.w * 6; return { cx: p[0], cy: p[1], w: Math.max(fs, String(k.t || '').length * fs * 0.56), h: fs * 1.25, r: k.r || 0 }; }
+    return { cx: p[0], cy: p[1], w: k.s || 1, h: k.h || k.s || 1, r: k.r || 0 };
+  }
+  function polyOf(b) { const a = (b.r || 0) * Math.PI / 180, co = Math.cos(a), si = Math.sin(a), out = []; [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([qx, qy]) => { const dx = qx * b.w / 2, dy = qy * b.h / 2; out.push(b.cx + dx * co - dy * si, b.cy + dx * si + dy * co); }); return out; }
   function strokeShape(g, k, color) {
     const p = k.pts, c = color || k.c;
     if (k.k === 'rect') {
+      if (color || k.r) { const pl = polyOf(rbox(k)); if (k.f) g.poly(pl, true).fill({ color: c, alpha: 0.35 }); g.poly(pl, true).stroke({ width: k.w, color: c, join: 'miter' }); return g; }
       const x = Math.min(p[0], p[2]), y = Math.min(p[1], p[3]), w = Math.abs(p[0] - p[2]), h = Math.abs(p[1] - p[3]);
       if (k.f) g.rect(x, y, w, h).fill({ color: c, alpha: 0.35 });
       g.rect(x, y, w, h).stroke({ width: k.w, color: c, join: 'miter' });
-    } else if (k.k === 'text') {
-      const fs = TEXTS[k.w] || k.w * 6, w = String(k.t || '').length * fs * 0.55;
-      g.rect(p[0] - w / 2, p[1] - fs * 0.6, w, fs * 1.2).fill({ color: c, alpha: 0.6 });
+    } else if (k.k === 'text' || k.k === 'asset' || k.k === 'img') {
+      g.poly(polyOf(rbox(k)), true).fill({ color: c || 0xff3b30, alpha: 0.6 });
     } else if (p.length === 2) {
       g.circle(p[0], p[1], Math.max(0.05, k.w / 2)).fill(c);
     } else {
@@ -115,21 +124,37 @@ async function create(canvas, opts = {}) {
     }
     return g;
   }
-  function strokeObj(k) {
+  function strokeObj(k, assetImg) {
+    if (k.k === 'asset' || k.k === 'img') {
+      const im = assetImg ? assetImg(k) : null;
+      if (!im) { const ph = new Container(); ph._pending = true; return ph; }
+      let t = assetTex.get(im); if (!t) { t = Texture.from(im); assetTex.set(im, t); }
+      const sp = new Sprite(t); sp.anchor.set(0.5); sp.width = k.s || 1; sp.height = k.h || k.s || 1; sp.position.set(k.pts[0], k.pts[1]); sp.rotation = (k.r || 0) * Math.PI / 180;
+      return sp;
+    }
     if (k.k === 'text') {
-      const fs = TEXTS[k.w] || k.w * 6;
+      const fs = k.fs || TEXTS[k.w] || k.w * 6;
       const t = new Text({ text: String(k.t || ''), resolution: 2, style: { fontFamily: 'Georgia, serif', fontWeight: '600', fontSize: TXT_BASE, fill: k.c, stroke: { color: 0xf3e9d2, alpha: 0.85, width: TXT_BASE / 6, join: 'round' } } });
-      t.anchor.set(0.5); t.scale.set(fs / TXT_BASE); t.position.set(k.pts[0], k.pts[1]);
+      t.anchor.set(0.5); t.scale.set(fs / TXT_BASE); t.position.set(k.pts[0], k.pts[1]); t.rotation = (k.r || 0) * Math.PI / 180;
       return t;
     }
     return strokeShape(new Graphics(), k);
   }
+  /* Clave de un trazo: cambia al editarlo (v) y durante la vista previa de un gesto (_p) */
+  const okey = (s) => s.id + ':' + (s.v || 0) + (s._p ? ':p' + s._p : '');
+  let pendingObjs = 0;
   function syncStrokes(m) {
-    const k = m.id + '|' + m.strokes.length + '|' + (m.strokes.length ? m.strokes[m.strokes.length - 1].id : '') + '|' + m.layers.map((l) => l.id).join(',') + '|' + Object.keys(m.hid).filter((x) => m.hid[x]).join(',');
-    if (k === strokeKey) return;
-    strokeKey = k;
+    const k = m.id + '|' + m.strokes.length + '|' + (m.strokes.length ? m.strokes[m.strokes.length - 1].id : '') + '|' + m.layers.map((l) => l.id).join(',') + '|' + Object.keys(m.hid).filter((x) => m.hid[x]).join(',') + '|' + (m.rev || 0);
+    if (k === strokeKey && !pendingObjs) return;
+    strokeKey = k; pendingObjs = 0;
     const alive = new Set();
-    m.strokes.forEach((s) => { const id = s.id + ':' + (s.v || 0); alive.add(id); if (!strokeObjs.has(id)) strokeObjs.set(id, strokeObj(s)); });
+    m.strokes.forEach((s) => {
+      const id = okey(s); alive.add(id); let o = strokeObjs.get(id);
+      // un objeto cuya imagen no había llegado se rehace cuando ya está
+      if (o && o._pending && m.asset && m.asset(s)) { o.destroy(); o = null; strokeObjs.delete(id); }
+      if (!o) { o = strokeObj(s, m.asset); strokeObjs.set(id, o); }
+      if (o._pending) pendingObjs++;
+    });
     for (const [id, o] of strokeObjs) if (!alive.has(id)) { o.destroy(); strokeObjs.delete(id); }
     const seenL = new Set();
     strokesBox.removeChildren();
@@ -140,7 +165,7 @@ async function create(canvas, opts = {}) {
       strokesBox.addChild(box);
     });
     for (const [id, box] of layerBoxes) if (!seenL.has(id)) { box.destroy(); layerBoxes.delete(id); }
-    m.strokes.forEach((s) => { const box = layerBoxes.get(s.l); if (box) box.addChild(strokeObjs.get(s.id + ':' + (s.v || 0))); });
+    m.strokes.forEach((s) => { const box = layerBoxes.get(s.l); if (box) box.addChild(strokeObjs.get(okey(s))); });
   }
 
   /* ---------- Niebla: una textura de cols × rows píxeles, uno por casilla ---------- */
@@ -234,9 +259,8 @@ async function create(canvas, opts = {}) {
     const W = sc.W, H = sc.H, px = 1 / v.s;
     preview.clear(); marks.clear(); rulerBox.clear(); rulerTxt.visible = false;
     if (sc.drawing) strokeShape(preview, sc.drawing);
-    if (sc.erase && sc.erase.length) sc.erase.forEach((k) => { if (k.k === 'text') strokeShape(marks, k, 0xff3b30); else strokeShape(marks, k, 0xff3b30); });
     marks.alpha = 1; preview.alpha = 1;
-    if (sc.erase && sc.erase.length) marks.alpha = 0.3;
+    if (sc.erase && sc.erase.length) { const er = new Graphics(); sc.erase.forEach((k) => strokeShape(er, k, 0xff3b30)); er.alpha = 0.35; top.addChild(er); setTimeout(() => er.destroy(), 0); }
     // ficha que se arrastra
     if (sc.ghost) {
       const sig = tokSig(sc.ghost);
@@ -250,6 +274,20 @@ async function create(canvas, opts = {}) {
       const w = rulerTxt.width + 16, lx = Math.min(W - w - 4, Math.max(4, bx - w / 2)), ly = Math.max(4, by - r.half * v.s - 34);
       rulerBox.rect(lx, ly, w, 26).fill({ color: 0x120d0b, alpha: 0.88 }).stroke({ width: 1, color: 0xffd66e });
       rulerTxt.position.set(lx + 8, ly + 13 - rulerTxt.height / 2);
+    }
+    if (sc.edit) {
+      const ed = sc.edit;
+      if (ed.lasso) { const l = ed.lasso; marks.rect(Math.min(l.x0, l.x1), Math.min(l.y0, l.y1), Math.abs(l.x1 - l.x0), Math.abs(l.y1 - l.y0)).fill({ color: 0xd9b866, alpha: 0.12 }).stroke({ width: 1.5 * px, color: 0xd9b866 }); }
+      (ed.boxes || []).forEach((b) => marks.poly(polyOf(b), true).stroke({ width: px, color: 0xd9b866, alpha: 0.7 }));
+      const H = ed.handles;
+      if (H) {
+        const c = H.corners, pl = []; c.forEach((q) => pl.push(q[0], q[1]));
+        for (let i = 0; i < 4; i++) { const a = c[i], b = c[(i + 1) % 4]; dashed(marks, a[0], a[1], b[0], b[1], 7 * px, 4 * px); }
+        marks.stroke({ width: 2 * px, color: 0xd9b866 });
+        marks.moveTo(H.top[0], H.top[1]).lineTo(H.rot[0], H.rot[1]).stroke({ width: 2 * px, color: 0xd9b866 });
+        c.forEach((q) => marks.rect(q[0] - 6 * px, q[1] - 6 * px, 12 * px, 12 * px).fill(0xfff8e6).stroke({ width: 2 * px, color: 0xd9b866 }));
+        marks.circle(H.rot[0], H.rot[1], 8 * px).fill(0xd9b866).stroke({ width: 1.5 * px, color: 0x2b1d12 });
+      }
     }
     if (sc.fogRect) {
       const f = sc.fogRect, x0 = Math.min(f.a[0], f.b[0]), y0 = Math.min(f.a[1], f.b[1]), w = Math.abs(f.a[0] - f.b[0]) + 1, h = Math.abs(f.a[1] - f.b[1]) + 1;

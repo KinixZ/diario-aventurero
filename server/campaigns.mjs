@@ -25,7 +25,7 @@ export const IMG_MAX_BYTES = 2 * 1024 * 1024, CAMP_IMG_BYTES = 60 * 1024 * 1024;
 export const BOARD_CATS = ['mision', 'pnj', 'lugar', 'pista', 'objeto', 'otro'];
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
 export const NPC_HP = ['none', 'state', 'bar', 'pct', 'num']; // lo que ven los jugadores de la vida de los enemigos
-const MAPS_MAX = 40, MAP_STROKES_MAX = 6000, MAP_PTS_MAX = 600, MAP_LAYERS_MAX = 8, MAP_TOOLS = ['pen', 'line', 'rect', 'text'];
+const MAPS_MAX = 40, MAP_STROKES_MAX = 6000, MAP_PTS_MAX = 600, MAP_LAYERS_MAX = 8, MAP_TOOLS = ['pen', 'line', 'rect', 'text', 'asset', 'img'];
 const TOKENS_MAX = 120, PLAYER_TOKENS_MAX = 5, TOKEN_KINDS = ['pc', 'npc', 'obj'];
 const BEASTS_MAX = 400, NOTES_MAX = 60, STAT_MAX = 80000;
 export const BEAST_KINDS = ['enemigo', 'pnj', 'criatura'];
@@ -411,11 +411,38 @@ export class Campaigns {
       case 'map.get': { const mp = this.mapFor(c, me, msg.id); out.push({ to: me.id, msg: { t: 'map', map: this.mapView(mp, me) } }); out.quiet = true; break; }
       case 'map.add': {
         const mp = this.mapFor(c, me, msg.id);
-        if (mp.strokes.length >= MAP_STROKES_MAX) throw err('board_full', 'Este mapa está lleno: hagan uno nuevo para la siguiente zona.');
-        const k = cleanMapStroke(msg.stroke, me.id, mp); if (!k) throw err('bad_stroke', 'No se pudo guardar el trazo.');
-        const secret = layerDm(mp, k.l); if (secret && !isDm) throw err('dm_only', 'Esa capa es solo del DM.');
-        k.id = 'k' + id(5); mp.strokes.push(k); mp.updated = this.now();
-        for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm) && (!secret || mm.role === 'dm')) out.push({ to: mm.id, msg: { t: 'map.add', id: mp.id, stroke: k, updated: mp.updated } });
+        const list = Array.isArray(msg.strokes) ? msg.strokes.slice(0, 100) : [msg.stroke];
+        if (mp.strokes.length + list.length > MAP_STROKES_MAX) throw err('board_full', 'Este mapa está lleno: hagan uno nuevo para la siguiente zona.');
+        const ks = list.map((s) => cleanMapStroke(s, me.id, mp, c));
+        if (ks.some((k) => !k)) throw err('bad_stroke', 'No se pudo guardar el trazo.');
+        if (!isDm && ks.some((k) => layerDm(mp, k.l))) throw err('dm_only', 'Esa capa es solo del DM.');
+        for (const k of ks) { k.id = strokeId(mp, k.id); mp.strokes.push(k); }
+        mp.updated = this.now();
+        for (const k of ks) { const secret = layerDm(mp, k.l); for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm) && (!secret || mm.role === 'dm')) out.push({ to: mm.id, msg: { t: 'map.add', id: mp.id, stroke: k, updated: mp.updated } }); }
+        out.quiet = true;
+        break;
+      }
+      case 'map.upd': {
+        // editar elementos ya puestos (mover, girar, escalar, color, capa, texto): el DM todos, cada quien los suyos
+        const mp = this.mapFor(c, me, msg.id);
+        const list = (Array.isArray(msg.strokes) ? msg.strokes : []).slice(0, 200), done = [], hidden = [];
+        for (const s of list) {
+          const i = mp.strokes.findIndex((k) => k.id === str(s && s.id, 20)); if (i < 0) continue;
+          const old = mp.strokes[i]; if (!isDm && old.by !== me.id) throw err('not_yours', 'Solo puedes mover lo que tú dibujaste; el DM, todo.');
+          const k = cleanMapStroke(s, old.by, mp, c); if (!k) throw err('bad_stroke', 'No se pudo guardar el cambio.');
+          if (!isDm && (layerDm(mp, k.l) || layerDm(mp, old.l))) throw err('dm_only', 'Esa capa es solo del DM.');
+          k.id = old.id; k.v = Math.max((old.v || 0) + 1, k.v || 0); mp.strokes[i] = k; done.push(k);
+          if (!layerDm(mp, old.l) && layerDm(mp, k.l)) hidden.push(k.id);
+        }
+        if (done.length) {
+          mp.updated = this.now();
+          for (const mm of c.members.values()) {
+            if (!this.canSeeMap(c, mp, mm)) continue;
+            const vis = mm.role === 'dm' ? done : done.filter((k) => !layerDm(mp, k.l));
+            if (vis.length) out.push({ to: mm.id, msg: { t: 'map.upd', id: mp.id, strokes: vis, updated: mp.updated } });
+            if (mm.role !== 'dm' && hidden.length) out.push({ to: mm.id, msg: { t: 'map.rm', id: mp.id, sids: hidden, updated: mp.updated } });
+          }
+        }
         out.quiet = true;
         break;
       }
@@ -691,17 +718,29 @@ function cleanLayers(ls, isDm) {
   return out;
 }
 const r2 = (v) => Math.round(v * 100) / 100;
-function cleanMapStroke(k, by, mp) {
+/* Un elemento del mapa. pen y line: puntos; rect: dos esquinas; text, asset e img: el centro.
+   asset (objeto dibujado) lleva su clave `a`; img, el id de una imagen de la campaña. Los tres de centro, y rect,
+   pueden girar (`r`, grados); asset e img tienen ancho `s` y alto `h` en casillas; text puede llevar tamaño `fs`. */
+const ASSET_RE = /^[a-z0-9-]{1,30}$/;
+function cleanMapStroke(k, by, mp, c) {
   if (!k || !MAP_TOOLS.includes(k.k) || !Array.isArray(k.pts)) return null;
   if (!mp.layers.some((l) => l.id === k.l)) return null;
-  const n = k.pts.length; if (n < 2 || n % 2 || n > MAP_PTS_MAX * 2 || (k.k !== 'pen' && k.k !== 'text' && n !== 4) || (k.k === 'text' && n !== 2)) return null;
+  const one = ['text', 'asset', 'img'].includes(k.k);
+  const n = k.pts.length; if (n < 2 || n % 2 || n > MAP_PTS_MAX * 2 || (k.k !== 'pen' && !one && n !== 4) || (one && n !== 2)) return null;
   const pts = [];
   for (let i = 0; i < n; i += 2) { const x = Number(k.pts[i]), y = Number(k.pts[i + 1]); if (!(x >= -1 && x <= mp.cols + 1 && y >= -1 && y <= mp.rows + 1)) return null; pts.push(r2(x), r2(y)); }
   const o = { id: k.id ? str(k.id, 20) : undefined, by: str(by, 20), l: k.l, k: k.k, c: COLOR_RE.test(k.c) ? k.c : '#2b1d12', w: Math.min(3, Math.max(0.03, Number(k.w) || 0.12)), pts };
-  if (k.k === 'text') { o.t = str(k.t, 60); if (!o.t) return null; }
+  if (k.k === 'text') { o.t = str(k.t, 60); if (!o.t) return null; if (k.fs != null) o.fs = num(k.fs, 0.2, 10, 1); }
   if (k.k === 'rect' && k.f) o.f = 1;
+  if (k.k === 'asset') { if (!ASSET_RE.test(k.a || '')) return null; o.a = k.a; }
+  if (k.k === 'img') { const im = str(k.img, 30); if (!/^[\w-]{1,30}$/.test(im) || (c && !c.images.has(im))) return null; o.img = im; }
+  if (k.k === 'asset' || k.k === 'img') { o.s = r2(num(k.s, 0.25, 30, 1)); o.h = r2(num(k.h, 0.25, 30, o.s)); delete o.w; }
+  if ((k.k === 'rect' || one) && Number(k.r)) o.r = Math.round(num(k.r, -360, 360, 0) * 10) / 10;
+  if (k.v != null) o.v = int(k.v, 0, 1e6, 0);
   return o;
 }
+/* El id lo propone el cliente (así deshacer un borrado recrea el mismo trazo); si no sirve, se inventa uno */
+function strokeId(mp, want) { const w = str(want, 20); return /^k[\w-]{3,18}$/.test(w) && !mp.strokes.some((k) => k.id === w) ? w : 'k' + id(5); }
 function cleanToken(t, mp, c, me) {
   if (!t || typeof t !== 'object') throw err('bad_msg', 'Ficha inválida.');
   const kind = TOKEN_KINDS.includes(t.kind) ? t.kind : 'obj';
@@ -717,7 +756,7 @@ function cleanMap(m, by, isDm, c) {
   const mp = { id: mid, name: str(m.name, 60) || 'Mapa', cols: int(m.cols, 8, 160, 40), rows: int(m.rows, 8, 160, 30), grid: ['square', 'hex', 'none'].includes(m.grid) ? m.grid : 'square', by: str(m.by, 20) || str(by, 20), created: Number(m.created) || Date.now(), hidden: isDm ? !!m.hidden : false };
   if (!c.members.has(mp.by)) mp.by = str(by, 20);
   mp.layers = cleanLayers(Array.isArray(m.layers) ? m.layers : [], isDm); if (!mp.layers.length) mp.layers = [{ id: 'l1', name: 'Terreno' }];
-  mp.strokes = (Array.isArray(m.strokes) ? m.strokes : []).slice(0, MAP_STROKES_MAX).map((k) => { const s = cleanMapStroke(k, k && k.by || by, mp); if (s && k.id) s.id = str(k.id, 20); return s; }).filter(Boolean);
+  mp.strokes = (Array.isArray(m.strokes) ? m.strokes : []).slice(0, MAP_STROKES_MAX).map((k) => { const s = cleanMapStroke(k, k && k.by || by, mp, c); if (s && k.id) s.id = str(k.id, 20); return s; }).filter(Boolean);
   for (const k of mp.strokes) if (!k.id) k.id = 'k' + id(5);
   mp.bg = isDm && m.bg && m.bg.img && c.images.has(str(m.bg.img, 30)) ? { img: str(m.bg.img, 30), op: num(m.bg.op, 0.1, 1, 1) } : null;
   mp.fog = { on: isDm ? !!(m.fog && m.fog.on) : false, cells: null };

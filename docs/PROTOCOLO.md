@@ -76,6 +76,16 @@ Cuando un monstruo **de los manuales** (con `ref`) entra visible al combate (o e
 
 La niebla viaja como base64 de un bit por casilla (`fog.cells`). Los jugadores no reciben capas del DM, fichas ocultas ni mapas ocultos.
 
+
+### Editar el mapa
+
+| `t` | Campos | Quién | Qué hace |
+|---|---|---|---|
+| `map.add` | `id`, `stroke` o `strokes[]` (hasta 100) | quien ve el mapa (capas «Solo DM», el DM) | Agrega elementos. El id lo propone el cliente (`k…`); si está repetido o no sirve, el servidor pone otro. |
+| `map.upd` | `id`, `strokes[]` (con su `id`) | el DM todo; cada quien lo suyo | Reemplaza elementos ya puestos: mover, girar, escalar, color, capa o texto. Si el DM pasa uno a una capa secreta, a los jugadores les llega `map.rm`. |
+
+Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `text` \| `asset` \| `img`. `rect`, `text`, `asset` e `img` aceptan `r` (grados); `text` lleva `t` y puede llevar `fs` (tamaño en casillas); `asset` lleva `a` (clave del objeto), `s` y `h` (casillas); `img` lleva `img` (id de una imagen de la campaña), `s` y `h`.
+
 ## Bestiario del grupo
 
 | `t` | Campos | Quién | Qué hace |

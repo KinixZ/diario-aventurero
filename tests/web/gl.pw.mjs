@@ -52,6 +52,13 @@ ok('el movimiento llega al jugador', moved);
 await dm.evaluate((id) => Sala.send({ t: 'fog.rect', id, rect: [10, 2, 20, 12], value: 1 }), mid);
 await pj.waitForTimeout(900);
 if (shots) { await pj.screenshot({ path: shots + '/gl-pj-2.png' }); await dm.screenshot({ path: shots + '/gl-dm.png' }); }
+// el DM pone un objeto y lo gira: al jugador le llega igual (editor del módulo 4)
+await dm.evaluate((id) => { const mp = Mapas._maps()[id]; Sala.send({ t: 'map.add', id, strokes: [{ id: 'kmesa001', k: 'asset', a: 'mesa', l: mp.layers[0].id, pts: [6, 4], s: 2, h: 1 }] }); }, mid);
+await pj.waitForTimeout(700);
+ok('el objeto llega al jugador', await pj.evaluate((id) => Mapas._maps()[id].strokes.some((k) => k.id === 'kmesa001' && k.a === 'mesa'), mid));
+await dm.evaluate((id) => { const k = Mapas._maps()[id].strokes.find((x) => x.id === 'kmesa001'); Sala.send({ t: 'map.upd', id, strokes: [{ ...k, r: 90, pts: [7, 5] }] }); }, mid);
+await pj.waitForTimeout(700);
+ok('el giro llega al jugador', await pj.evaluate((id) => { const k = Mapas._maps()[id].strokes.find((x) => x.id === 'kmesa001'); return k && k.r === 90 && k.pts[0] === 7; }, mid));
 // volver a la lista y abrir otra vez: el contexto WebGL se libera y se crea uno nuevo sin errores
 for (let i = 0; i < 6; i++) { await pj.evaluate(() => document.querySelector('[data-act="mapback"]').click()); await pj.waitForTimeout(150); await pj.evaluate((id) => Mapas.open(id), mid); await pj.waitForTimeout(500); }
 ok('abrir y cerrar el mapa 6 veces', await pj.evaluate(() => document.querySelector('#mapCv').dataset.engine === 'gl'));

@@ -45,8 +45,8 @@ const best = {_bestiario:{v:1, creado:'2026-10-26T00:00:00Z'}, monster:[
   f.dispatchEvent(new w.Event('submit', {bubbles:true, cancelable:true})); await wait(50);
   check('editor abierto', !!$('#mapCv') && $('#mapName').value === 'Cripta de Vel');
   const maps = w.Mapas._maps(), mp = Object.values(maps)[0];
-  check('capas por defecto', mp.layers.map(l => l.name).join(',') === 'Terreno,Paredes y puertas,Notas');
-  act('maplayers'); act('mapladd'); check('agregar capa', mp.layers.length === 4);
+  check('una capa por defecto', mp.layers.map(l => l.name).join(',') === 'Capa 1');
+  act('maplayers'); act('mapladd'); check('agregar capa', mp.layers.length === 2);
   act('mapset'); const g = $('#mapGrid'); g.value = 'hex'; g.dispatchEvent(new w.Event('change', {bubbles:true})); check('cambiar cuadrícula', mp.grid === 'hex');
   act('mapback'); await wait(700);
   const ix = JSON.parse(w.localStorage.getItem('diario-mapas'));
