@@ -43,8 +43,8 @@ var Sala = (function(){
   function summary(){
     var X = window.Diario; if (!X) return null;
     var C = X.cur(), D = X.D(); if (!C || !D || !D.ok) return null;
-    var r = X.rt(C);
-    return {name: C.name || 'Sin nombre', cls: D.clsLabel, lvl: D.level, ac: D.ac, hp: r.hp, hpMax: D.hp.max, temp: r.temp || 0, initMod: D.init, speed: parseFloat(String(D.speed).replace(',', '.')) || 9, conc: r.conc ? String(r.conc).split('|')[0] : null, conds: (r.conds || []).slice(), comps: X.compSummaries ? X.compSummaries() : []};
+    var r = X.rt(C), P = window.Retratos ? Retratos.forSummary(C) : {};
+    return {img: P.img || null, tok: P.tok || null, form: P.form || null, name: C.name || 'Sin nombre', cls: D.clsLabel, lvl: D.level, ac: D.ac, hp: r.hp, hpMax: D.hp.max, temp: r.temp || 0, initMod: D.init, speed: parseFloat(String(D.speed).replace(',', '.')) || 9, conc: r.conc ? String(r.conc).split('|')[0] : null, conds: (r.conds || []).slice(), comps: X.compSummaries ? X.compSummaries() : []};
   }
 
   /* ---------- Conexión ---------- */
@@ -223,13 +223,20 @@ var Sala = (function(){
     return '<div class="bar"><i style="width:' + p + '%;background:' + c + '"></i></div>' + (show === 'pct' ? '<span class="sala-hp">' + p + '%</span>' : '');
   }
   function bar(hp, max, temp){ var p = Math.max(0, Math.min(100, Math.round(hp / max * 100))), c = p <= 33 ? 'var(--bad)' : p <= 66 ? 'var(--warn)' : 'var(--ok)'; return '<div class="bar"><i style="width:' + p + '%;background:' + c + '"></i></div><span class="sala-hp">' + hp + '/' + max + (temp ? ' +' + temp : '') + '</span>'; }
+  /* Retrato en la lista: el que subió el jugador, la imagen del monstruo o un icono de su tipo */
+  function avHtml(x, name){
+    var id = x.pc ? (x.m.char && (x.m.char.img || x.m.char.tok)) : x.n.img;
+    if (id && window.Mesa) return '<span class="sala-av' + (x.pc ? ' pc' : '') + '"><img alt="" loading="lazy" src="' + attr(Mesa.imgUrl(id)) + '"></span>';
+    if (!x.pc && window.Retratos) return '<span class="sala-av npc ic"><svg class="gi"><use href="#gi-' + Retratos.typeIcon(x.n.binfo ? x.n.binfo.type : x.n.ty) + '"/></svg></span>';
+    return '<span class="sala-av' + (x.pc ? ' pc' : '') + ' ini">' + esc(String(name || '?').split(/\s+/).slice(0, 2).map(function(w){ return w.charAt(0); }).join('').toUpperCase()) + '</span>';
+  }
   function rowHtml(x, dm, inOrder){
     var turn = room.turnId === x.id, on = !!sel[x.id], name, sub, hp = '', ac = '', conds = [], init;
     if (x.pc) { var m = x.m, c = m.char || {}; name = c.name || m.name; sub = (c.cls || '') + (m.online ? '' : ' · desconectado'); ac = c.ac; init = m.init; conds = (c.conds || []).slice(); if (c.conc) conds.push('concentration'); hp = c.hp == null ? '<span class="sala-state">PG ocultos</span>' : bar(c.hp, c.hpMax, c.temp); if (c.comps && c.comps.length) sub += ' · ' + c.comps.map(function(k){ return k.name + ' ' + k.hp + '/' + k.hpMax; }).join(', '); }
     else { var n = x.n; name = n.name; init = n.init; conds = n.conds || []; if (dm) { ac = n.ac; hp = bar(n.hp, n.hpMax, n.temp); sub = (n.hidden ? 'oculto para los jugadores' : 'enemigo') + (n.init == null && n.ref ? ' · inic. 1d20 ' + sgn(n.initMod || 0).replace('+', '+ ').replace('−', '− ') : ''); } else { sub = 'enemigo'; hp = npcHpHtml(n); } }
     var me = x.id === room.you;
     var pickable = !(dm && x.pc);
-    var h = '<div class="sala-row' + (turn ? ' turn' : '') + (on ? ' sel' : '') + (x.pc ? '' : ' npc') + '" role="listitem"><button type="button" class="sala-pick" ' + (pickable ? 'data-act="salasel" data-id="' + attr(x.id) + '" aria-pressed="' + on + '" aria-label="Seleccionar a ' + attr(name) + '"' : 'tabindex="-1" aria-disabled="true"') + '><span class="sala-init">' + (init == null ? '–' : init) + '</span><span class="sala-name"><b>' + esc(name) + (me ? ' <small>(tú)</small>' : '') + '</b><small>' + esc(sub || '') + '</small></span>' + (ac !== '' && ac != null ? '<span class="sala-ac">' + ac + '</span>' : '') + '</button><div class="sala-hpbox">' + hp + '</div>';
+    var h = '<div class="sala-row' + (turn ? ' turn' : '') + (on ? ' sel' : '') + (x.pc ? '' : ' npc') + '" role="listitem"><button type="button" class="sala-pick" ' + (pickable ? 'data-act="salasel" data-id="' + attr(x.id) + '" aria-pressed="' + on + '" aria-label="Seleccionar a ' + attr(name) + '"' : 'tabindex="-1" aria-disabled="true"') + '><span class="sala-init">' + (init == null ? '–' : init) + '</span>' + avHtml(x, name) + '<span class="sala-name"><b>' + esc(name) + (me ? ' <small>(tú)</small>' : '') + '</b><small>' + esc(sub || '') + '</small></span>' + (ac !== '' && ac != null ? '<span class="sala-ac">' + ac + '</span>' : '') + '</button><div class="sala-hpbox">' + hp + '</div>';
     var dmNpc = dm && !x.pc;
     if (conds.length) h += '<div class="sala-conds">' + conds.map(function(k){ return dmNpc ? '<button type="button" class="chip" data-act="salacondoff" data-id="' + attr(x.id) + '" data-v="' + k + '" aria-label="Quitar ' + attr(COND[k] || k) + ' a ' + attr(name) + '">' + esc(COND[k] || k) + ' ×</button>' : '<span class="chip">' + esc(COND[k] || k) + '</span>'; }).join('') + '</div>';
     if (dmNpc) {

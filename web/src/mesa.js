@@ -56,9 +56,14 @@ var Mesa = (function(){
   function mountLobby(){}
 
   /* ---------- Chat ---------- */
+  /* Cara de quien escribe: la ficha que subió a la campaña */
+  function msgAv(m){
+    var r = room(), mem = r && r.members.filter(function(x){ return x.id === m.from; })[0], id = mem && mem.char && (mem.char.tok || mem.char.img);
+    return id ? '<span class="msg-av"><img alt="" loading="lazy" src="' + attr(imgUrl(id)) + '"></span>' : '';
+  }
   function msgHtml(m){
     var mine = m.from === myId(), wh = m.to ? (m.from === myId() ? 'susurro para ' + nameOf(m.to) : 'susurro de ' + m.name) : '';
-    var h = '<div class="msg' + (mine ? ' mine' : '') + (m.role === 'dm' ? ' dm' : '') + (m.to ? ' whisper' : '') + (m.kind === 'roll' ? ' is-roll' : '') + '" data-id="' + attr(m.id) + '"><div class="msg-h"><b>' + esc(m.name) + '</b>' + (wh ? '<span class="wh"><svg class="ic"><use href="#i-eye"/></svg>' + esc(wh) + '</span>' : '') + '<time>' + hhmm(m.at) + '</time></div>';
+    var h = '<div class="msg' + (mine ? ' mine' : '') + (m.role === 'dm' ? ' dm' : '') + (m.to ? ' whisper' : '') + (m.kind === 'roll' ? ' is-roll' : '') + '" data-id="' + attr(m.id) + '"><div class="msg-h">' + msgAv(m) + '<b>' + esc(m.name) + '</b>' + (wh ? '<span class="wh"><svg class="ic"><use href="#i-eye"/></svg>' + esc(wh) + '</span>' : '') + '<time>' + hhmm(m.at) + '</time></div>';
     if (m.kind === 'roll') { var r = m.roll || {}, crit = r.nat === 20, fumble = r.nat === 1; h += '<div class="roll-card' + (crit ? ' is-crit' : fumble ? ' is-fumble' : '') + '"><span class="roll-lbl">' + esc(r.label) + (r.adv === 'adv' ? ' · con ventaja' : r.adv === 'dis' ? ' · con desventaja' : '') + '</span><b>' + r.total + '</b>' + (r.nat ? '<small>' + (crit ? '¡20 natural!' : fumble ? '1 natural' : 'd20: ' + r.nat) + '</small>' : '') + '</div>'; }
     else if (m.kind === 'img') h += '<button type="button" class="msg-img" data-act="mesaview" data-img="' + attr(m.img) + '"><img alt="' + attr(m.text || 'Imagen') + '" loading="lazy" src="' + attr(imgUrl(m.img)) + '"></button>' + (m.text ? '<p>' + esc(m.text) + '</p>' : '') + (isDm() ? '<button class="pill" type="button" data-act="mesapin" data-img="' + attr(m.img) + '" data-cap="' + attr(m.text || '') + '">Fijar en el tablero</button>' : '');
     else h += '<p>' + esc(m.text).replace(/\n/g, '<br>') + '</p>';

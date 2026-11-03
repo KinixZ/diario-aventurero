@@ -157,6 +157,14 @@
     if (!$('#combat').hidden) renderCombat();
     save();
   }
+  /* Retrato en el medallón del encabezado y en la portada (si el personaje tiene imagen) */
+  function portraits(C){
+    var R2 = window.Retratos, on = !!(R2 && C && R2.has(C)), hp = $('#hPt'), cp = $('#cvPt');
+    var lvl = document.querySelector('.head .lvl'); if (lvl) lvl.classList.toggle('has-pt', on);
+    if (hp) hp.innerHTML = on ? R2.pic(C, 'tok') : '';
+    cover.classList.toggle('has-pt', on);
+    if (cp) { cp.hidden = !on; cp.innerHTML = on ? R2.pic(C, 'cov', 'cov-pic') + '<span class="cv-form">' + (R2.cur(C).id !== 'base' ? esc(R2.cur(C).name) : '') + '</span>' : ''; }
+  }
   function renderHead(){
     var C = cur();
     if (C && D && D.ok) {
@@ -164,6 +172,7 @@
       var clsTxt = D.multi ? D.classes.map(function(E){ return E.cls.name + ' ' + E.lv + (E.sub ? ' (' + E.sub.name + ')' : ''); }).join(' / ') : D.cls.name + (D.sub ? ' · ' + D.sub.name : '');
       $('#hSub').textContent = [D.race && D.race.name, clsTxt].filter(Boolean).join(' · ');
       $('#cvName').textContent = C.name || 'Sin nombre'; $('#cvSub').textContent = D.clsLabel + ' · nivel ' + D.level;
+      portraits(C);
     } else {
       $('#hLvl').textContent = '–'; $('#hName').textContent = 'Diario del Aventurero'; $('#hSub').textContent = C ? 'Personaje sin calcular' : 'Sin personaje';
       $('#cvName').textContent = C ? (C.name || 'Sin nombre') : 'Sin personaje'; $('#cvSub').textContent = Lib5e.has() ? '' : 'Carga tu 5etools en Ajustes';
@@ -175,7 +184,7 @@
   }
   function mcBanner(){ return D.mcReqs && D.mcReqs.length ? '<div class="banner warn"><p>Multiclase sin el requisito de 13: ' + esc(D.mcReqs.join(' · ')) + '. Si tu DM lo permite, no pasa nada.</p></div>' : ''; }
   function renderPersonaje(C){
-    var h = pendingBanner() + mcBanner();
+    var h = pendingBanner() + mcBanner() + portraitCard(C);
     h += '<div class="abil">' + R.ABS.map(function(k){ return '<div class="ab"><small>' + R.AB[k].toUpperCase() + '</small><div class="medal">' + sgn(D.mod[k]) + '</div><span class="score">' + D.abil[k] + '</span></div>'; }).join('') + '</div>';
     h += '<div class="stats"><div class="stat" title="' + attr(D.acNote) + '"><div class="shield"><svg width="44" height="50" viewBox="0 0 44 50" aria-hidden="true"><path d="M22 2 L41 9 Q41 33 22 48 Q3 33 3 9 Z"/></svg><span>' + D.ac + '</span></div><span class="label">clase de armadura</span></div>'
       + '<div class="stat"><span class="big">' + sgn(D.init) + '</span><span class="label">iniciativa</span></div><div class="stat"><span class="big">' + D.speed + '</span><span class="label">velocidad</span></div></div>';
@@ -193,6 +202,16 @@
     h += '<div class="card"><span class="label">competencias y rasgos</span>' + prof.filter(function(p){ return p[1].length; }).map(function(p){ return '<div class="line" style="align-items:flex-start;padding:6px 0"><span class="muted" style="min-width:110px">' + p[0] + '</span><span style="flex:1;text-align:right">' + p[1].map(esc).join(', ') + '</span></div>'; }).join('') + '</div>';
     compBodies = {}; h += compSection(false);
     $('#pPersonaje').innerHTML = h;
+  }
+
+  /* Retrato y formas, arriba de la hoja: como la ficha de un personaje de videojuego */
+  function portraitCard(C){
+    var R2 = window.Retratos; if (!R2) return '';
+    var P = R2.pt(C), f = R2.cur(C);
+    return '<div class="card pt-card"><button type="button" class="pt-frame" data-act="ptopen" aria-label="Retratos y formas de ' + attr(C.name || 'tu personaje') + '">' + R2.pic(C, 'por') + '</button>'
+      + '<div class="pt-info"><span class="label">' + (R2.has(C) ? 'retrato' : 'sin retrato') + '</span><b class="pt-name">' + esc(C.name || 'Sin nombre') + '</b><small>' + esc([D.race && D.race.name, D.clsLabel].filter(Boolean).join(' · ')) + '</small>'
+      + (P.forms.length > 1 ? '<div class="chips pt-chips">' + P.forms.map(function(x){ return '<button type="button" class="chip' + (x.id === f.id ? ' on' : '') + '" data-act="ptcur" data-v="' + attr(x.id) + '" aria-pressed="' + (x.id === f.id) + '">' + esc(x.name) + '</button>'; }).join('') + '</div>' : '')
+      + '<button class="btn sm" type="button" data-act="ptopen">' + (R2.has(C) ? 'Retratos y formas' : 'Poner un retrato') + '</button></div></div>';
   }
 
   /* ---------- Conjuros ---------- */
@@ -1195,7 +1214,7 @@
     else if (m.kind === 'cond-') r.conds = r.conds.filter(function(k){ return k !== m.cond; });
     save(); render(false);
   }
-  window.Diario = {cur:cur, D:function(){ return D; }, rt:rt, applyToMe:applyToMe, trWrap:function(h, k){ return trWrap(h, k); }, trInit:function(r){ trInit(r); }, openSheet:function(id){ openSheet(id); }, closeSheets:function(){ closeSheets(); },
+  window.Diario = {cur:cur, D:function(){ return D; }, rt:rt, save:function(){ save(); }, redraw:function(){ renderHead(); if (cur() && D && D.ok) renderPersonaje(cur()); if (!$('#combat').hidden) combatHead(); }, applyToMe:applyToMe, trWrap:function(h, k){ return trWrap(h, k); }, trInit:function(r){ trInit(r); }, openSheet:function(id){ openSheet(id); }, closeSheets:function(){ closeSheets(); },
     addNote:function(text){ var C = cur(); if (!C) return false; var r = rt(C); r.notes = (r.notes ? r.notes.replace(/\s+$/, '') + '\n\n' : '') + text; save(); if ($('#notes')) $('#notes').value = r.notes; return true; },
     newTurn:function(){ var C = cur(); if (!C) return; rt(C).econ = {a:false,b:false,r:false,m:false}; S.cSub = 'turno'; save(); if (!$('#combat').hidden) renderCombat(); },
     combatRefresh:function(){ if (!$('#combat').hidden) combatHead(); },
@@ -1214,7 +1233,8 @@
   function combatSub(){ if (!S.cSub) S.cSub = inRoom() ? 'orden' : 'turno'; return S.cSub; }
   function vitalsHtml(C, r){
     var pct = Math.max(0, Math.round(r.hp / D.hp.max * 100)), barc = pct <= 33 ? 'var(--bad)' : pct <= 66 ? 'var(--warn)' : 'var(--ok)';
-    var h = '<div class="vt-main"><div class="vt-ac" title="' + attr(D.acNote) + '"><svg width="40" height="46" viewBox="0 0 44 50" aria-hidden="true"><path d="M22 2 L41 9 Q41 33 22 48 Q3 33 3 9 Z"/></svg><b>' + D.ac + '</b><small>CA</small></div>'
+    var R2 = window.Retratos, fm = R2 ? R2.cur(C) : null, many = R2 && R2.pt(C).forms.length > 1;
+    var h = '<div class="vt-main">' + (R2 && (R2.has(C) || many) ? '<button type="button" class="vt-pt" data-act="ptopen" aria-label="Retrato y forma: ' + attr(fm.name) + '">' + R2.pic(C, 'tok') + (many ? '<small>' + esc(fm.name) + '</small>' : '') + '</button>' : '') + '<div class="vt-ac" title="' + attr(D.acNote) + '"><svg width="40" height="46" viewBox="0 0 44 50" aria-hidden="true"><path d="M22 2 L41 9 Q41 33 22 48 Q3 33 3 9 Z"/></svg><b>' + D.ac + '</b><small>CA</small></div>'
       + '<button type="button" class="vt-hp" data-act="hpopen" aria-expanded="' + !!S.hpOpen + '" aria-label="Puntos de golpe: ' + r.hp + ' de ' + D.hp.max + '. Toca para daño o curación"><span class="vt-hpn"><b>' + r.hp + '</b><small>/ ' + D.hp.max + '</small>' + (r.temp ? '<em>+' + r.temp + ' temp</em>' : '') + '</span><span class="bar"><i style="width:' + pct + '%;background:' + barc + '"></i></span><small class="vt-hint">' + (S.hpOpen ? 'Cerrar' : 'Daño o curación') + '</small></button>'
       + '<div class="vt-mini"><div><b>' + sgn(D.init) + '</b><small>inic.</small></div><div><b>' + D.speed.replace(' m', '') + '<i> m</i></b><small>vel.</small></div></div></div>';
     if (S.hpOpen) h += '<form class="hp-form vt-form" id="hpForm"><input id="hpIn" class="field" inputmode="numeric" autocomplete="off" placeholder="Lo que sacaste" aria-label="Resultado de tus dados"><button class="btn dmg" type="submit" data-sign="-1">Daño</button><button class="btn heal" type="submit" data-sign="1">Curar</button><button class="btn" type="submit" data-sign="0">Temp.</button></form><p class="err" id="hpErr" hidden>Escribe un número primero.</p><div class="quick vt-quick"><button type="button" class="m" data-act="hp" data-v="-5">−5</button><button type="button" class="m" data-act="hp" data-v="-1">−1</button><button type="button" class="p" data-act="hp" data-v="1">+1</button><button type="button" class="p" data-act="hp" data-v="5">+5</button></div>';

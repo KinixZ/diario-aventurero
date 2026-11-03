@@ -295,6 +295,7 @@ var Mapas = (function(){
     else { var n = x.n; o.name = n.name; o.init = n.init; if (n.hp != null && n.hpMax) { o.pct = n.hp / n.hpMax; o.label = dm || n.show === 'num' ? n.hp + '/' + n.hpMax : ''; o.down = n.hp <= 0; } else if (n.pct != null) { o.pct = n.pct / 100; o.down = n.pct <= 0; } if (n.state) { o.label = n.state; o.down = n.state === 'caído'; } }
     return o;
   }
+  function chipImg(x, t){ if (x.pc) return x.m.char && (x.m.char.img || x.m.char.tok) || (t && t.img) || null; return x.n.img || (t && t.img) || null; }
   function initStrip(mp){
     var el = $('#vttInit'); if (!el) return;
     var r = fight(); if (!r || mode !== 'jugar') { el.hidden = true; el.innerHTML = ''; return; }
@@ -303,7 +304,7 @@ var Mapas = (function(){
     el.innerHTML = '<span class="vi-round">' + (r.round ? '<small>ronda</small><b>' + r.round + '</b>' : '<small>combate</small><b>·</b>') + '</span><div class="vi-list">' + list.map(function(x, i){
       var o = cInfo(x, r), t = onMap[x.id], turn = r.round && r.turnId === x.id, col = t ? t.color : x.pc ? '#2f5d8a' : '#8c2626', p = o.pct == null ? null : Math.max(0, Math.min(1, o.pct));
       return '<button type="button" class="vi-chip' + (turn ? ' turn' : '') + (x.pc ? ' pc' : ' npc') + (o.down ? ' down' : '') + (x.id === r.you ? ' me' : '') + (x.n && x.n.hidden ? ' hid' : '') + (r.order.indexOf(x.id) < 0 ? ' noinit' : '') + '" data-act="mapchip" data-id="' + attr(x.id) + '" style="--d:' + (i * 35) + 'ms" title="' + attr(o.name + (o.label ? ' · ' + o.label : '')) + '">'
-        + '<span class="vi-av" style="background:' + attr(col) + '">' + (t && t.img ? '<img alt="" src="' + attr(Mesa.imgUrl(t.img)) + '">' : esc(ini(o.name))) + '</span><span class="vi-init">' + (o.init == null ? '–' : o.init) + '</span>'
+        + '<span class="vi-av" style="background:' + attr(col) + '">' + (chipImg(x, t) ? '<img alt="" src="' + attr(Mesa.imgUrl(chipImg(x, t))) + '">' : !x.pc && window.Retratos ? '<svg class="gi"><use href="#gi-' + Retratos.typeIcon(x.n.binfo ? x.n.binfo.type : x.n.ty) + '"/></svg>' : esc(ini(o.name))) + '</span><span class="vi-init">' + (o.init == null ? '–' : o.init) + '</span>'
         + (p != null ? '<i class="vi-hp"><i style="width:' + Math.round(p * 100) + '%;background:' + (p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a') + '"></i></i>' : '') + '<span class="vi-n">' + esc(String(o.name).split(' ')[0]) + '</span></button>';
     }).join('') + '</div>';
     var on = el.querySelector('.vi-chip.turn'), ls = el.querySelector('.vi-list'); if (on && ls) ls.scrollLeft = Math.max(0, on.offsetLeft - (ls.clientWidth - on.offsetWidth) / 2);
@@ -381,7 +382,13 @@ var Mapas = (function(){
     }
     return h + '</div>';
   }
-  function avatar(t){ var c = t.color || '#8c2626'; return '<span class="tok-av" style="background:' + attr(c) + '">' + (t.img ? '<img alt="" src="' + attr(Mesa.imgUrl(t.img)) + '">' : esc(ini(t.name))) + '</span>'; }
+  /* La imagen de una ficha: la que se le puso; si no, la ficha del jugador o la imagen del enemigo */
+  function tokImg(t){
+    if (t.img) return t.img; var r = room(); if (!r || !t.ref || t.comp) return null;
+    var m = r.members.filter(function(x){ return x.id === t.ref; })[0]; if (m && m.char) return m.char.tok || m.char.img || null;
+    var n = (r.npcs || []).filter(function(x){ return x.id === t.ref; })[0]; return n && n.img || null;
+  }
+  function avatar(t){ var c = t.color || '#8c2626', id = tokImg(t); return '<span class="tok-av" style="background:' + attr(c) + '">' + (id ? '<img alt="" src="' + attr(Mesa.imgUrl(id)) + '">' : esc(ini(t.name))) + '</span>'; }
   function ini(n){ return String(n || '?').split(/\s+/).slice(0, 2).map(function(w){ return w.charAt(0); }).join('').toUpperCase(); }
   /* Lo que se sabe de una ficha: nombre, PG o cómo se ve, si es su turno */
   function tokInfo(t){
@@ -467,7 +474,7 @@ var Mapas = (function(){
   }
   function tokScene(t, v, late){
     var info = tokInfo(t);
-    return {id:t.id, x:t.x, y:t.y, s:t.s || 1, color:t.color || '#8c2626', img:t.img ? Mesa.imgUrl(t.img) : null, ini:ini(info.name), name:info.name, pct:info.pct, turn:info.turn, down:info.down, hidden:!!t.hidden, sel:selTok === t.id, late:late, label:v.s >= 40 || selTok === t.id || info.turn};
+    return {id:t.id, x:t.x, y:t.y, s:t.s || 1, color:t.color || '#8c2626', img:tokImg(t) ? Mesa.imgUrl(tokImg(t)) : null, ini:ini(info.name), name:info.name, pct:info.pct, turn:info.turn, down:info.down, hidden:!!t.hidden, sel:selTok === t.id, late:late, label:v.s >= 40 || selTok === t.id || info.turn};
   }
   function bgImage(mp){
     if (!mp.bg) return null; var key = mp.bg.img || ('d:' + (mp.bg.data || '').length);
@@ -498,7 +505,7 @@ var Mapas = (function(){
     c.save(); if (t.hidden) c.globalAlpha = 0.5; if (ghost) c.globalAlpha = 0.85;
     if (info.turn) { c.beginPath(); c.arc(cx, cy, rad + Math.max(3, v.s * 0.12), 0, Math.PI * 2); c.fillStyle = 'rgba(255,214,110,.55)'; c.fill(); }
     c.beginPath(); c.arc(cx, cy, rad, 0, Math.PI * 2); c.fillStyle = t.color || '#8c2626'; c.fill();
-    var im = t.img && tokImage(t.img);
+    var tid = tokImg(t), im = tid && tokImage(tid);
     if (im) { c.save(); c.beginPath(); c.arc(cx, cy, rad - 1.5, 0, Math.PI * 2); c.clip(); var k = Math.max(rad * 2 / im.naturalWidth, rad * 2 / im.naturalHeight); c.drawImage(im, cx - im.naturalWidth * k / 2, cy - im.naturalHeight * k / 2, im.naturalWidth * k, im.naturalHeight * k); c.restore(); }
     else { c.fillStyle = '#fff'; c.font = '700 ' + Math.max(8, rad * 0.8) + 'px Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ini(info.name), cx, cy + 1); }
     c.lineWidth = Math.max(1.5, v.s * 0.06); c.strokeStyle = selTok === t.id ? '#ffd66e' : 'rgba(20,12,8,.85)'; if (t.hidden) c.setLineDash([4, 3]); c.stroke(); c.setLineDash([]);

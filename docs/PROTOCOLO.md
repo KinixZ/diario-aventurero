@@ -30,7 +30,7 @@ HTTP:
 | `session.start` | `title?` | DM | Empieza la sesión N+1. Todos reciben `live`. |
 | `session.title` | `title` | DM | Título de la sesión en curso. |
 | `session.end` | — | DM | Termina la sesión: cada quien recibe `ended` con su resumen. |
-| `char` | `char` | jugador | Actualiza su resumen público (lo manda el diario cada vez que cambia la hoja). |
+| `char` | `char` | jugador | Actualiza su resumen público (lo manda el diario cada vez que cambia la hoja). Incluye `img` (retrato 3:4), `tok` (ficha en círculo), ids de imágenes ya subidas a la campaña, y `form` (la forma que lleva puesta). |
 
 Fuera de sesión todo sigue disponible: combate, chat, pizarra, tablero, mapas y bestiario. Los mensajes del chat llevan `ses` (número de sesión, o 0 fuera de sesión); el resumen de `ended` usa solo los de esa sesión.
 
@@ -39,7 +39,7 @@ Fuera de sesión todo sigue disponible: combate, chat, pizarra, tablero, mapas y
 | `t` | Campos | Quién | Qué hace |
 |---|---|---|---|
 | `init` | `value`, `id?` | jugador (el suyo) / DM (cualquiera) | Pone la iniciativa; reordena. |
-| `npc.add` | `name`, `ac`, `hp`, `init?`, `count?`, `hidden?`, `ref?`, `initMod?`, `formula?`, `binfo?` | DM | Agrega uno o varios PNJ ("Goblin 1", "Goblin 2"…). `ref` = `Nombre|LIBRO` del Manual; `binfo: {type, size}` es lo que se anota en el encuentro. |
+| `npc.add` | `name`, `ac`, `hp`, `init?`, `count?`, `hidden?`, `ref?`, `initMod?`, `formula?`, `binfo?`, `img?` | DM | Agrega uno o varios PNJ ("Goblin 1", "Goblin 2"…). `ref` = `Nombre|LIBRO` del Manual; `binfo: {type, size}` es lo que se anota en el encuentro. |
 | `npc.del` | `id` | DM | Quita un PNJ. |
 | `npc.set` | `id`, `hp?`, `hpMax?`, `delta?`, `ac?`, `name?`, `conds?` | DM | Ajusta a mano un enemigo. |
 | `npc.reveal` | `id` | DM | Muestra u oculta un PNJ a los jugadores. |

@@ -222,3 +222,21 @@ test('ambiente de la mesa: el DM lo pone, todos lo ven y se guarda', async () =>
   R.act(c, dm.id, { t: 'amb.set', amb: null });
   assert.equal(R.view(c, a.id).amb, null);
 });
+
+test('retratos: el jugador manda su retrato y su forma; los enemigos llevan imagen y tipo', async () => {
+  const { R, c, dm, a } = await mesa();
+  const im = R.noteImage(c, a.id, 1000, 'image/jpeg'), tk = R.noteImage(c, a.id, 500, 'image/jpeg');
+  R.act(c, a.id, { t: 'char', char: { ...pc('Lyra', 30), img: im.id, tok: tk.id, form: 'Alas celestiales' } });
+  let me = R.view(c, dm.id).members.find((m) => m.id === a.id);
+  assert.equal(me.char.img, im.id); assert.equal(me.char.tok, tk.id); assert.equal(me.char.form, 'Alas celestiales');
+  // ids raros no pasan
+  R.act(c, a.id, { t: 'char', char: { ...pc('Lyra', 30), img: '../../etc', tok: '<x>' } });
+  me = R.view(c, dm.id).members.find((m) => m.id === a.id); assert.equal(me.char.img, null); assert.equal(me.char.tok, null); assert.equal(me.char.form, null);
+  // enemigo con imagen de la campaña; una que no existe se ignora
+  const gi = R.noteImage(c, dm.id, 800, 'image/png');
+  R.act(c, dm.id, { t: 'npc.add', name: 'Goblin', ac: 15, hp: 7, img: gi.id, binfo: { type: 'humanoide', size: 'pequeño' } });
+  R.act(c, dm.id, { t: 'npc.add', name: 'Ogro', ac: 11, hp: 59, img: 'noexiste' });
+  const npcs = R.view(c, a.id).npcs;
+  assert.equal(npcs.find((n) => n.name === 'Goblin').img, gi.id); assert.equal(npcs.find((n) => n.name === 'Goblin').ty, 'humanoide');
+  assert.equal(npcs.find((n) => n.name === 'Ogro').img, null);
+});
