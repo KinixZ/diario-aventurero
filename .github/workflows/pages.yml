@@ -24,6 +24,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      # el build usa esbuild, PixiJS, las fuentes y los iconos: hay que instalar antes de compilar
+      - run: npm ci
       - run: node tools/build-web.mjs
         env:
           SALA_URL: ${{ vars.SALA_URL }}

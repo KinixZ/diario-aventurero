@@ -8,7 +8,7 @@
 
   <section class="page page-right" id="pageRight">
     <header class="head" id="head">
-      <button class="lvl btn-lvl" type="button" data-act="levelup" aria-label="Subir de nivel o editar el personaje" title="Subir de nivel o editar"><b id="hLvl">1</b><span>nivel</span></button>
+      <button class="lvl btn-lvl" type="button" data-act="levelup" aria-label="Subir de nivel o editar el personaje" title="Subir de nivel o editar"><span class="lvl-pt" id="hPt"></span><b id="hLvl">1</b><span>nivel</span></button>
       <div class="who">
         <h1 id="hName">Diario del Aventurero</h1>
         <p id="hSub"></p>
@@ -165,6 +165,10 @@
       <div class="sheet-h"><h2 id="abTitle">Nueva habilidad homebrew</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="scroll"><form id="abForm" class="hbform" novalidate></form></div>
     </div>
+    <div class="sheet" id="ptSheet" hidden role="dialog" aria-labelledby="ptTitle">
+      <div class="sheet-h"><h2 id="ptTitle">Retratos y formas</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll" id="ptBody"></div>
+    </div>
     <div class="sheet" id="quickSheet" hidden role="dialog" aria-labelledby="quickTitle">
       <div class="sheet-h"><h2 id="quickTitle">Acceso rápido del combate</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="scroll"><p class="note" style="margin-top:0">Marca lo que quieres tener a mano en «Mi turno». Al usarlo se gasta el espacio, la carga o el objeto, y se marca tu acción.</p><div id="quickList" class="q-picks"></div></div>
@@ -224,6 +228,10 @@
           <span class="label">calidad gráfica</span>
           <p style="margin:6px 0 0;font-size:15px">Qué tanto trabaja tu aparato al dibujar el mapa, las luces y los efectos.</p>
           <div id="gfxBox"></div>
+        </section>
+        <section>
+          <span class="label">imágenes de monstruos</span>
+          <div id="monImgBox"></div>
         </section>
         <section>
           <span class="label">créditos</span>
@@ -319,6 +327,7 @@
     <button class="clasp" type="button" data-act="open" aria-label="Abrir diario"><span></span></button>
     <span class="eyebrow">diario del</span>
     <h2>Aventurero</h2>
+    <div class="cv-pt" id="cvPt" hidden></div>
     <svg class="emblem" viewBox="0 0 150 150" role="img" aria-label="Emblema">
       <circle class="e-ring" cx="75" cy="75" r="70" stroke-width="2"/>
       <circle class="e-ring" cx="75" cy="75" r="60" stroke-width="1" stroke-dasharray="3 5"/>

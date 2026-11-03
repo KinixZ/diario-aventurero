@@ -1,0 +1,83 @@
+/* ==================== RETRATOS ==================== */
+.pt-img{position:relative;display:block;background:center/cover no-repeat;flex:none;overflow:hidden}
+.pt-img.tok{border-radius:50%}
+.pt-img.empty{background:radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--oath) 55%, var(--iron-3)), var(--iron-1) 75%)}
+.pt-ph{position:absolute;inset:0;display:grid;place-items:center;color:color-mix(in srgb, var(--gold-hi) 85%, #fff)}
+.pt-ph .gi{width:62%;height:62%;fill:currentColor;filter:drop-shadow(0 2px 2px rgba(0,0,0,.6));opacity:.9}
+.gi{fill:currentColor}
+
+/* ---------- Medallón del encabezado: la cara y el nivel en una gema ---------- */
+.lvl .lvl-pt{display:none}
+.lvl.has-pt{padding:0;overflow:visible}
+.lvl.has-pt .lvl-pt{display:block;position:absolute;inset:0;border-radius:50%;overflow:hidden}
+.lvl.has-pt .lvl-pt .pt-img{width:100%;height:100%}
+.lvl.has-pt b{position:absolute;right:-6px;bottom:-6px;z-index:1;min-width:22px;height:22px;padding:0 4px;display:grid;place-items:center;border-radius:11px;font-size:13px!important;
+  background:var(--enamel-grad);color:var(--on-accent);text-shadow:none;box-shadow:0 0 0 1.5px var(--gild),0 2px 4px rgba(0,0,0,.5)}
+.lvl.has-pt>span:not(.lvl-pt){display:none}
+
+/* ---------- Portada: retrato en un arco dorado ---------- */
+.cv-pt{position:relative;z-index:1;width:min(210px, 52vw);aspect-ratio:3/4;margin:-6px 0 4px;padding:9px;
+  background:var(--gild-grad);border-radius:50% 50% 6px 6px / 38% 38% 6px 6px;box-shadow:0 10px 30px -8px rgba(0,0,0,.75),0 0 30px color-mix(in srgb, var(--gold-hi) 18%, transparent)}
+.cv-pt::before{content:"";position:absolute;inset:4px;border-radius:50% 50% 4px 4px / 38% 38% 4px 4px;border:1px solid color-mix(in srgb, var(--iron-0) 60%, transparent);pointer-events:none;z-index:2}
+.cv-pt .pt-img{width:100%;height:100%;border-radius:50% 50% 3px 3px / 38% 38% 3px 3px;box-shadow:inset 0 0 0 2px var(--iron-1),inset 0 0 30px rgba(0,0,0,.45)}
+.cv-pt .cv-form{position:absolute;left:50%;bottom:-12px;transform:translateX(-50%);z-index:3;padding:2px 14px;font-family:var(--display);font-size:11px;letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;color:var(--gold-hi);background:var(--iron-grad);clip-path:polygon(0 0,100% 0,94% 50%,100% 100%,0 100%,6% 50%)}
+.cv-pt .cv-form:empty{display:none}
+.cover.has-pt .emblem{display:none}
+.cover.has-pt h2{margin-bottom:16px!important}
+.cover.has-pt .name{margin-top:18px!important}
+@media (min-width:900px){ .cv-pt{width:230px} }
+
+/* ---------- Tarjeta de la hoja ---------- */
+.pt-card{display:flex;gap:14px;align-items:center;margin-bottom:14px}
+.pt-frame{flex:none;width:104px;aspect-ratio:3/4;padding:5px;border:0;background:var(--gild-grad);border-radius:50% 50% 4px 4px / 38% 38% 4px 4px;box-shadow:0 6px 14px -6px rgba(0,0,0,.6);cursor:pointer;transition:transform .15s}
+.pt-frame:active{transform:scale(.97)}
+.pt-frame .pt-img{width:100%;height:100%;border-radius:50% 50% 2px 2px / 38% 38% 2px 2px}
+.pt-info{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.pt-name{font-family:var(--deco);font-size:21px;line-height:1.05}
+.pt-info small{color:var(--ink-2);font-size:14px}
+.pt-chips{margin:2px 0}
+.pt-chips .chip.on{background:var(--enamel-grad);color:var(--on-accent);border-color:var(--gild)}
+
+/* ---------- Hoja de retratos ---------- */
+.pt-hero{display:flex;gap:16px;align-items:center;margin-bottom:16px}
+.pt-hero .pt-img.big{width:132px;aspect-ratio:3/4;border-radius:50% 50% 4px 4px / 38% 38% 4px 4px;box-shadow:0 0 0 4px var(--gild),0 0 0 5px var(--gild-lo),0 10px 22px -8px rgba(0,0,0,.6)}
+.pt-hero-t{display:flex;flex-direction:column;gap:8px;align-items:flex-start;min-width:0}
+.pt-hero-t b{font-family:var(--deco);font-size:22px}
+.pt-hero-t small{color:var(--ink-2)}
+.pickbtn{position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center}
+.pickbtn input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.pt-forms{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:6px 0}
+.pt-form{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:3px;border:1px solid var(--card-rule);background:var(--card-bg);box-shadow:var(--lift)}
+.pt-form.on{border-color:var(--gild);box-shadow:0 0 0 2px var(--glow-soft),var(--lift)}
+.pt-pick{display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:0;text-align:left;font-family:var(--display);font-size:13.5px;color:var(--ink)}
+.pt-pick .pt-img{width:48px;height:48px;box-shadow:0 0 0 2px var(--gild),0 2px 5px rgba(0,0,0,.4)}
+.pt-form.on .pt-pick .pt-img{box-shadow:0 0 0 2px var(--gold-hi),0 0 12px var(--glow-soft)}
+.pt-fb{display:flex;gap:6px}
+.pt-fb .icon-btn{width:36px;height:36px}
+.pt-sug{margin:6px 0}
+.pt-sug small{font-family:var(--display);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+.pt-add{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.pt-add .gi{width:18px;height:18px}
+.pt-add.got{opacity:.45}
+.pt-ed{display:flex;flex-direction:column;gap:10px}
+.pt-stage-w{border-radius:4px;overflow:hidden;box-shadow:0 0 0 1px var(--gild),inset 0 0 0 1px rgba(0,0,0,.4)}
+.pt-stage{display:block;width:100%;touch-action:none;cursor:grab;background:#120d0b}
+.pt-stage:active{cursor:grabbing}
+
+/* ---------- Combate: la cara junto a la CA ---------- */
+.vt-pt{flex:none;display:flex;flex-direction:column;align-items:center;gap:2px;border:0;background:transparent;padding:0;color:var(--ink-2)}
+.vt-pt .pt-img{width:52px;height:52px;box-shadow:0 0 0 2px var(--gild),0 0 0 3px var(--gild-lo),0 4px 10px rgba(0,0,0,.6)}
+.vt-pt small{font-family:var(--display);font-size:9.5px;letter-spacing:.06em;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- Caras en listas, chat y campaña ---------- */
+.sala-av{flex:none;width:34px;height:34px;border-radius:50%;overflow:hidden;display:grid;place-items:center;background:var(--iron-2);color:var(--gold-hi);font-family:var(--display);font-size:12px;box-shadow:0 0 0 1.5px var(--gild),0 2px 4px rgba(0,0,0,.4)}
+.sala-av img{width:100%;height:100%;object-fit:cover}
+.sala-av.npc{background:radial-gradient(circle at 50% 35%, #7a2a24, #2a0f0c)}
+.sala-av.ic .gi{width:70%;height:70%}
+.msg-av{display:inline-block;width:22px;height:22px;border-radius:50%;overflow:hidden;vertical-align:middle;margin-right:6px;box-shadow:0 0 0 1px var(--gild)}
+.msg-av img{width:100%;height:100%;object-fit:cover;display:block}
+.camp-av.pic{padding:0;overflow:hidden}
+.camp-av.pic img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
+.camp-av.xs{display:inline-grid;width:18px;height:18px;margin-right:4px;vertical-align:middle;border-radius:50%;overflow:hidden}
+.vi-av img{object-fit:cover}
+.vi-av .gi{width:72%;height:72%;color:#f6dca0;filter:drop-shadow(0 1px 1px rgba(0,0,0,.6))}

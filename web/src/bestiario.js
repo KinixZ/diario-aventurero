@@ -183,8 +183,11 @@ var Bestiario = (function(){
     var v = function(n){ return f.elements[n].type === 'checkbox' ? f.elements[n].checked : f.elements[n].value.trim(); };
     var hp = parseInt(v('hp'), 10), count = Math.max(1, Math.min(12, parseInt(v('count'), 10) || 1));
     if (!(hp > 0)) { f.elements.hp.focus(); return; }
-    var ok = Sala.send({t:'npc.add', name:v('name') || m.name, ac:parseInt(v('ac'), 10) || acOf(m), hp:hp, init:v('init'), count:count, hidden:v('hidden'), ref:m.name + '|' + m.source, initMod:initOf(m), formula:m.hp && m.hp.formula || null, binfo:{type:TYPE_ES[m._t] || m._t || '', size:SIZE_ES[(m.size || [])[0]] || ''}});
-    if (ok) { Sala.toast((count > 1 ? count + ' × ' : '') + (v('name') || m.name) + ' en la iniciativa.'); if (window.Diario) Diario.closeSheets(); view.ref = null; }
+    var msg = {t:'npc.add', name:v('name') || m.name, ac:parseInt(v('ac'), 10) || acOf(m), hp:hp, init:v('init'), count:count, hidden:v('hidden'), ref:m.name + '|' + m.source, initMod:initOf(m), formula:m.hp && m.hp.formula || null, binfo:{type:TYPE_ES[m._t] || m._t || '', size:SIZE_ES[(m.size || [])[0]] || ''}};
+    var label = (count > 1 ? count + ' × ' : '') + (v('name') || m.name), btn = f.querySelector('[type="submit"]'); if (btn) btn.disabled = true;
+    // la imagen del monstruo (carpeta 5etools-img del DM), sin hacer esperar más de 4 segundos
+    var img = window.Retratos ? Promise.race([Retratos.monster(msg.ref), new Promise(function(res){ setTimeout(function(){ res(null); }, 4000); })]) : Promise.resolve(null);
+    img.then(function(id){ if (id) msg.img = id; var ok = Sala.send(msg); if (btn) btn.disabled = false; if (ok) { Sala.toast(label + ' en la iniciativa.'); if (window.Diario) Diario.closeSheets(); view.ref = null; } });
   });
 
   /* ---------- Para el bestiario del grupo ---------- */

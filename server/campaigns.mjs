@@ -62,8 +62,13 @@ export function cleanChar(c = {}) {
     conc: str(c.conc, 60) || null,
     conds: Array.isArray(c.conds) ? c.conds.filter(x => CONDITIONS.includes(x)).slice(0, 16) : [],
     comps: Array.isArray(c.comps) ? c.comps.slice(0, 4).map(k => ({ name: str(k.name, 40), ac: int(k.ac, 0, 40, 10), hp: int(k.hp, 0, 999, 0), hpMax: int(k.hpMax, 1, 999, 1) })) : [],
+    // retrato (3:4) y ficha (círculo) subidos a la campaña, y la forma que lleva puesta
+    img: IMG_ID_RE.test(c.img || '') ? c.img : null,
+    tok: IMG_ID_RE.test(c.tok || '') ? c.tok : null,
+    form: str(c.form, 40) || null,
   };
 }
+const IMG_ID_RE = /^[\w-]{1,30}$/;
 
 /* ---------- Niebla de guerra: un bit por casilla (1 = descubierta) ---------- */
 /* Ambiente de la mesa que pone el DM: un sonido de fondo, una música y una pista propia (enlace http/https) */
@@ -293,7 +298,8 @@ export class Campaigns {
           const hpMax = int(msg.hp, 1, 9999, 10);
           const n = { id: 'n' + id(4), name: (str(msg.name, 40) || 'Enemigo') + (count > 1 ? ' ' + (i + 1) : ''), ac: int(msg.ac, 0, 40, 12), hp: hpMax, hpMax, temp: 0, init: msg.init == null || msg.init === '' ? null : int(msg.init, -10, 50, 0), conds: [], hidden: !!msg.hidden,
             ref: msg.ref ? str(msg.ref, 120) : null, initMod: int(msg.initMod, -10, 20, 0), formula: msg.formula ? str(msg.formula, 30) : null,
-            binfo: msg.binfo && typeof msg.binfo === 'object' ? { type: str(msg.binfo.type, 40), size: str(msg.binfo.size, 40) } : null };
+            binfo: msg.binfo && typeof msg.binfo === 'object' ? { type: str(msg.binfo.type, 40), size: str(msg.binfo.size, 40) } : null,
+            img: msg.img && c.images.has(str(msg.img, 30)) ? str(msg.img, 30) : null };
           c.npcs.set(n.id, n);
           if (!n.hidden && i === 0) this.autoBeast(c, n);
         }
@@ -315,6 +321,7 @@ export class Campaigns {
         if (msg.hp != null) n.hp = int(msg.hp, 0, n.hpMax, n.hp);
         if (msg.delta != null) { const d = int(msg.delta, -9999, 9999, 0); if (d < 0) applyTo(n, 'damage', -d); else applyTo(n, 'heal', d); }
         if (msg.ac != null) n.ac = int(msg.ac, 0, 40, n.ac);
+        if (msg.img !== undefined) n.img = msg.img && c.images.has(str(msg.img, 30)) ? str(msg.img, 30) : null;
         if (msg.name != null && str(msg.name, 40)) n.name = str(msg.name, 40);
         if (Array.isArray(msg.conds)) n.conds = msg.conds.filter(x => CONDITIONS.includes(x)).slice(0, 16);
         break;
@@ -671,7 +678,7 @@ export class Campaigns {
 
 /* Lo que ven los jugadores de un enemigo según lo que eligió el DM */
 function npcForPlayers(n, mode) {
-  const o = { id: n.id, name: n.name, init: n.init, conds: n.conds, show: mode };
+  const o = { id: n.id, name: n.name, init: n.init, conds: n.conds, show: mode, img: n.img || null, ty: n.binfo ? n.binfo.type : null };
   if (mode === 'state') o.state = hpState(n);
   else if (mode === 'bar' || mode === 'pct') { o.pct = n.hp <= 0 ? 0 : Math.max(1, Math.round(n.hp / n.hpMax * 100)); o.state = n.hp <= 0 ? 'caído' : null; }
   else if (mode === 'num') { o.hp = n.hp; o.hpMax = n.hpMax; o.temp = n.temp; o.state = n.hp <= 0 ? 'caído' : null; }
