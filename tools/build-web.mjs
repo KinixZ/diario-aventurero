@@ -13,10 +13,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const artifact = process.argv.includes('--artifact');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-const css = readdirSync(join(root, 'styles')).filter(f => f.endsWith('.css')).sort().map(f => read('styles/' + f)).join('\n');
+let css = readdirSync(join(root, 'styles')).filter(f => f.endsWith('.css')).sort().map(f => read('styles/' + f)).join('\n');
 const icons = read('assets/icons.svg');
 const body = read('body.html');
-const order = ['gfx.js', 'lib.js', 'render.js', 'rules.js', 'app.js', 'sala.js', 'mesa.js', 'campana.js', 'bestiario.js', 'grupo.js', 'cronica.js', 'mapas.js'];
+const order = ['gfx.js', 'fx.js', 'sonido.js', 'iconos.js', 'lib.js', 'render.js', 'rules.js', 'app.js', 'sala.js', 'mesa.js', 'campana.js', 'bestiario.js', 'grupo.js', 'cronica.js', 'mapas.js'];
 const js = order.map(f => `/* ---- ${f} ---- */\n` + read('src/' + f)).join('\n');
 // Motor del mapa (PixiJS): archivo aparte que se baja solo al abrir un mapa. El artefacto de claude.ai usa Canvas 2D.
 const plain = process.argv.includes('--plain');
@@ -28,12 +28,48 @@ if (!artifact) {
   glHash = createHash('sha1').update(gl).digest('hex').slice(0, 10);
   console.log(`Motor del mapa: mapa-gl.js (${(gl.length / 1024).toFixed(0)} KB)`);
 }
+// Iconos de juego (game-icons.net, CC BY 3.0): solo los que lista web/src/iconos.js, en un archivo aparte.
+// En el artefacto van dentro de la página (window.DIARIO_ICONS) porque no hay archivos aparte.
+let iconsHash = '', iconsInline = '';
+{
+  const src = readFileSync(join(root, 'src', 'iconos.js'), 'utf8');
+  const list = JSON.parse(src.match(/var GI = (\[[\s\S]*?\]);/)[1].replace(/'/g, '"'));
+  const gi = JSON.parse(readFileSync(join(root, '..', 'node_modules', '@iconify-json', 'game-icons', 'icons.json'), 'utf8'));
+  const miss = list.filter((n) => !gi.icons[n]);
+  if (miss.length) throw new Error('Iconos que no existen en game-icons: ' + miss.join(', '));
+  const sprite = '<svg xmlns="http://www.w3.org/2000/svg">' + [...new Set(list)].map((n) => `<symbol id="gi-${n}" viewBox="0 0 ${gi.width || 512} ${gi.height || 512}">${gi.icons[n].body}</symbol>`).join('') + '</svg>';
+  iconsHash = createHash('sha1').update(sprite).digest('hex').slice(0, 10);
+  if (artifact) iconsInline = `window.DIARIO_ICONS = ${JSON.stringify(sprite)};`;
+  else { mkdirSync(join(root, 'dist'), { recursive: true }); writeFileSync(join(root, 'dist', 'iconos.svg'), sprite); }
+  console.log(`Iconos de juego: ${list.length} (${(sprite.length / 1024).toFixed(0)} KB)`);
+}
 const sha = process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || '';
-const config = `window.DIARIO_CONFIG = ${JSON.stringify({ salaUrl: process.env.SALA_URL || '', artifact, version: sha ? sha.slice(0, 7) : 'dev', gl: glHash })};`;
+const config = `window.DIARIO_CONFIG = ${JSON.stringify({ salaUrl: process.env.SALA_URL || '', artifact, version: sha ? sha.slice(0, 7) : 'dev', gl: glHash, icons: iconsHash })};${iconsInline}`;
 // Minificado: los scripts siguen siendo globales (sin "format"), así que Diario, Sala, Mapas… conservan su nombre.
 const jsOut = plain ? js : transformSync(js, { minify: true, target: 'es2017', legalComments: 'none', charset: 'utf8' }).code;
-const fonts = '<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap">';
+// Fuentes propias (sin Google): se sirven desde el servidor, funcionan sin internet y se ven igual en todos los teléfonos.
+// En el artefacto de claude.ai no hay archivos aparte, así que ahí se piden a Google Fonts como antes.
+const FONTS = [
+  ['Cinzel', 'cinzel', 'cinzel', [[400, 'normal'], [600, 'normal'], [700, 'normal']]],
+  ['Cinzel Decorative', 'cinzel-decorative', 'cinzel-decorative', [[700, 'normal']]],
+  ['EB Garamond', 'eb-garamond', 'eb-garamond', [[400, 'normal'], [500, 'normal'], [600, 'normal'], [400, 'italic']]],
+  ['Caveat', 'caveat', 'caveat', [[500, 'normal'], [600, 'normal']]],
+];
+const nm = join(root, '..', 'node_modules', '@fontsource');
+let fontCss = '';
+const fonts = artifact
+  ? '<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap">'
+  : '<link rel="preload" href="fonts/cinzel-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>\n<link rel="preload" href="fonts/eb-garamond-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>';
+if (!artifact) {
+  mkdirSync(join(root, 'dist', 'fonts'), { recursive: true });
+  for (const [family, pkg, file, variants] of FONTS) for (const [w, st] of variants) {
+    const f = `${file}-latin-${w}-${st}.woff2`;
+    cpSync(join(nm, pkg, 'files', f), join(root, 'dist', 'fonts', f));
+    fontCss += `@font-face{font-family:'${family}';font-style:${st};font-weight:${w};font-display:swap;src:url(fonts/${f}) format('woff2')}\n`;
+  }
+}
 
+css = fontCss + css;
 const cssOut = plain ? css : transformSync(css, { loader: 'css', minify: true, charset: 'utf8' }).code;
 const inner = `<title>Diario del Aventurero</title>\n${fonts}\n<style>${cssOut}</style>\n${icons}\n${body}\n<script>${config}\n${jsOut}\n</script>\n`;
 const page = artifact ? inner : `<!doctype html>

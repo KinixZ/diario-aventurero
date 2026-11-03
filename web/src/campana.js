@@ -113,6 +113,7 @@ var Campana = (function(){
       + tile('tablero', 'i-pin', 'Tablero', quests.length ? quests.length + ' misi' + (quests.length === 1 ? 'ón' : 'ones') + ' abiertas' : 'Misiones y PNJ')
       + tile('bestiario', 'i-paw', 'Bestiario', (r.beasts || []).length + ' encuentro' + ((r.beasts || []).length === 1 ? '' : 's'))
       + '</div>';
+    if (r.amb && window.Sfx) { var sc = Sfx.cfg(); h += fold('pj-amb', {icon:'i-music', title:'Ambiente', sum:'Suena: ' + esc(Sfx.nowPlaying(r.amb)), body:[['ambiente','Ambiente'],['musica','Música']].map(function(x){ return '<label class="sfx-vol"><span><b>' + x[1] + '</b></span><input type="range" min="0" max="100" step="5" data-sfxvol="' + x[0] + '" value="' + Math.round(sc[x[0]] * 100) + '" aria-label="Tu volumen: ' + x[1] + '"><output>' + Math.round(sc[x[0]] * 100) + '</output></label>'; }).join('') + '<p class="note">' + (sc.on ? 'Es tu volumen: no cambia el de los demás.' : 'Tienes el sonido apagado en Ajustes.') + '</p>'}); }
     if (chars.length > 1) h += fold('pj-char', {icon:'i-shield', title:'Tu personaje', sum:'Cambia con qué hoja juegas', body:'<label class="fl">Tu personaje en esta campaña<select class="field" id="campChar">' + chars.map(function(c){ return '<option value="' + attr(c.id) + '"' + (c.active ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select></label><p class="note">Cambiarlo cambia la hoja que ven los demás.</p>'});
     h += fold('pj-camp', {icon:'i-banner', title:'La campaña', sum:'Código, quién está y salir', body:'<p class="note">Comparte el código <b class="camp-code">' + esc(r.code) + '</b> con quien falte.</p><div class="dm-row"><button class="btn" type="button" data-act="campshare">Compartir código</button><button class="btn" type="button" data-act="campforget" data-code="' + attr(r.code) + '">Salir de la campaña</button></div>'});
     return h;
@@ -129,6 +130,8 @@ var Campana = (function(){
     h += fold('dm-map', {cls:'dm-box', icon:'i-map', title:'Mapa en pantalla', sum: sn ? 'Todos ven: ' + esc(sn) : maps.length ? 'Nadie tiene un mapa en pantalla' : 'Aún no hay mapas', body: maps.length
       ? '<div class="dm-row"><select class="field" id="campScene" aria-label="Mapa">' + maps.map(function(m){ return '<option value="' + attr(m.id) + '"' + (m.id === r.scene ? ' selected' : '') + '>' + esc(m.name) + (m.hidden ? ' (oculto)' : '') + '</option>'; }).join('') + '</select></div><div class="dm-row"><button class="btn main" type="button" data-act="campscene">Mostrar a todos</button><button class="btn" type="button" data-act="campopenmap">Abrir</button>' + (r.scene ? '<button class="btn" type="button" data-act="campscenex">Quitar</button>' : '') + '</div><p class="note">Los mapas ocultos solo los ves tú.</p>'
       : '<p class="note">Crea uno en blanco o súbelo desde una imagen.</p><button class="btn main" type="button" data-act="campgo" data-v="mapas">Ir a Mapas</button>'});
+    // Ambiente de la mesa
+    h += fold('dm-amb', {cls:'dm-box', icon:'i-music', title:'Ambiente y música', sum: r.amb && window.Sfx ? 'Suena: ' + esc(Sfx.nowPlaying(r.amb)) : 'Silencio', body: ambBody(r)});
     // Combate
     h += fold('dm-fight', {cls:'dm-box', icon:'i-swords', title:'Combate', sum: r.round ? 'Ronda ' + r.round + (r.turnId ? ' · turno de ' + esc(nameOf(r, r.turnId)) : '') : npcs.length + ' enemigo' + (npcs.length === 1 ? '' : 's') + ' · ' + pcsReady + ' con iniciativa', body:'<div class="dm-row">'
       + (r.round ? '<button class="btn main dm-huge" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Siguiente turno</button>' : '<button class="btn main" type="button" data-act="salaturn" data-v="start"' + (r.order.length ? '' : ' disabled') + '>Empezar combate</button>')
@@ -142,6 +145,18 @@ var Campana = (function(){
       + '<form class="dm-row" data-form="campkey"><input class="field" name="key" type="password" placeholder="Nueva clave del DM" aria-label="Nueva clave del DM" autocomplete="new-password"><button class="btn sm" type="submit">Cambiar clave</button></form>' + (keyMsg ? '<p class="note">' + esc(keyMsg) + '</p>' : '')});
     return h + '</div>';
   }
+  /* Ambiente: sonido de fondo, música y pista propia para toda la mesa (cada quien ajusta su volumen) */
+  function ambBody(r){
+    if (!window.Sfx) return '<p class="note">Este navegador no tiene sonido.</p>';
+    var a = r.amb || {};
+    var grid = function(list, key){ return '<div class="amb-grid">' + list.map(function(x){ return '<button type="button" class="amb-b' + (a[key] === x[0] ? ' on' : '') + '" data-act="campamb" data-k="' + key + '" data-v="' + x[0] + '" aria-pressed="' + (a[key] === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>'; };
+    return '<span class="label">sonido de fondo</span>' + grid(Sfx.AMB, 'k') + '<span class="label" style="margin-top:10px">música</span>' + grid(Sfx.MUS, 'm')
+      + '<label class="sfx-vol amb-vol"><span><b>Volumen para todos</b></span><input type="range" min="0" max="100" step="5" id="campAmbVol" value="' + Math.round((a.v == null ? 1 : a.v) * 100) + '" aria-label="Volumen del ambiente para todos"><output>' + Math.round((a.v == null ? 1 : a.v) * 100) + '</output></label>'
+      + '<form class="dm-row" data-form="campambur"><input class="field" name="url" type="url" inputmode="url" value="' + attr(a.url || '') + '" placeholder="Pista propia: enlace a un .mp3 (opcional)" aria-label="Enlace a una pista de audio" autocomplete="off"><button class="btn sm" type="submit">' + (a.url ? 'Cambiar' : 'Poner') + '</button></form>'
+      + '<div class="dm-row"><button class="btn" type="button" data-act="campambx"' + (r.amb ? '' : ' disabled') + '>Silencio</button></div>'
+      + '<p class="note">Suena en el teléfono de cada quien (después de su primer toque). Cada jugador ajusta su volumen en Ajustes → Sonido.</p>';
+  }
+  function setAmb(o){ var r = room(); if (!r) return; var a = Object.assign({k:null, m:null, url:null, v:1}, r.amb || {}, o); Sala.send({t:'amb.set', amb:a}); }
   function nameOf(r, id){ var m = r.members.filter(function(x){ return x.id === id; })[0]; if (m) return m.char ? m.char.name : m.name; var n = r.npcs.filter(function(x){ return x.id === id; })[0]; return n ? n.name : ''; }
 
   /* ---------- Eventos ---------- */
@@ -150,6 +165,8 @@ var Campana = (function(){
     var b = ev.target.closest && ev.target.closest('[data-act]'); if (!b) return;
     var a = b.dataset.act; if (a.indexOf('camp') !== 0) return;
     var r = room();
+    if (a === 'campamb') { var cur = r && r.amb && r.amb[b.dataset.k]; var o = {}; o[b.dataset.k] = cur === b.dataset.v ? null : b.dataset.v; setAmb(o); return; }
+    if (a === 'campambx') { Sala.send({t:'amb.set', amb:null}); return; }
     if (a === 'campselect') { Sala.clearError(); showList = false; Sala.select(b.dataset.code); render(); }
     else if (a === 'campforget') {
       if (!b.dataset.sure) { b.dataset.sure = 1; if (b.classList.contains('icon-btn')) { b.style.borderColor = 'var(--bad)'; b.setAttribute('aria-label', 'Toca otra vez para olvidarla en este aparato'); } else b.textContent = '¿Seguro? Toca otra vez'; setTimeout(function(){ if (document.contains(b)) { delete b.dataset.sure; render(); } }, 4000); return; }
@@ -173,6 +190,7 @@ var Campana = (function(){
     if (k === 'campjoin') { var code = v('code').toUpperCase().replace(/[^A-Z]/g, ''); if (code.length !== 6) return fail('El código tiene 6 letras.', f.elements.code); Sala.clearError(); showList = false; Sala.join(code, {char:v('char') || null}); render(); }
     else if (k === 'campnew') { var key = f.elements.key.value; if (key.length < 4) return fail('La clave necesita al menos 4 caracteres.', f.elements.key); if (key !== f.elements.key2.value) return fail('Las dos claves no coinciden.', f.elements.key2); Sala.clearError(); showList = false; Sala.create(v('name') || 'Nueva campaña', key); render(); }
     else if (k === 'campdmopen') { var c2 = v('code').toUpperCase().replace(/[^A-Z]/g, ''); if (c2.length !== 6) return fail('El código tiene 6 letras.', f.elements.code); if (!f.elements.key.value) return fail('Escribe tu clave de DM.', f.elements.key); Sala.clearError(); showList = false; Sala.join(c2, {dmKey:f.elements.key.value}); render(); }
+    else if (k === 'campambur') { var u = v('url'); if (u && !/^https?:\/\//i.test(u)) return fail('El enlace empieza con http:// o https://', f.elements.url); setAmb({url:u || null}); }
     else if (k === 'campsesstart') Sala.send({t:'session.start', title:v('title')});
     else if (k === 'campsestitle') { Sala.send({t:'session.title', title:v('title')}); Sala.toast('Título guardado.'); }
     else if (k === 'campname') { if (v('name')) Sala.send({t:'camp.name', name:v('name')}); }
@@ -181,6 +199,7 @@ var Campana = (function(){
   document.addEventListener('change', function(ev){
     var t = ev.target;
     if (t.id === 'campAuto') Sala.send({t:'beast.auto', value:t.checked});
+    if (t.id === 'campAmbVol') setAmb({v:(+t.value) / 100});
     else if (t.id === 'campChar' && window.Diario) { if (Diario.useChar(t.value)) { Sala.sync(true); Sala.toast('Ahora juegas con ' + (t.options[t.selectedIndex] || {}).text + '.'); } }
   });
   document.addEventListener('input', function(ev){ if (ev.target.classList && ev.target.classList.contains('camp-codein')) { var p = ev.target.selectionStart; ev.target.value = ev.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 6); try { ev.target.setSelectionRange(p, p); } catch(e){} } });

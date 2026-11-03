@@ -6,11 +6,16 @@ El diario es una sola página sin framework. `tools/build-web.mjs` concatena est
 
 El motor del mapa va aparte: `web/gl/mapa-gl.js` (PixiJS / WebGL) se empaqueta en `web/dist/mapa-gl.js` y se baja solo al abrir un mapa (o en segundo plano al entrar a una campaña). Sin WebGL, en el artefacto o si falla, el mapa usa Canvas 2D con el mismo dibujo. El servidor manda los archivos de texto comprimidos con brotli o gzip.
 
+El estilo va en `web/styles/*.css` por orden de nombre. Los de la `z` son el sistema visual: materiales por estilo de color (`z0`), componentes (`z1`), hoja (`z2`), combate (`z3`), animaciones (`z4`) y ajustes (`z5`). Los ornamentos SVG (`a0-ornamentos.css`) se generan con `python3 tools/ornamentos.py` y se usan como máscaras, así toman el oro de cada estilo. Las fuentes viajan con la app (`@fontsource`).
+
 Los scripts se cargan en este orden y cada uno expone un objeto global:
 
 | Archivo | Global | Depende de | Qué hace |
 |---|---|---|---|
 | `gfx.js` | `Gfx` | — | Calidad gráfica (`localStorage['diario-gfx']`: automática, baja, media, alta), si hay WebGL, resolución y suavizado; carga `mapa-gl.js`. Pone `<html data-gfx>` para que el CSS recorte efectos. Su sección vive en Ajustes (`#gfxBox`). |
+| `fx.js` | `Fx` | — | Animaciones en tres niveles (`localStorage['diario-fx']`: sutil, dramática, apagadas; `<html data-motion>`). Su catálogo arma la tabla de Ajustes. `Fx.hp()` (daño y curación, lo llama `save()` cuando cambia la vida), `Fx.announce()` (estandarte de turno, ronda y combate; lo llama `sala.js`), `Fx.crit()`, `Fx.pop()`. |
+| `sonido.js` | `Sfx` | — | Sonido sintetizado con Web Audio (sin archivos): efectos, 8 ambientes y 4 músicas generativas, con volumen por canal (`localStorage['diario-sfx']`). `Sfx.ambience(room.amb)` pone lo que eligió el DM. |
+| `iconos.js` | `Iconos` | — | Iconos de game-icons.net (CC BY 3.0) para conjuros: por nombre, curación, daño, estado, etiquetas o escuela, sobre el color de la escuela. El build empaqueta solo la lista `GI` en `iconos.svg`, que se baja en segundo plano. |
 | `lib.js` | `Lib5e` | — | Importa JSON de 5etools o el paquete, resuelve `_copy`, indexa y busca por tipo, nombre y libro (prefiere 2024). Del bestiario solo guarda compañeros. |
 | `render.js` | `Render5e` | `Lib5e` | Convierte `entries` y etiquetas `{@spell …}` en HTML; los enlaces son `a.ref[data-ref="tipo\|nombre\|libro"]`. |
 | `rules.js` | `Rules5e` | `Lib5e` | `derive(C)` toma un personaje guardado y devuelve todo lo calculado (`D`) más la lista de elecciones pendientes. Sin DOM: se puede probar en Node. |

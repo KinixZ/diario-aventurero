@@ -204,3 +204,21 @@ test('tablero y pizarra', async () => {
   assert.throws(() => R.act(c, a.id, { t: 'draw.clear' }), /Solo el DM/);
   R.act(c, dm.id, { t: 'draw.clear' }); assert.equal(c.strokes.length, 0); assert.equal(c.pages.length, 1);
 });
+
+test('ambiente de la mesa: el DM lo pone, todos lo ven y se guarda', async () => {
+  const { R, c, dm, a } = await mesa();
+  assert.equal(R.view(c, a.id).amb, null);
+  assert.throws(() => R.act(c, a.id, { t: 'amb.set', amb: { k: 'lluvia' } }), /DM/);
+  R.act(c, dm.id, { t: 'amb.set', amb: { k: 'tormenta', m: 'combate', v: 0.7 } });
+  assert.deepEqual(R.view(c, a.id).amb, { k: 'tormenta', m: 'combate', url: null, v: 0.7 });
+  // lo desconocido se ignora y una pista propia solo con http(s)
+  R.act(c, dm.id, { t: 'amb.set', amb: { k: 'volcán', m: 'calma', url: 'javascript:alert(1)', v: 9 } });
+  assert.deepEqual(R.view(c, dm.id).amb, { k: null, m: 'calma', url: null, v: 1 });
+  R.act(c, dm.id, { t: 'amb.set', amb: { url: ' https://ejemplo.mx/pista.mp3 ' } });
+  assert.equal(R.view(c, a.id).amb.url, 'https://ejemplo.mx/pista.mp3');
+  // se guarda con la campaña y vuelve igual
+  const back = R.fromDoc(JSON.parse(JSON.stringify(R.toDoc(c))));
+  assert.equal(back.amb.url, 'https://ejemplo.mx/pista.mp3');
+  R.act(c, dm.id, { t: 'amb.set', amb: null });
+  assert.equal(R.view(c, a.id).amb, null);
+});

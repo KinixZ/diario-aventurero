@@ -1,0 +1,75 @@
+/* ==================== MATERIALES DEL SISTEMA VISUAL ====================
+   Cada estilo del diario define sus colores base (cuero, pergamino, tinta, oro, juramento).
+   Aquí salen de esos colores los materiales que usa la interfaz tipo videojuego:
+   hierro (marcos), oro (filos, remaches, ornamentos), esmalte (botones principales), brillo (luces y gemas).
+   Un estilo puede afinar cualquiera de ellos abajo.
+   Ojo: una variable derivada se calcula donde se declara. El modo combate (.combat) redefine el pergamino
+   con tonos oscuros, así que los derivados del pergamino se vuelven a declarar ahí. */
+:root{
+  --deco:'Cinzel Decorative', 'Cinzel', Georgia, serif;
+  /* hierro: marcos de metal oscuro */
+  --iron-0:color-mix(in srgb, var(--night) 82%, #000);
+  --iron-1:color-mix(in srgb, var(--leather-2) 62%, #121212);
+  --iron-2:color-mix(in srgb, var(--leather) 55%, #2b2b2b);
+  --iron-3:color-mix(in srgb, var(--leather-edge) 55%, #6d6d6d);
+  --iron-grad:linear-gradient(180deg, var(--iron-3) 0%, var(--iron-2) 9%, var(--iron-1) 55%, var(--iron-0) 100%);
+  /* oro: filos, remaches, ornamentos art déco */
+  --gild:var(--gold); --gild-hi:var(--gold-hi); --gild-lo:color-mix(in srgb, var(--gold) 55%, #000);
+  --gild-grad:linear-gradient(180deg, var(--gild-hi) 0%, var(--gild) 38%, var(--gild-lo) 52%, var(--gild) 70%, var(--gild-hi) 100%);
+  --gild-soft:color-mix(in srgb, var(--gold) 45%, transparent);
+  /* esmalte: botones principales y lo activo */
+  --enamel:var(--oath); --enamel-hi:color-mix(in srgb, var(--oath) 70%, #fff); --enamel-lo:color-mix(in srgb, var(--oath) 60%, #000);
+  --enamel-grad:linear-gradient(180deg, var(--enamel-hi) 0%, var(--enamel) 42%, var(--enamel-lo) 100%);
+  /* brillo: gemas, luces, foco */
+  --glow:color-mix(in srgb, var(--gold-hi) 75%, #fff);
+  --glow-soft:color-mix(in srgb, var(--gold-hi) 35%, transparent);
+  /* sombras */
+  --lift:0 1px 0 rgba(255,255,255,.35) inset, 0 -2px 0 rgba(0,0,0,.10) inset, 0 2px 4px -1px rgba(0,0,0,.28);
+  --sink:0 2px 4px rgba(0,0,0,.18) inset, 0 1px 0 rgba(255,255,255,.4);
+  --drop:0 10px 28px -10px rgba(0,0,0,.6), 0 2px 6px -2px rgba(0,0,0,.35);
+}
+/* pergamino de las tarjetas: depende del pergamino del lugar */
+:root,.combat{
+  --card-bg:linear-gradient(180deg, color-mix(in srgb, var(--parch-3) 70%, var(--parch-2)) 0%, var(--parch-2) 100%);
+  --card-rule:color-mix(in srgb, var(--gold) 55%, var(--rule));
+}
+/* Páginas oscuras y el modo combate: las luces van al revés (el brillo sale del borde de abajo) */
+:root[data-tone="dark"],.combat{
+  --lift:0 1px 0 rgba(255,255,255,.07) inset, 0 -2px 0 rgba(0,0,0,.35) inset, 0 2px 6px -1px rgba(0,0,0,.6);
+  --sink:0 2px 5px rgba(0,0,0,.5) inset, 0 1px 0 rgba(255,255,255,.05);
+  --card-bg:linear-gradient(180deg, color-mix(in srgb, var(--parch-3) 97%, #fff) 0%, var(--parch-2) 100%);
+  --card-rule:color-mix(in srgb, var(--gold) 45%, var(--rule));
+}
+
+/* ---------- Afinado por estilo ---------- */
+:root[data-skin="acero"]{ --iron-3:#7d8a99; --iron-2:#2c3644; --glow:#e3f0ff; }
+:root[data-skin="bosque"]{ --iron-3:#6f7a5a; --iron-2:#283224; --glow:#f3e7a4; }
+:root[data-skin="obsidiana"]{ --iron-1:#141218; --iron-2:#211e27; --iron-3:#4a4555; --glow:#ffe3a0; --gild-lo:#5a4520; }
+:root[data-skin="arcano"]{ --iron-2:#2a2140; --iron-3:#6f5f96; --glow:#e8dcff; --enamel-hi:#9a6fd0; }
+:root[data-skin="escarcha"]{ --iron-2:#1f3a4c; --iron-3:#7aa6bd; --glow:#e8fbff; }
+:root[data-skin="desierto"]{ --iron-2:#4a3420; --iron-3:#a58459; --glow:#ffe9b8; }
+:root[data-skin="fae"]{ --iron-2:#3c2432; --iron-3:#a77f93; --glow:#ffe4f0; }
+:root[data-skin="brasas"]{ --iron-1:#120705; --iron-2:#24110b; --iron-3:#6a3018; --glow:#ffc27a; --gild-lo:#6b2f10; }
+:root[data-skin="abismo"]{ --iron-1:#061412; --iron-2:#0f2523; --iron-3:#2f6560; --glow:#a8fff0; --gild-lo:#1d5c55; }
+
+/* ---------- Dos estilos nuevos de páginas oscuras ---------- */
+/* Medianoche: azul noche y plata */
+:root[data-skin="medianoche"]{
+  --night:#04070f; --leather:#111a2e; --leather-2:#0b1222; --leather-3:#18233c; --leather-edge:#2a3a5c;
+  --parch:#0f1626; --parch-2:#141c2f; --parch-3:#182238; --rule:#2e3d5e; --rule-2:#223050; --track:#26345a; --mastery:#1a2440;
+  --ink:#e6ecf8; --ink-2:#a3b2cf; --gold:#8e9fc2; --gold-hi:#dfe8ff; --on-dark:#e6ecf8; --on-dark-2:#b9c6e2;
+  --oath:#4a76d1; --oath-ink:#b7cdff; --oath-tint:#18284a; --cls-tint:#1f2a44; --cls-ink:#cdd8f0;
+  --ok:#5fae7a; --ok-ink:#a4e2b8; --warn:#e0b04a; --bad:#e0605a; --radiant:#f2d27a; --used:#1b2338; --used-ink:#7f8db0; --link:#9fc0ff; --scheme:dark;
+  --hud-bg:#03050b; --hud-top:#0f1830; --hud-p1:#0b1120; --hud-p2:#111a2e; --hud-p3:#0e1628; --hud-rule:#2f4373; --hud-rule2:#1a2645; --hud-ink2:#b3c6ee;
+  --iron-1:#070b16; --iron-2:#121a2d; --iron-3:#4b5d86; --glow:#eaf1ff; --gild-lo:#3b4b70; --grain:.08;
+}
+/* Jade: verde profundo, jade y oro */
+:root[data-skin="jade"]{
+  --night:#030a07; --leather:#0e2219; --leather-2:#091711; --leather-3:#143024; --leather-edge:#24503d;
+  --parch:#0d1a15; --parch-2:#12221b; --parch-3:#162820; --rule:#2c5544; --rule-2:#1f3e31; --track:#234838; --mastery:#183126;
+  --ink:#e4f1e8; --ink-2:#9fc2ad; --gold:#b39a4c; --gold-hi:#ecd585; --on-dark:#e4f1e8; --on-dark-2:#b9d6c4;
+  --oath:#2f9e74; --oath-ink:#a6ecce; --oath-tint:#123828; --cls-tint:#1a3027; --cls-ink:#cbe3d4;
+  --ok:#62b87a; --ok-ink:#a9e6bb; --warn:#dfae45; --bad:#df5e50; --radiant:#f0d270; --used:#16261f; --used-ink:#7c9a88; --link:#ecd585; --scheme:dark;
+  --hud-bg:#020604; --hud-top:#0c2018; --hud-p1:#08150f; --hud-p2:#0e1f17; --hud-p3:#0b1a13; --hud-rule:#2a5a45; --hud-rule2:#16332a; --hud-ink2:#b6dcc6;
+  --iron-1:#06100b; --iron-2:#10211a; --iron-3:#4a6b56; --glow:#f5e6a8; --gild-lo:#5b4c1e; --grain:.08;
+}

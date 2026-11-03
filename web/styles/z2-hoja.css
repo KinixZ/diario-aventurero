@@ -1,0 +1,64 @@
+/* ==================== HOJA DE PERSONAJE ====================
+   Características en escudos heráldicos (como las fichas de Pathfinder), la puntuación en un estandarte de hierro,
+   la CA en un escudo de metal con remaches, y placas de pergamino para el resto. */
+
+/* ---------- Características ---------- */
+.abil{gap:14px 8px}
+.ab small{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.2em;color:var(--ink-2);margin-bottom:3px}
+.medal{position:relative;isolation:isolate;width:min(74px, 100%)!important;height:82px!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding-bottom:10px;
+  background:var(--gild-grad)!important;-webkit-mask:var(--orn-crest) center/100% 100% no-repeat;mask:var(--orn-crest) center/100% 100% no-repeat;
+  font-family:var(--display)!important;font-size:27px!important;font-weight:700!important;color:var(--ink)!important;text-shadow:0 1px 0 color-mix(in srgb, var(--parch-3) 70%, transparent)}
+.medal::before{content:"";position:absolute;inset:3px;z-index:-1;background:radial-gradient(ellipse 70% 55% at 50% 30%, var(--parch-3) 0%, var(--parch-2) 70%, color-mix(in srgb, var(--parch-2) 85%, #000) 100%);
+  -webkit-mask:var(--orn-crest) center/100% 100% no-repeat;mask:var(--orn-crest) center/100% 100% no-repeat}
+
+.score{position:relative;z-index:1;margin-top:-16px!important;min-width:42px!important;padding:2px 12px!important;border-radius:0!important;border:0!important;
+  background:var(--iron-grad)!important;color:var(--gold-hi)!important;font-weight:700;font-size:13px!important;letter-spacing:.04em;
+  clip-path:polygon(0 0,100% 0,90% 50%,100% 100%,0 100%,10% 50%);box-shadow:none;filter:drop-shadow(0 2px 2px rgba(0,0,0,.35))}
+.comp-abil .medal{height:70px!important;width:min(62px, 100%)!important;font-size:22px!important}
+
+/* ---------- CA, iniciativa, velocidad ---------- */
+.stat{position:relative;border-radius:3px!important;border:1px solid var(--card-rule)!important;background:var(--card-bg)!important;
+  box-shadow:inset 0 0 0 3px color-mix(in srgb, var(--parch-3) 55%, transparent),inset 0 0 0 4px color-mix(in srgb, var(--gold) 25%, transparent),0 3px 8px -4px rgba(0,0,0,.35)}
+.stat .big{font-weight:700!important;color:var(--ink)}
+.stat .label{font-size:10px;letter-spacing:.14em}
+.shield{width:58px!important;height:66px!important;isolation:isolate;background:var(--gild-grad);-webkit-mask:var(--orn-crest) center/100% 100% no-repeat;mask:var(--orn-crest) center/100% 100% no-repeat}
+.shield svg{display:none}
+.shield::before{content:"";position:absolute;inset:3px;z-index:-1;background:radial-gradient(ellipse 70% 50% at 50% 28%, var(--iron-3) 0%, var(--iron-2) 45%, var(--iron-0) 100%);-webkit-mask:var(--orn-crest) center/100% 100% no-repeat;mask:var(--orn-crest) center/100% 100% no-repeat}
+.shield::after{content:"";position:absolute;left:50%;top:8px;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:radial-gradient(circle at 35% 30%, var(--gild-hi), var(--gild-lo));box-shadow:-17px 3px 0 0 var(--gild),17px 3px 0 0 var(--gild)}
+.shield span{font-size:23px!important;color:var(--gold-hi)!important;padding-bottom:8px!important;text-shadow:0 0 10px color-mix(in srgb, var(--gold-hi) 45%, transparent),0 1px 0 #000}
+
+/* ---------- Salvaciones y habilidades: rombos de gema ---------- */
+.dot{border-color:var(--gild-lo)!important;background:var(--parch-3)}
+.dot.on{background:radial-gradient(circle at 35% 30%, var(--enamel-hi), var(--enamel) 55%, var(--enamel-lo))!important;border-color:var(--gild)!important;box-shadow:0 0 6px color-mix(in srgb, var(--oath) 45%, transparent)}
+.skl .dot.ex{background:radial-gradient(circle at 35% 30%, #fff, var(--gold-hi) 50%, var(--gild-lo))!important;box-shadow:0 0 0 2px var(--oath),0 0 8px var(--glow-soft)!important}
+.saves .line,.skl .line{border-bottom:1px solid color-mix(in srgb, var(--rule-2) 75%, transparent)}
+.saves .num,.skl .num{font-family:var(--display);font-weight:700;color:var(--ink)}
+
+/* ---------- Espacios de conjuro, CD y ataque ---------- */
+.trio div{border-radius:3px!important;background:var(--iron-grad)!important;border:1px solid var(--gild)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--gold-hi) 25%, transparent),0 4px 10px -4px rgba(0,0,0,.6)}
+.trio b{font-family:var(--display);color:var(--gold-hi)!important;text-shadow:0 0 10px color-mix(in srgb, var(--gold-hi) 40%, transparent)}
+.trio span{font-family:var(--display);letter-spacing:.12em;text-transform:uppercase;font-size:9.5px!important;color:var(--on-dark-2)!important}
+.pip span{transition:background .15s,transform .15s}
+.lvl-sep{font-family:var(--display);letter-spacing:.24em;text-transform:uppercase;font-size:11px}
+.spell h3 a.ref,.trait h3{font-family:var(--display);font-size:15px;letter-spacing:.02em}
+
+/* ---------- Equipo: ranuras engastadas ---------- */
+.slot{border-radius:3px!important;border-color:var(--card-rule)!important;background:linear-gradient(180deg, var(--parch-3), var(--parch-2))!important;box-shadow:var(--sink)}
+.slot:not(.empty){border-color:var(--gild)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--gold-hi) 35%, transparent),var(--lift)}
+.slot .ico{border-radius:3px!important;background:var(--iron-grad)!important;color:var(--gold-hi)!important;border:1px solid var(--gild-lo)}
+.slot.empty .ico{background:var(--parch-2)!important;color:var(--ink-2)!important}
+.case{border-radius:3px!important;background:var(--iron-grad)!important;border:1px solid var(--gild)!important;box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--gold-hi) 20%, transparent),var(--drop)!important}
+.coin{border-radius:50%}
+
+/* ---------- Iconos de conjuro (game-icons.net): recuadro del color de la escuela ---------- */
+.gi-tile{flex:none;position:relative;display:inline-grid;place-items:center;width:46px;height:46px;border-radius:4px;color:#fff;
+  background:radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--sc, #7a5a12) 75%, #fff), var(--sc, #7a5a12) 55%, color-mix(in srgb, var(--sc, #7a5a12) 55%, #000) 100%);
+  box-shadow:0 0 0 1px var(--gild-lo),0 0 0 2px color-mix(in srgb, var(--gold) 70%, transparent),inset 0 0 8px rgba(0,0,0,.45),0 3px 6px -2px rgba(0,0,0,.5)}
+.gi-tile::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(160deg, rgba(255,255,255,.28), transparent 45%);pointer-events:none}
+.gi-tile .gi{width:72%;height:72%;fill:currentColor;filter:drop-shadow(0 1px 1px rgba(0,0,0,.55))}
+.gi-tile.sm{width:34px;height:34px}
+.gi-card{display:flex;gap:12px;align-items:flex-start}
+.gi-body{flex:1;min-width:0}
+.gi-item{display:grid!important;grid-template-columns:auto 1fr;column-gap:10px;align-items:center}
+.gi-item .gi-tile{grid-row:span 2}
+.q-h .gi-tile{margin-right:2px}
