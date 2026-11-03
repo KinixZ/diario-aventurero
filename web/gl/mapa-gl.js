@@ -1,0 +1,289 @@
+/* ==================== MOTOR DEL MAPA (PixiJS / WebGL) ====================
+   Lo carga Gfx.loadGL() solo cuando se abre un mapa. Expone window.MapaGL.create(canvas, opts).
+   mapas.js decide qué se ve (fichas, niebla, quién es dueño de qué) y le pasa una "escena" ya resuelta;
+   este módulo solo dibuja, y conserva entre cuadros lo que no cambió (cuadrícula, trazos, fichas, niebla).
+   Todo lo del mundo se dibuja en casillas: el contenedor `world` se escala con el zoom (v.s px por casilla). */
+import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+
+const PAPER = 0xf3e9d2, OUT = 0x1c1512;
+const TEXTS = { 0.06: 0.7, 0.14: 1.1, 0.32: 1.8 };
+const TXT_BASE = 72, LBL_BASE = 28;
+
+async function create(canvas, opts = {}) {
+  const app = new Application();
+  await app.init({
+    canvas, width: opts.width || canvas.clientWidth || 360, height: opts.height || canvas.clientHeight || 400,
+    resolution: opts.resolution || 1, autoDensity: true, antialias: opts.antialias !== false,
+    background: OUT, preference: 'webgl', autoStart: false, sharedTicker: false,
+    powerPreference: opts.power || 'default', failIfMajorPerformanceCaveat: false,
+  });
+  app.ticker.stop();
+  const need = typeof opts.onNeed === 'function' ? opts.onNeed : () => {};
+
+  /* Capas del escenario, de abajo hacia arriba */
+  const world = new Container(), screen = new Container();
+  const paper = new Graphics(), bg = new Sprite(), grid = new Graphics(), strokesBox = new Container();
+  const tokLow = new Container(), fog = new Sprite(), tokHigh = new Container(), border = new Graphics(), top = new Container();
+  const preview = new Graphics(), marks = new Graphics(), ghostBox = new Container();
+  top.addChild(marks, preview, ghostBox);
+  world.addChild(paper, bg, grid, strokesBox, tokLow, fog, tokHigh, border, top);
+  app.stage.addChild(world, screen);
+  bg.visible = false; fog.visible = false;
+
+  const imgCache = new Map();   // url → {img, tex, circle}
+  const strokeObjs = new Map(); // id → display object
+  const layerBoxes = new Map(); // layer id → Container
+  const tokObjs = new Map();    // id → {box, sig}
+  const labelPool = [];
+  let paperKey = '', gridKey = '', strokeKey = '', fogKey = '', bgKey = '', fogCanvas = null, fogTex = null, dead = false;
+
+  /* ---------- Imágenes ---------- */
+  function image(url) {
+    let e = imgCache.get(url);
+    if (e) return e.ready ? e : null;
+    e = { ready: false, img: new Image(), tex: null, circle: null };
+    imgCache.set(url, e);
+    e.img.decoding = 'async';
+    e.img.onload = () => { if (dead) return; e.ready = true; need(); };
+    e.img.onerror = () => { e.failed = true; };
+    e.img.src = url;
+    return null;
+  }
+  function texOf(url) { const e = image(url); if (!e) return null; if (!e.tex) e.tex = Texture.from(e.img); return e.tex; }
+  /* Retrato recortado en círculo, una vez por imagen (más barato que una máscara por ficha) */
+  function circleOf(url) {
+    const e = image(url); if (!e) return null;
+    if (!e.circle) {
+      const n = 160, cv = document.createElement('canvas'); cv.width = cv.height = n;
+      const c = cv.getContext('2d'), im = e.img, k = Math.max(n / im.naturalWidth, n / im.naturalHeight);
+      c.beginPath(); c.arc(n / 2, n / 2, n / 2, 0, Math.PI * 2); c.clip();
+      c.drawImage(im, (n - im.naturalWidth * k) / 2, (n - im.naturalHeight * k) / 2, im.naturalWidth * k, im.naturalHeight * k);
+      e.circle = Texture.from(cv);
+    }
+    return e.circle;
+  }
+
+  /* ---------- Papel, fondo y cuadrícula (solo cambian con el mapa) ---------- */
+  function syncPaper(m) {
+    const k = m.cols + 'x' + m.rows;
+    if (k !== paperKey) {
+      paperKey = k;
+      paper.clear().rect(0, 0, m.cols, m.rows).fill(PAPER);
+      border.clear().rect(0, 0, m.cols, m.rows).stroke({ color: 0x3c2814, alpha: 0.6, width: 1, pixelLine: true });
+    }
+    const bk = (m.bgUrl || '') + '|' + m.cols + 'x' + m.rows;
+    const t = m.bgUrl ? texOf(m.bgUrl) : null;
+    if (t) { if (bgKey !== bk) { bg.texture = t; bgKey = bk; } bg.visible = true; bg.width = m.cols; bg.height = m.rows; bg.alpha = m.bgOp == null ? 1 : m.bgOp; }
+    else { bg.visible = false; bgKey = ''; }
+  }
+  function syncGrid(m, v) {
+    const k = m.grid + '|' + m.cols + 'x' + m.rows + '|' + (m.bgUrl ? 1 : 0);
+    if (k !== gridKey) {
+      gridKey = k; grid.clear();
+      if (m.grid === 'square') {
+        for (let x = 0; x <= m.cols; x++) grid.moveTo(x, 0).lineTo(x, m.rows);
+        for (let y = 0; y <= m.rows; y++) grid.moveTo(0, y).lineTo(m.cols, y);
+      } else if (m.grid === 'hex') {
+        const r = 1 / Math.sqrt(3), dy = 1.5 * r;
+        for (let row = -1; row * dy <= m.rows + 1; row++) for (let col = -1; col <= m.cols + 1; col++) {
+          const cx = col + (row % 2 ? 1 : 0.5), cy = row * dy + r, pts = [];
+          for (let i = 0; i < 6; i++) { const a = Math.PI / 180 * (60 * i - 90); pts.push(Math.max(0, Math.min(m.cols, cx + r * Math.cos(a))), Math.max(0, Math.min(m.rows, cy + r * Math.sin(a)))); }
+          grid.poly(pts, true);
+        }
+      }
+      if (m.grid !== 'none') grid.stroke(m.bgUrl ? { color: 0x1e140a, alpha: 0.35, width: 1, pixelLine: true } : { color: 0x503a22, alpha: 0.28, width: 1, pixelLine: true });
+    }
+    grid.visible = m.grid !== 'none' && v.s >= 5;
+  }
+
+  /* ---------- Trazos: uno por id, se crean una sola vez ---------- */
+  function strokeShape(g, k, color) {
+    const p = k.pts, c = color || k.c;
+    if (k.k === 'rect') {
+      const x = Math.min(p[0], p[2]), y = Math.min(p[1], p[3]), w = Math.abs(p[0] - p[2]), h = Math.abs(p[1] - p[3]);
+      if (k.f) g.rect(x, y, w, h).fill({ color: c, alpha: 0.35 });
+      g.rect(x, y, w, h).stroke({ width: k.w, color: c, join: 'miter' });
+    } else if (k.k === 'text') {
+      const fs = TEXTS[k.w] || k.w * 6, w = String(k.t || '').length * fs * 0.55;
+      g.rect(p[0] - w / 2, p[1] - fs * 0.6, w, fs * 1.2).fill({ color: c, alpha: 0.6 });
+    } else if (p.length === 2) {
+      g.circle(p[0], p[1], Math.max(0.05, k.w / 2)).fill(c);
+    } else {
+      g.moveTo(p[0], p[1]);
+      for (let i = 2; i < p.length; i += 2) g.lineTo(p[i], p[i + 1]);
+      g.stroke({ width: k.w, color: c, cap: 'round', join: 'round' });
+    }
+    return g;
+  }
+  function strokeObj(k) {
+    if (k.k === 'text') {
+      const fs = TEXTS[k.w] || k.w * 6;
+      const t = new Text({ text: String(k.t || ''), resolution: 2, style: { fontFamily: 'Georgia, serif', fontWeight: '600', fontSize: TXT_BASE, fill: k.c, stroke: { color: 0xf3e9d2, alpha: 0.85, width: TXT_BASE / 6, join: 'round' } } });
+      t.anchor.set(0.5); t.scale.set(fs / TXT_BASE); t.position.set(k.pts[0], k.pts[1]);
+      return t;
+    }
+    return strokeShape(new Graphics(), k);
+  }
+  function syncStrokes(m) {
+    const k = m.id + '|' + m.strokes.length + '|' + (m.strokes.length ? m.strokes[m.strokes.length - 1].id : '') + '|' + m.layers.map((l) => l.id).join(',') + '|' + Object.keys(m.hid).filter((x) => m.hid[x]).join(',');
+    if (k === strokeKey) return;
+    strokeKey = k;
+    const alive = new Set();
+    m.strokes.forEach((s) => { const id = s.id + ':' + (s.v || 0); alive.add(id); if (!strokeObjs.has(id)) strokeObjs.set(id, strokeObj(s)); });
+    for (const [id, o] of strokeObjs) if (!alive.has(id)) { o.destroy(); strokeObjs.delete(id); }
+    const seenL = new Set();
+    strokesBox.removeChildren();
+    m.layers.forEach((l) => {
+      seenL.add(l.id);
+      let box = layerBoxes.get(l.id); if (!box) { box = new Container(); layerBoxes.set(l.id, box); }
+      box.removeChildren(); box.visible = !m.hid[l.id];
+      strokesBox.addChild(box);
+    });
+    for (const [id, box] of layerBoxes) if (!seenL.has(id)) { box.destroy(); layerBoxes.delete(id); }
+    m.strokes.forEach((s) => { const box = layerBoxes.get(s.l); if (box) box.addChild(strokeObjs.get(s.id + ':' + (s.v || 0))); });
+  }
+
+  /* ---------- Niebla: una textura de cols × rows píxeles, uno por casilla ---------- */
+  function syncFog(f, m) {
+    if (!f || !f.on) { fog.visible = false; return; }
+    const k = m.id + '|' + m.cols + 'x' + m.rows + '|' + f.key + '|' + (f.dm ? 1 : 0);
+    if (k !== fogKey) {
+      fogKey = k;
+      if (!fogCanvas || fogCanvas.width !== m.cols || fogCanvas.height !== m.rows) {
+        fogCanvas = document.createElement('canvas'); fogCanvas.width = m.cols; fogCanvas.height = m.rows;
+        if (fogTex) fogTex.destroy(true);
+        fogTex = Texture.from(fogCanvas); fogTex.source.scaleMode = 'nearest'; fog.texture = fogTex;
+      }
+      const c = fogCanvas.getContext('2d'), id = c.createImageData(m.cols, m.rows), d = id.data, a = f.dm ? 128 : 255, bits = f.bits;
+      for (let i = 0, n = m.cols * m.rows; i < n; i++) {
+        const dark = !((bits[i >> 3] >> (i & 7)) & 1), o = i * 4;
+        d[o] = f.dm ? 12 : 11; d[o + 1] = f.dm ? 8 : 8; d[o + 2] = 6; d[o + 3] = dark ? a : 0;
+      }
+      c.putImageData(id, 0, 0); fogTex.source.update();
+    }
+    fog.visible = true; fog.width = m.cols; fog.height = m.rows;
+  }
+
+  /* ---------- Fichas ---------- */
+  function dashedCircle(g, cx, cy, r, w, color) {
+    const n = 14;
+    for (let i = 0; i < n; i++) { const a0 = (i / n) * Math.PI * 2, a1 = a0 + (Math.PI * 2 / n) * 0.55; g.moveTo(cx + r * Math.cos(a0), cy + r * Math.sin(a0)).arc(cx, cy, r, a0, a1); }
+    g.stroke({ width: w, color });
+  }
+  function tokSig(t) { return [t.color, t.img || '', t.ini, t.s, t.hidden ? 1 : 0, t.sel ? 1 : 0, t.turn ? 1 : 0, t.pct == null ? '' : Math.round(t.pct * 40), t.down ? 1 : 0, t.ghost ? 1 : 0, t.img && image(t.img) ? 1 : 0].join('|'); }
+  function buildTok(t) {
+    const box = new Container(), s = t.s || 1, rad = s * 0.44, g = new Graphics();
+    if (t.turn) g.circle(0, 0, rad + Math.max(0.12, s * 0.08)).fill({ color: 0xffd66e, alpha: 0.55 });
+    g.circle(0, 0, rad).fill(t.color || '#8c2626');
+    box.addChild(g);
+    const tex = t.img ? circleOf(t.img) : null;
+    if (tex) { const sp = new Sprite(tex); sp.anchor.set(0.5); sp.width = sp.height = (rad - 0.04) * 2; box.addChild(sp); }
+    else {
+      const tx = new Text({ text: t.ini, resolution: 2, style: { fontFamily: 'Georgia, serif', fontWeight: '700', fontSize: TXT_BASE, fill: 0xffffff } });
+      tx.anchor.set(0.5); tx.scale.set((rad * 0.8) / TXT_BASE); tx.position.set(0, 0.02); box.addChild(tx);
+    }
+    const ring = new Graphics(), lw = 0.06;
+    if (t.hidden) dashedCircle(ring, 0, 0, rad, lw, t.sel ? 0xffd66e : 0x140c08);
+    else ring.circle(0, 0, rad).stroke({ width: lw, color: t.sel ? 0xffd66e : 0x140c08, alpha: t.sel ? 1 : 0.85 });
+    if (t.pct != null) {
+      const p = Math.max(0, Math.min(1, t.pct));
+      if (p > 0) ring.arc(0, 0, rad + lw * 1.4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p).stroke({ width: 0.08, color: p > 0.66 ? 0x5fb85a : p > 0.33 ? 0xe0b43a : 0xd24a3a });
+    }
+    if (t.down) { const r6 = rad * 0.6; ring.moveTo(-r6, -r6).lineTo(r6, r6).moveTo(r6, -r6).lineTo(-r6, r6).stroke({ width: Math.max(0.06, rad * 0.18), color: 0xd24a3a }); }
+    box.addChild(ring);
+    box.alpha = t.ghost ? 0.85 : t.hidden ? 0.5 : 1;
+    return box;
+  }
+  function label(i) {
+    let l = labelPool[i];
+    if (!l) { l = new Text({ text: '', resolution: 2, style: { fontFamily: 'Georgia, serif', fontWeight: '600', fontSize: LBL_BASE, fill: 0x2b1d12, stroke: { color: 0xf3e9d2, alpha: 0.9, width: 6, join: 'round' } } }); l.anchor.set(0.5, 0); labelPool[i] = l; }
+    return l;
+  }
+  function syncTokens(list, v) {
+    const alive = new Set();
+    let li = 0;
+    tokLow.removeChildren(); tokHigh.removeChildren();
+    list.forEach((t) => {
+      alive.add(t.id);
+      const sig = tokSig(t); let o = tokObjs.get(t.id);
+      if (!o || o.sig !== sig) { if (o) o.box.destroy({ children: true }); o = { box: buildTok(t), sig }; tokObjs.set(t.id, o); }
+      const s = t.s || 1;
+      o.box.position.set(t.x + s / 2, t.y + s / 2);
+      (t.late ? tokHigh : tokLow).addChild(o.box);
+      if (t.label) {
+        const l = label(li++), fs = Math.max(10, Math.min(15, v.s * 0.38)), txt = t.name.length > 14 ? t.name.slice(0, 13) + '…' : t.name;
+        if (l.text !== txt) l.text = txt;
+        l.scale.set(fs / LBL_BASE / v.s); l.position.set(t.x + s / 2, t.y + s / 2 + s * 0.44 + 3 / v.s);
+        (t.late ? tokHigh : tokLow).addChild(l);
+      }
+    });
+    for (const [id, o] of tokObjs) if (!alive.has(id)) { o.box.destroy({ children: true }); tokObjs.delete(id); }
+  }
+
+  /* ---------- Encima: trazo en curso, borrador, regla, niebla en curso, señales ---------- */
+  let ghostSig = '', ghostObj = null;
+  const rulerBox = new Graphics(), rulerTxt = new Text({ text: '', resolution: 2, style: { fontFamily: 'Georgia, serif', fontWeight: '700', fontSize: 15, fill: 0xffd66e } });
+  screen.addChild(rulerBox, rulerTxt);
+  const pingTxt = [];
+  function dashed(g, ax, ay, bx, by, on, off) {
+    const L = Math.hypot(bx - ax, by - ay); if (!L) return g; const ux = (bx - ax) / L, uy = (by - ay) / L;
+    for (let d = 0; d < L; d += on + off) { const e = Math.min(L, d + on); g.moveTo(ax + ux * d, ay + uy * d).lineTo(ax + ux * e, ay + uy * e); }
+    return g;
+  }
+  function syncTop(sc, v) {
+    const W = sc.W, H = sc.H, px = 1 / v.s;
+    preview.clear(); marks.clear(); rulerBox.clear(); rulerTxt.visible = false;
+    if (sc.drawing) strokeShape(preview, sc.drawing);
+    if (sc.erase && sc.erase.length) sc.erase.forEach((k) => { if (k.k === 'text') strokeShape(marks, k, 0xff3b30); else strokeShape(marks, k, 0xff3b30); });
+    marks.alpha = 1; preview.alpha = 1;
+    if (sc.erase && sc.erase.length) marks.alpha = 0.3;
+    // ficha que se arrastra
+    if (sc.ghost) {
+      const sig = tokSig(sc.ghost);
+      if (sig !== ghostSig) { if (ghostObj) ghostObj.destroy({ children: true }); ghostObj = buildTok(sc.ghost); ghostSig = sig; ghostBox.addChild(ghostObj); }
+      const s = sc.ghost.s || 1; ghostObj.position.set(sc.ghost.x + s / 2, sc.ghost.y + s / 2); ghostObj.visible = true;
+    } else if (ghostObj) ghostObj.visible = false;
+    if (sc.ruler) {
+      const r = sc.ruler, ax = v.x + r.ax * v.s, ay = v.y + r.ay * v.s, bx = v.x + r.bx * v.s, by = v.y + r.by * v.s;
+      dashed(rulerBox, ax, ay, bx, by, 8, 6).stroke({ width: 3, color: 0xffd66e, alpha: 0.95 });
+      rulerTxt.text = r.text; rulerTxt.visible = true;
+      const w = rulerTxt.width + 16, lx = Math.min(W - w - 4, Math.max(4, bx - w / 2)), ly = Math.max(4, by - r.half * v.s - 34);
+      rulerBox.rect(lx, ly, w, 26).fill({ color: 0x120d0b, alpha: 0.88 }).stroke({ width: 1, color: 0xffd66e });
+      rulerTxt.position.set(lx + 8, ly + 13 - rulerTxt.height / 2);
+    }
+    if (sc.fogRect) {
+      const f = sc.fogRect, x0 = Math.min(f.a[0], f.b[0]), y0 = Math.min(f.a[1], f.b[1]), w = Math.abs(f.a[0] - f.b[0]) + 1, h = Math.abs(f.a[1] - f.b[1]) + 1;
+      marks.rect(x0, y0, w, h).fill(f.v ? { color: 0x5fb85a, alpha: 0.28 } : { color: 0x0a0604, alpha: 0.55 }).stroke({ width: 2 * px, color: f.v ? 0x5fb85a : 0xffd66e });
+    }
+    let pi = 0;
+    (sc.pings || []).forEach((p) => {
+      const col = p.color || '#ffd66e';
+      for (let i = 0; i < 2; i++) marks.circle(p.x, p.y, (8 + ((p.k * 2 + i * 0.5) % 1) * v.s * 2.2) * px).stroke({ width: 4 * px, color: col, alpha: 1 - p.k });
+      marks.circle(p.x, p.y, 5 * px).fill({ color: col, alpha: 1 - p.k });
+      if (p.name) {
+        let t = pingTxt[pi]; if (!t) { t = new Text({ text: '', resolution: 2, style: { fontFamily: 'Georgia, serif', fontWeight: '700', fontSize: 14, fill: 0xffffff, stroke: { color: 0x120d0b, width: 3 } } }); t.anchor.set(0.5, 1); pingTxt[pi] = t; screen.addChild(t); }
+        t.text = p.name; t.alpha = 1 - p.k; t.visible = true; t.position.set(v.x + p.x * v.s, v.y + p.y * v.s - 10); pi++;
+      }
+    });
+    for (let i = pi; i < pingTxt.length; i++) pingTxt[i].visible = false;
+  }
+
+  /* ---------- API ---------- */
+  function render(sc) {
+    if (dead) return;
+    const v = sc.v, m = sc.map;
+    world.position.set(v.x, v.y); world.scale.set(v.s);
+    syncPaper(m); syncGrid(m, v); syncStrokes(m); syncTokens(sc.tokens || [], v); syncFog(sc.fog, m); syncTop(sc, v);
+    app.render();
+  }
+  function resize(w, h, resolution) { if (dead) return; app.renderer.resize(w, h, resolution || app.renderer.resolution); }
+  function destroy() {
+    if (dead) return; dead = true;
+    for (const e of imgCache.values()) { if (e.tex) e.tex.destroy(true); if (e.circle) e.circle.destroy(true); }
+    imgCache.clear();
+    try { app.destroy({ removeView: false }, { children: true, texture: true, textureSource: true }); } catch (e) { /* ya estaba muerto */ }
+  }
+  return { render, resize, destroy, kind: 'webgl', get dead() { return dead; } };
+}
+
+window.MapaGL = { create, version: 1 };

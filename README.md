@@ -76,7 +76,9 @@ web/                 La aplicación (sin framework)
   src/sala.js        Conexión a las campañas (WebSocket) y lista de iniciativa
   src/campana.js     Selector de campañas y panel del DM
   src/mesa.js        Chat, pizarra, tablero y sesiones
+  src/gfx.js         Calidad gráfica y carga del motor del mapa
   src/mapas.js       Mapas, fichas, niebla y regla
+  gl/mapa-gl.js      Motor del mapa en PixiJS (WebGL), archivo aparte
   src/bestiario.js   Bestiario del DM (archivo aparte)
   src/grupo.js       Bestiario del grupo
 server/

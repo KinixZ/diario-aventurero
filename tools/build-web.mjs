@@ -6,6 +6,8 @@
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { buildSync, transformSync } from 'esbuild';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const artifact = process.argv.includes('--artifact');
@@ -14,12 +16,26 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 const css = readdirSync(join(root, 'styles')).filter(f => f.endsWith('.css')).sort().map(f => read('styles/' + f)).join('\n');
 const icons = read('assets/icons.svg');
 const body = read('body.html');
-const order = ['lib.js', 'render.js', 'rules.js', 'app.js', 'sala.js', 'mesa.js', 'campana.js', 'bestiario.js', 'grupo.js', 'cronica.js', 'mapas.js'];
+const order = ['gfx.js', 'lib.js', 'render.js', 'rules.js', 'app.js', 'sala.js', 'mesa.js', 'campana.js', 'bestiario.js', 'grupo.js', 'cronica.js', 'mapas.js'];
 const js = order.map(f => `/* ---- ${f} ---- */\n` + read('src/' + f)).join('\n');
-const config = `window.DIARIO_CONFIG = ${JSON.stringify({ salaUrl: process.env.SALA_URL || '', artifact, version: process.env.GITHUB_SHA ? process.env.GITHUB_SHA.slice(0, 7) : 'dev' })};`;
+// Motor del mapa (PixiJS): archivo aparte que se baja solo al abrir un mapa. El artefacto de claude.ai usa Canvas 2D.
+const plain = process.argv.includes('--plain');
+let glHash = '';
+if (!artifact) {
+  const gl = buildSync({ entryPoints: [join(root, 'gl', 'mapa-gl.js')], bundle: true, format: 'iife', minify: !plain, target: 'es2020', write: false, legalComments: 'none', logLevel: 'warning' }).outputFiles[0].text;
+  mkdirSync(join(root, 'dist'), { recursive: true });
+  writeFileSync(join(root, 'dist', 'mapa-gl.js'), gl);
+  glHash = createHash('sha1').update(gl).digest('hex').slice(0, 10);
+  console.log(`Motor del mapa: mapa-gl.js (${(gl.length / 1024).toFixed(0)} KB)`);
+}
+const sha = process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || '';
+const config = `window.DIARIO_CONFIG = ${JSON.stringify({ salaUrl: process.env.SALA_URL || '', artifact, version: sha ? sha.slice(0, 7) : 'dev', gl: glHash })};`;
+// Minificado: los scripts siguen siendo globales (sin "format"), así que Diario, Sala, Mapas… conservan su nombre.
+const jsOut = plain ? js : transformSync(js, { minify: true, target: 'es2017', legalComments: 'none', charset: 'utf8' }).code;
 const fonts = '<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap">';
 
-const inner = `<title>Diario del Aventurero</title>\n${fonts}\n<style>${css}</style>\n${icons}\n${body}\n<script>${config}\n${js}\n</script>\n`;
+const cssOut = plain ? css : transformSync(css, { loader: 'css', minify: true, charset: 'utf8' }).code;
+const inner = `<title>Diario del Aventurero</title>\n${fonts}\n<style>${cssOut}</style>\n${icons}\n${body}\n<script>${config}\n${jsOut}\n</script>\n`;
 const page = artifact ? inner : `<!doctype html>
 <html lang="es">
 <head>

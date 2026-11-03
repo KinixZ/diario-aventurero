@@ -1,7 +1,7 @@
 // Service worker del Diario: permite instalarlo y abrirlo sin internet.
 // La página va "red primero" (siempre la versión nueva si hay conexión); íconos y fuentes, de la caché.
 // Las salas de combate (/ws), /health y /api/ (traducción) nunca pasan por aquí.
-const CACHE = 'diario-v2';
+const CACHE = 'diario-v3';
 const SHELL = ['./', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });

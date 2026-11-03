@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { brotliCompressSync, gzipSync, constants as zc } from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { Campaigns, cleanCode, CODE_LEN, IMG_MAX_BYTES } from './campaigns.mjs';
 import { createStore, memoryStore } from './store.mjs';
@@ -47,12 +48,28 @@ export async function startServer({ port = Number(process.env.PORT) || 8080, hos
     if (!file.startsWith(DIST)) { res.writeHead(403); res.end(); return; }
     try {
       const s = await stat(file); if (!s.isFile()) throw new Error('dir');
-      res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream', 'cache-control': /\.(html|webmanifest)$|sw\.js$/.test(file) ? 'no-cache' : 'public, max-age=3600' });
-      res.end(await readFile(file));
+      const type = TYPES[extname(file)] || 'application/octet-stream', head = { 'content-type': type, 'cache-control': /\.(html|webmanifest)$|sw\.js$/.test(file) ? 'no-cache' : url.searchParams.has('v') ? 'public, max-age=31536000, immutable' : 'public, max-age=3600', vary: 'accept-encoding' };
+      const body = await packed(file, s, type, String(req.headers['accept-encoding'] || ''));
+      if (body.enc) head['content-encoding'] = body.enc;
+      res.writeHead(200, head); res.end(body.data);
     } catch {
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('No existe. ¿Corriste npm run build?');
     }
   });
+
+  /* Archivos de texto comprimidos (brotli o gzip) una sola vez por versión del archivo: el diario pesa 4 veces menos */
+  const packCache = new Map();
+  async function packed(file, st, type, accept) {
+    const text = /^(text\/|application\/(json|manifest)|image\/svg)/.test(type);
+    const enc = !text || st.size < 1024 ? '' : /\bbr\b/.test(accept) ? 'br' : /\bgzip\b/.test(accept) ? 'gzip' : '';
+    const k = file + '|' + st.mtimeMs + '|' + enc, hit = packCache.get(k);
+    if (hit) return hit;
+    const raw = await readFile(file);
+    const out = { enc, data: enc === 'br' ? brotliCompressSync(raw, { params: { [zc.BROTLI_PARAM_QUALITY]: 9, [zc.BROTLI_PARAM_SIZE_HINT]: raw.length } }) : enc === 'gzip' ? gzipSync(raw, { level: 9 }) : raw };
+    for (const key of packCache.keys()) if (key.startsWith(file + '|') && !key.startsWith(file + '|' + st.mtimeMs + '|')) packCache.delete(key);
+    if (enc || raw.length < 4 * 1024 * 1024) packCache.set(k, out);
+    return out;
+  }
 
   function json(res, code, obj) { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); }
 

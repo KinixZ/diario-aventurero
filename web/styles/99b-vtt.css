@@ -273,3 +273,9 @@
 .combat:not([data-tab="combate"]) .combat-h .round{display:none}
 .combat:not([data-tab="combate"]) .combat-h .camp-title{margin-right:auto}
 .combat-h .round{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Motor WebGL arrancando: el lienzo queda en el color de fondo con un aviso discreto */
+.map-wrap.gl-loading::after{content:'Preparando el mapa…';position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);font-family:var(--display);font-size:14px;letter-spacing:.08em;color:#e6d6b0;opacity:.8;pointer-events:none;animation:glpulse 1.2s ease-in-out infinite alternate}
+.map-wrap canvas[data-engine="gl"]{background:#1c1512}
+@keyframes glpulse{from{opacity:.35}to{opacity:.85}}
+.gfx-q{flex-wrap:wrap;margin-top:8px}
+.gfx-now{margin:6px 0 4px}
