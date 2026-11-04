@@ -1223,7 +1223,52 @@
     activeId:function(){ return S.active; },
     useChar:function(id){ if (!S.chars.some(function(c){ return c.id === id; }) || S.active === id) return false; S.active = id; sel = null; render(false); save(); return true; },
     renderCombat:function(){ if (!$('#combat').hidden) renderCombat(); },
-    compSummaries:function(){ var C = cur(); if (!C || !D || !D.ok) return []; return (rt(C).comp || []).map(function(c){ var st = compStats(c); return st ? {name:c.n || st.m.name, ac:st.ac, hp:c.hp == null ? st.hpMax : c.hp, hpMax:st.hpMax} : null; }).filter(Boolean); }};
+    compSummaries:function(){ var C = cur(); if (!C || !D || !D.ok) return []; return (rt(C).comp || []).map(function(c){ var st = compStats(c); return st ? {name:c.n || st.m.name, ac:st.ac, hp:c.hp == null ? st.hpMax : c.hp, hpMax:st.hpMax} : null; }).filter(Boolean); },
+    actions:combatActions, slotsFor:freeSlots, spellDice:function(ref, lv){ var e = R.findSpell(ref); return e ? spellDice(e, lv) : ''; },
+    saveMod:function(ab){ return D && D.ok && D.save ? D.save[ab] || 0 : 0; },
+    /* Lanzar desde la escena de combate: gasta el espacio (o el del pacto), marca la acción y la concentración */
+    cast:function(ref, lv){ quickUse('sp:' + ref, lv); }};
+
+  /* ==================== ACCIONES PARA EL COMBATE COMPARTIDO ====================
+     Lo que la escena de combate (acciones.js) ofrece al jugador: sus armas con su ataque y daño, y sus conjuros con
+     ataque o salvación y los dados de daño o curación (los trucos crecen con el nivel; con un espacio mayor, lo que
+     diga «A niveles superiores»). Los números salen de la hoja; el servidor tira los dados. */
+  var DMG_EN = {acid:'ácido', bludgeoning:'contundente', cold:'frío', fire:'fuego', force:'fuerza', lightning:'relámpago', necrotic:'necrótico', piercing:'perforante', poison:'veneno', psychic:'psíquico', radiant:'radiante', slashing:'cortante', thunder:'trueno'};
+  var SAVE_EN = {strength:'str', dexterity:'dex', constitution:'con', intelligence:'int', wisdom:'wis', charisma:'cha'};
+  function dmgExpr(dice, mod){ return dice + (mod ? (mod > 0 ? ' + ' : ' - ') + Math.abs(mod) : ''); }
+  /* Dados de un conjuro lanzado a nivel `lv` (truco: según el nivel del personaje) */
+  function spellDice(e, lv){
+    var json = JSON.stringify(e.entries || []), heal = (e.miscTags || []).indexOf('HL') >= 0, m = heal ? /\{@(?:dice|damage) ([^}|]+)/.exec(json) : /\{@damage ([^}|]+)/.exec(json), base = m ? m[1].replace(/\s+/g, '') : '';
+    if (!e.level && e.scalingLevelDice) { var sc = [].concat(e.scalingLevelDice)[0], best = null; Object.keys(sc.scaling || {}).forEach(function(k){ if (+k <= D.level && (best == null || +k > best)) best = +k; }); if (best != null) base = sc.scaling[best]; }
+    var hi = JSON.stringify(e.entriesHigherLevel || []), up = /\{@scale(?:damage|dice) [^|}]+\|[^|}]+\|([^}]+)\}/.exec(hi);
+    if (base && up && lv > e.level) { var steps = lv - e.level, a = /^(\d+)d(\d+)/.exec(base), b = /^(\d+)d(\d+)$/.exec(up[1].replace(/\s+/g, '')); if (a && b && a[2] === b[2]) base = base.replace(/^\d+d/, (+a[1] + steps * +b[1]) + 'd'); else if (b) base += '+' + (steps * +b[1]) + 'd' + b[2]; }
+    return base;
+  }
+  function combatActions(){
+    var C = cur(); if (!C || !D || !D.ok) return [];
+    var out = [], r = rt(C), K = (D.casters || [])[0];
+    D.attacks.forEach(function(a){
+      var dm = [{dice:dmgExpr(a.dice, a.mod), type:a.type}]; a.extra.forEach(function(x){ if (/^\d+d\d+/.test(x.dice)) dm.push({dice:x.dice, type:x.type}); });
+      out.push({key:'w:' + a.id, group:'Armas', title:a.name, atk:{bonus:a.atk}, dmg:dm, text:a.notes || ''});
+    });
+    allSpells().forEach(function(x){
+      var e = x.e, json = JSON.stringify(e.entries || []), heal = (e.miscTags || []).indexOf('HL') >= 0, dice = spellDice(e, e.level);
+      if (!(e.spellAttack && e.spellAttack.length) && !(e.savingThrow && e.savingThrow.length) && !dice) return;
+      var mod = K && heal && /spellcasting ability modifier/i.test(json) ? D.mod[K.ability] : 0;
+      out.push({key:'sp:' + e.name + '|' + e.source, group:'Conjuros', title:e.name, lv:e.level || 0,
+        atk:e.spellAttack && e.spellAttack.length && K ? {bonus:K.atk} : null,
+        save:e.savingThrow && e.savingThrow.length && K ? {ab:SAVE_EN[e.savingThrow[0]] || 'dex', dc:K.dc, half:/half as much damage|half damage/i.test(json)} : null,
+        dmg:dice ? [{dice:dmgExpr(dice, mod), type:heal ? '' : DMG_EN[(e.damageInflict || [])[0]] || ''}] : [], heal:heal, text:''});
+    });
+    return out;
+  }
+  /* Espacios libres para lanzar un conjuro de nivel `lv` (y el del pacto) */
+  function freeSlots(lv){
+    var C = cur(); if (!C || !D || !D.ok) return []; var r = rt(C), o = [];
+    D.slots.forEach(function(n, i){ var L = i + 1, left = n - (r.slotsUsed[i] || 0); if (n > 0 && L >= lv) o.push({v:String(L), label:'Nivel ' + L + ' (' + left + ')', left:left}); });
+    if (D.pact && D.pact.level >= lv) { var pl = D.pact.count - (r.pactUsed || 0); o.push({v:'pact', label:'Pacto, nivel ' + D.pact.level + ' (' + pl + ')', left:pl, lvl:D.pact.level}); }
+    return o;
+  }
 
   /* ==================== COMBATE ==================== */
   /* Arriba, fija: tu vida y tus defensas. Abajo, tres partes: Orden (la sala), Mi turno (acciones y armas) y Recursos.
@@ -1254,7 +1299,7 @@
     var dmg = '<b>' + dice + ' ' + sgn(a.mod).replace('+', '+ ').replace('−', '− ') + '</b> ' + esc(a.type) + Object.keys(extra).map(function(k){ var p = k.split('|'); return ' <span class="rad">+ ' + extra[k] + 'd' + p[1] + ' ' + esc(p[0]) + '</span>'; }).join('');
     var open = S.wOpen && S.wOpen[a.id];
     return '<div class="wpn' + (r.crit ? ' is-crit' : '') + '"><div class="wpn-h"><svg class="ic"><use href="#' + (a.ranged ? 'i-bow' : 'i-sword') + '"/></svg><h3>' + (a.ref ? '<a class="ref" data-ref="' + attr(a.ref) + '" style="color:inherit">' + nm(a.name) + '</a>' : nm(a.name) + '<span class="hb-tag">homebrew</span>') + '</h3><span class="wpn-roll">1d20 ' + sgn(a.atk).replace('+', '+ ').replace('−', '− ') + '</span></div>'
-      + '<div class="wpn-dmg">' + dmg + '</div>'
+      + '<div class="wpn-dmg">' + dmg + (inRoom() ? '<button class="btn sm wpn-go" type="button" data-act="actpick" data-k="' + attr('w:' + a.id) + '" title="Atacar desde la escena de combate (se tiran los dados y lo ve el grupo)"><svg class="ic"><use href="#i-d20"/></svg>Atacar</button>' : '') + '</div>'
       + (smiteOk ? '<div class="wpn-smite"><a class="ref" data-ref="spell|Divine Smite|XPHB">Castigo</a>' + [0].concat(D.slots.map(function(n, i){ return n > 0 ? i + 1 : null; }).filter(Boolean)).slice(0, 5).map(function(v){ return '<button type="button" data-act="smite" data-v="' + v + '" aria-pressed="' + (r.smite === v) + '">' + (v ? 'Nv ' + v : 'No') + '</button>'; }).join('') + '</div>' : '')
       + '<button type="button" class="wpn-more" data-act="wmore" data-id="' + attr(a.id) + '" aria-expanded="' + !!open + '">' + (open ? 'Menos' : 'Detalles' + (a.mastery.length ? ' · ' + esc(a.mastery.join(', ')) : '')) + '</button>'
       + (open ? '<div class="wpn-det"><p class="muted">' + esc(a.notes) + (a.extra.length ? ' · ' + a.extra.map(function(x){ return esc(x.note); }).join(', ') : '') + '</p>' + (a.mastery.length ? '<p><b>Maestría:</b> ' + a.mastery.map(function(mm){ return '<a class="ref" data-ref="itemMastery|' + attr(mm) + '|XPHB">' + esc(mm) + '</a>'; }).join(', ') + '</p>' : '') + (a.hbNotes ? '<p style="white-space:pre-line">' + esc(a.hbNotes) + '</p>' : '') + '</div>' : '')
@@ -1272,7 +1317,7 @@
   }
   function renderCombat(){
     var C = cur();
-    if (!combatHead()) { $('#cTurno').innerHTML = noCharHtml(); $('#cRec').innerHTML = ''; $('#cOrden').innerHTML = '<div id="salaBox"></div>'; if (window.Sala) Sala.mount($('#salaBox')); return; }
+    if (!combatHead()) { $('#cTurno').innerHTML = noCharHtml(); $('#cRec').innerHTML = ''; $('#cOrden').innerHTML = '<div id="actBox"></div><div id="salaBox"></div>'; if (window.Sala) Sala.mount($('#salaBox')); if (window.Acciones) Acciones.render(); return; }
     var r = rt(C);
     /* Mi turno */
     var T = '<div class="card econ-card"><div class="econ">' + [['a','Acción','i-swords'],['b','Adicional','i-star'],['r','Reacción','i-shield'],['m','Movimiento','i-boot']].map(function(e){ return '<button type="button" data-act="econ" data-k="' + e[0] + '" aria-pressed="' + !!r.econ[e[0]] + '"><svg class="ic"><use href="#' + e[2] + '"/></svg><i class="shape" aria-hidden="true"></i>' + e[1] + '</button>'; }).join('') + '</div><div class="econ-foot"><span class="muted">Toca lo que ya usaste</span><button class="pill" type="button" data-act="crit" aria-pressed="' + !!r.crit + '">Crítico' + (r.crit ? ': dados ×2' : '') + '</button><button class="pill" type="button" data-act="newturn">Nuevo turno</button></div></div>';
@@ -1295,8 +1340,9 @@
     Rc += '<div class="row rest-row"><button class="btn" type="button" data-act="short">Descanso corto</button><button class="btn" type="button" data-act="long">Descanso largo</button></div>';
     $('#cRec').innerHTML = Rc;
     /* Orden: la sala */
-    $('#cOrden').innerHTML = '<div id="salaBox"></div>';
+    $('#cOrden').innerHTML = '<div id="actBox"></div><div id="salaBox"></div>';
     if (window.Sala) Sala.mount($('#salaBox'));
+    if (window.Acciones) Acciones.render();
   }
   document.addEventListener('submit', function(ev){
     if (ev.target.id !== 'hpForm') return;

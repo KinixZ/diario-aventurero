@@ -1,0 +1,129 @@
+/* ==================== ESCENA DE COMBATE (combate sin mapa) ==================== */
+#actBox:empty{display:none}
+#actBox{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.cs-pic{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;overflow:hidden;background:radial-gradient(circle at 40% 30%, #5a2a22, #2a1210);border:2px solid #b84a3a;color:#fff;font-family:var(--display);font-size:13px;letter-spacing:.02em}
+.cs-pic.pc{border-color:#5f8fd0;background:radial-gradient(circle at 40% 30%, #2f4a72, #142034)}
+.cs-pic.dm{border-color:var(--gold-hi);background:radial-gradient(circle at 40% 30%, #4a3a1c, #1c1408);color:var(--gold-hi)}
+.cs-pic img{width:100%;height:100%;object-fit:cover}
+.cs-pic .gi,.cs-pic .ic{width:62%;height:62%;color:#f0d9b0}
+
+/* La cinta de turnos y el turno en grande */
+.cs-stage{position:relative;display:flex;flex-direction:column;gap:10px;padding:10px;border-radius:10px;background:linear-gradient(180deg, rgba(40,28,20,.95), rgba(18,13,11,.98));border:1px solid var(--gold);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04),0 8px 24px rgba(0,0,0,.35);overflow:hidden;--acc:var(--gold-hi)}
+.cs-stage.foe{--acc:#e0574a}
+.cs-stage.mine{--acc:#ffd66e;box-shadow:inset 0 0 0 1px rgba(255,214,110,.3),0 0 22px rgba(255,214,110,.25),0 8px 24px rgba(0,0,0,.35)}
+.cs-stage::before{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 18% 70%, color-mix(in srgb, var(--acc) 22%, transparent), transparent 60%)}
+.cs-ribbon{position:relative;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 2px 4px}
+.cs-ribbon::-webkit-scrollbar{display:none}
+.cs-chip{flex:none;position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;width:52px;padding:4px 2px 3px;border-radius:8px;border:1px solid transparent;transition:transform .25s,opacity .25s}
+.cs-chip .cs-pic{width:36px;height:36px;font-size:11px}
+.cs-chip b{position:absolute;top:0;right:2px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#1c1512;border:1px solid var(--gold);color:var(--gold-hi);font-size:10.5px;line-height:16px;text-align:center}
+.cs-chip small{max-width:50px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;color:var(--on-dark-2,#c9b48a)}
+.cs-chip.turn{border-color:var(--acc);background:color-mix(in srgb, var(--acc) 16%, transparent);transform:translateY(-1px)}
+.cs-chip.turn .cs-pic{box-shadow:0 0 0 2px var(--acc),0 0 12px var(--acc)}
+.cs-chip.turn small{color:#fff}
+.cs-chip.done{opacity:.55}
+.cs-chip.down .cs-pic{filter:grayscale(1) brightness(.6)}
+.cs-chip.down::after{content:'';position:absolute;left:14px;top:12px;width:24px;height:3px;border-radius:2px;background:#d24a3a;transform:rotate(-35deg)}
+.cs-turn{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:'pic info' 'ctl ctl';gap:10px 14px;align-items:center}
+.cs-big{grid-area:pic}
+.cs-big .cs-pic{width:84px;height:84px;font-size:26px;border-width:3px;box-shadow:0 0 0 3px rgba(0,0,0,.4),0 0 18px color-mix(in srgb, var(--acc) 55%, transparent);animation:csIn .35s ease both}
+.cs-info{grid-area:info;min-width:0;display:flex;flex-direction:column;gap:3px}
+.cs-round{font-family:var(--display);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--acc)}
+.cs-info h2{margin:0;font-family:var(--display);font-size:22px;letter-spacing:.03em;color:#fff;line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 2px 10px rgba(0,0,0,.6)}
+.cs-sub{margin:0;font-size:13px;color:var(--on-dark-2,#c9b48a)}
+.cs-hpbox{display:flex;align-items:center;gap:8px}
+.cs-hp{flex:1;max-width:220px;height:8px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden}
+.cs-hp i{display:block;height:100%;transition:width .4s}
+.cs-hpbox small{font-size:12.5px;color:var(--on-dark)}
+.cs-state{font-size:12.5px;padding:1px 8px;border-radius:10px;border:1px solid rgba(217,184,102,.4);color:var(--on-dark)}
+.cs-conds{display:flex;flex-wrap:wrap;gap:4px}
+.cs-next{margin:2px 0 0;font-size:12.5px;color:var(--on-dark-2,#c9b48a)}
+.cs-next b{color:var(--on-dark)}
+.cs-ctl{grid-area:ctl;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.cs-ctl .btn{display:inline-flex;align-items:center;gap:6px}
+.cs-ctl .btn .ic{width:16px;height:16px}
+@media (min-width:640px){ .cs-turn{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:'pic info ctl'} .cs-big .cs-pic{width:104px;height:104px} .cs-ctl{flex-direction:column;align-items:stretch} }
+@keyframes csIn{from{transform:scale(.85);opacity:0}to{transform:none;opacity:1}}
+
+/* Compositor de la acción */
+.cs-acts{display:flex;gap:8px;flex-wrap:wrap}
+.cs-acts .btn{display:inline-flex;align-items:center;gap:7px}
+.cs-acts .btn .ic{width:17px;height:17px}
+.cs-comp{display:flex;flex-direction:column;gap:9px;padding:12px;border-left:3px solid var(--gold-hi)}
+.cs-comp-h{display:flex;align-items:center;gap:8px}
+.cs-comp-h b{display:inline-flex;align-items:center;gap:6px;font-family:var(--display);letter-spacing:.04em;color:var(--gold-hi)}
+.cs-comp-h b .ic{width:18px;height:18px}
+.cs-comp-h select{flex:1;min-width:0;height:36px}
+.cs-srcs{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto}
+.cs-src-l{display:flex;gap:6px;flex-wrap:wrap;margin-top:3px}
+.cs-pick{display:flex;flex-direction:column;align-items:flex-start;gap:1px;max-width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--rule);background:var(--parch);color:inherit;font:inherit;text-align:left;cursor:pointer}
+.cs-pick b{font-family:var(--display);font-size:13px;letter-spacing:.02em}
+.cs-pick small{font-size:11.5px;color:var(--ink-2)}
+.cs-pick[aria-pressed="true"]{border-color:var(--gold-hi);background:color-mix(in srgb, var(--gold) 22%, var(--parch));box-shadow:0 0 10px color-mix(in srgb, var(--gold-hi) 30%, transparent)}
+.cs-f{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+.cs-f .fl{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--ink-2)}
+.cs-f .cs-title,.cs-f .cs-dice{flex:1 1 200px}
+.cs-f .field{height:36px}
+.cs-f .mini-l{flex-direction:row;align-items:center;gap:6px}
+.cs-f .field.mini{width:58px}
+.cs-f .mini-s{width:auto;height:34px}
+.cs-comp textarea.field{min-height:50px;resize:vertical}
+.cs-tgs .label{display:block;margin-bottom:4px}
+.cs-tg-l{display:flex;flex-wrap:wrap;gap:6px}
+.cs-tg{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 3px;border-radius:20px;border:1px solid var(--rule);background:var(--parch);color:inherit;font:inherit;font-size:13px;cursor:pointer}
+.cs-tg .cs-pic{width:28px;height:28px;font-size:10px;border-width:1.5px}
+.cs-tg[aria-pressed="true"]{border-color:#e0574a;background:color-mix(in srgb, #e0574a 20%, var(--parch));box-shadow:0 0 8px rgba(224,87,74,.35)}
+.cs-tg.pc[aria-pressed="true"]{border-color:#5f8fd0;background:color-mix(in srgb, #5f8fd0 20%, var(--parch));box-shadow:0 0 8px rgba(95,143,208,.35)}
+.cs-tg.down{opacity:.6}
+.cs-go{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cs-go .btn{display:inline-flex;align-items:center;gap:7px}
+.cs-go .btn .ic{width:18px;height:18px}
+
+/* Lo que va pasando: tarjetas de acción */
+.cs-feed{display:flex;flex-direction:column;gap:8px}
+.cs-feed>.row{margin:0;gap:8px}
+.cs-older{display:flex;flex-direction:column;gap:8px;opacity:.75}
+.ac-card{position:relative;display:flex;flex-direction:column;gap:5px;padding:9px 11px;border-radius:8px;background:var(--parch-2);border:1px solid var(--rule);border-left:4px solid var(--kc,var(--gold));animation:acIn .3s ease both}
+.ac-card.npc{--kc:#c0473a}
+.ac-card.pc{--kc:#5f8fd0}
+.ac-card.dm{--kc:var(--gold-hi)}
+.ac-card.crit{box-shadow:0 0 0 1px #ffd66e,0 0 18px rgba(255,214,110,.35)}
+.ac-card header{display:flex;align-items:center;gap:9px}
+.ac-card header .cs-pic{width:34px;height:34px;font-size:11px}
+.ac-who{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 7px;line-height:1.2}
+.ac-who b{font-family:var(--display);letter-spacing:.03em}
+.ac-who small{font-size:11.5px;color:var(--ink-2)}
+.ac-who span{width:100%;font-size:13.5px;color:var(--ink-2)}
+.ac-r{font-size:11px;color:var(--ink-2);white-space:nowrap}
+.ac-x{width:30px;height:30px}
+.ac-card p{margin:0;display:flex;align-items:center;flex-wrap:wrap;gap:4px 7px;font-size:13.5px}
+.ac-card p .ic{width:17px;height:17px;color:var(--gold-hi)}
+.ac-n{font-family:var(--display);font-size:21px;line-height:1;color:#fff}
+.ac-card p small{font-size:12px;color:var(--ink-2)}
+.ac-card p small i{font-style:normal;opacity:.8}
+.ac-dmg .ac-n{color:#ff9c8c}
+.ac-dmg.heal .ac-n{color:#8fe08a}
+.ac-dmg.hid{color:var(--ink-2)}
+.ac-text{font-size:13px!important;line-height:1.4;color:var(--ink-2);display:block!important}
+.ac-badge{font-style:normal;font-size:11.5px;font-weight:700;letter-spacing:.03em;padding:1px 8px;border-radius:10px;border:1px solid currentColor}
+.ac-badge.crit{color:#ffd66e;background:rgba(255,214,110,.12);animation:acPulse 1.2s ease-in-out 2}
+.ac-badge.fumble{color:#9aa3ad}
+.ac-badge.hit,.ac-badge.ko{color:#ff8a78}
+.ac-badge.miss,.ac-badge.ok{color:#8fd0f0}
+.ac-badge.done{color:#8fe08a}
+.ac-tgs{list-style:none;margin:2px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.ac-tg{display:flex;align-items:center;flex-wrap:wrap;gap:5px 7px;padding:5px 7px;border-radius:6px;background:rgba(255,255,255,.03);font-size:13px}
+.ac-tg>b{font-weight:600}
+.ac-tg>small{font-size:11.5px;color:var(--ink-2)}
+.ac-tg.me{background:color-mix(in srgb, #5f8fd0 14%, transparent);box-shadow:inset 0 0 0 1px rgba(95,143,208,.4)}
+.ac-btns{display:inline-flex;gap:5px;flex-wrap:wrap;margin-left:auto}
+.ac-btns .btn{height:32px;padding:0 10px;display:inline-flex;align-items:center;gap:5px;font-size:12.5px}
+.ac-btns .btn .ic{width:14px;height:14px}
+@keyframes acIn{from{transform:translateY(-6px);opacity:0}to{transform:none;opacity:1}}
+@keyframes acPulse{50%{box-shadow:0 0 12px rgba(255,214,110,.7)}}
+html[data-motion="off"] .ac-card,html[data-motion="off"] .cs-big .cs-pic,html[data-motion="off"] .ac-badge.crit{animation:none}
+
+/* En Mi turno: atacar desde el arma */
+.wpn-dmg .wpn-go{margin-left:auto;display:inline-flex;align-items:center;gap:5px}
+.wpn-dmg .wpn-go .ic{width:15px;height:15px}
+.wpn-dmg:has(.wpn-go){display:flex;align-items:center;flex-wrap:wrap;gap:6px}

@@ -16,7 +16,7 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 let css = readdirSync(join(root, 'styles')).filter(f => f.endsWith('.css')).sort().map(f => read('styles/' + f)).join('\n');
 const icons = read('assets/icons.svg');
 const body = read('body.html');
-const order = ['gfx.js', 'fx.js', 'sonido.js', 'iconos.js', 'lib.js', 'render.js', 'rules.js', 'app.js', 'sala.js', 'mesa.js', 'retratos.js', 'campana.js', 'bestiario.js', 'grupo.js', 'cronica.js', 'assets.js', 'editor.js', 'vision.cjs', 'clima.js', 'mapas.js', 'encuentros.js'];
+const order = ['gfx.js', 'fx.js', 'sonido.js', 'iconos.js', 'lib.js', 'render.js', 'rules.js', 'app.js', 'sala.js', 'mesa.js', 'retratos.js', 'campana.js', 'bestiario.js', 'grupo.js', 'cronica.js', 'assets.js', 'editor.js', 'vision.cjs', 'clima.js', 'mapas.js', 'encuentros.js', 'acciones.js'];
 const js = order.map(f => `/* ---- ${f} ---- */\n` + read('src/' + f)).join('\n');
 // Motor del mapa (PixiJS): archivo aparte que se baja solo al abrir un mapa. El artefacto de claude.ai usa Canvas 2D.
 const plain = process.argv.includes('--plain');
