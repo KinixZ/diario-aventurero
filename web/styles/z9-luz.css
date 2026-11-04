@@ -1,0 +1,38 @@
+/* ==================== LUZ, HORA Y CLIMA ==================== */
+/* El clima se dibuja en un lienzo encima del mapa y no estorba a los dedos */
+.map-wx{position:absolute;left:0;top:0;z-index:1;pointer-events:none;display:block}
+.map-wx[hidden]{display:none}
+
+/* Pestañas de la escena (DM) */
+.vtt-hud .sc-tabs{align-self:flex-start;max-width:100%;overflow-x:auto;scrollbar-width:none}
+.vtt-hud .sc-tabs button{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.vtt-hud .sc-tabs .ic{width:15px;height:15px}
+.vtt-hud .seg button .ic{width:15px;height:15px;vertical-align:-3px;margin-right:3px}
+.vtt-hud .lt-amb{display:flex;flex-direction:column;gap:2px;font-size:11.5px;color:var(--on-dark-2);min-width:170px}
+.vtt-hud .lt-amb .field{height:36px;font-size:13px;background-color:rgba(255,255,255,.06);color:var(--on-dark)}
+.vtt-hud .hud-hint b{color:var(--gold-hi);font-weight:600}
+.wx-row .wx-b{background:rgba(255,255,255,.04);color:var(--on-dark);border-color:rgba(217,184,102,.45)}
+.wx-row .wx-b[aria-pressed="true"]{background:var(--enamel-grad, #8c2626);color:var(--on-accent, #fff);border-color:var(--gold-hi);box-shadow:0 0 10px color-mix(in srgb, var(--gold-hi) 35%, transparent)}
+
+/* Dónde está tu ficha: luz, penumbra, oscuridad */
+.lit-chip{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border-radius:15px;font-size:12.5px;white-space:nowrap;border:1px solid rgba(217,184,102,.45);background:rgba(255,255,255,.05);color:var(--on-dark)}
+.lit-chip .ic{width:16px;height:16px}
+.lit-chip.lv2 .ic{color:#ffd66e}
+.lit-chip.lv1{background:rgba(70,80,140,.22);border-color:rgba(150,160,220,.5)}
+.lit-chip.lv1 .ic{color:#c7b3ff}
+.lit-chip.lv0{background:rgba(10,12,30,.6);border-color:rgba(120,130,190,.5);color:#cfd6ff}
+.lit-chip.lv0 .ic{color:#9fb0ff}
+
+/* En el panel de la ficha */
+.tok-lit{display:flex;gap:8px;align-items:flex-start;margin:6px 0 2px;padding:7px 9px;border-radius:6px;font-size:12.5px;line-height:1.3;background:rgba(255,255,255,.04);border:1px solid rgba(217,184,102,.3)}
+.tok-lit .ic{width:18px;height:18px;flex:none;margin-top:1px}
+.tok-lit.lv2 .ic{color:#ffd66e}
+.tok-lit.lv1{background:rgba(70,80,140,.18)}
+.tok-lit.lv1 .ic{color:#c7b3ff}
+.tok-lit.lv0{background:rgba(10,12,30,.5)}
+.tok-lit.lv0 .ic{color:#9fb0ff}
+.map-tok-b label select[data-toklt],.map-tok-b label select[data-toksn]{min-width:0}
+
+/* La luz de un objeto en la barra de selección */
+.sel-bar .sel-light{height:34px;width:auto;min-width:130px;max-width:210px;font-size:13px;background-color:rgba(255,255,255,.06);color:var(--on-dark)}
+@media (max-width:600px){ .sel-bar .sel-light{min-width:0;width:118px} }

@@ -30,7 +30,7 @@ HTTP:
 | `session.start` | `title?` | DM | Empieza la sesión N+1. Todos reciben `live`. |
 | `session.title` | `title` | DM | Título de la sesión en curso. |
 | `session.end` | — | DM | Termina la sesión: cada quien recibe `ended` con su resumen. |
-| `char` | `char` | jugador | Actualiza su resumen público (lo manda el diario cada vez que cambia la hoja). Incluye `img` (retrato 3:4), `tok` (ficha en círculo), ids de imágenes ya subidas a la campaña, y `form` (la forma que lleva puesta). |
+| `char` | `char` | jugador | Actualiza su resumen público (lo manda el diario cada vez que cambia la hoja). Incluye `img` (retrato 3:4), `tok` (ficha en círculo), ids de imágenes ya subidas a la campaña, `form` (la forma que lleva puesta) y sus sentidos en pies, `dv` (visión en la oscuridad) y `bs` (vista ciega), que usa la luz del mapa. |
 
 Fuera de sesión todo sigue disponible: combate, chat, pizarra, tablero, mapas y bestiario. Los mensajes del chat llevan `ses` (número de sesión, o 0 fuera de sesión); el resumen de `ended` usa solo los de esa sesión.
 
@@ -67,20 +67,21 @@ Cuando un monstruo **de los manuales** (con `ref`) entra visible al combate (o e
 | `fog.on` | `id`, `value` | DM | Activa la niebla de guerra. |
 | `fog.rect` | `id`, `rect: [x1, y1, x2, y2]`, `value` | DM | Descubre (`false`) o cubre (`true`) casillas. |
 | `fog.all` | `id`, `value` | DM | Cubre o descubre todo. Con la visión puesta, lo que ven ahora los personajes vuelve a quedar descubierto. Apagar la niebla apaga la visión. |
+| `map.light` | `id`, `light: {time?, amb?, wx?}` | DM | Hora (`dia`, `amanecer`, `atardecer`, `noche`), luz del lugar (`auto` = según la hora, `bright`, `dim`, `dark`) y clima (`despejado`, `lluvia`, `tormenta`, `niebla`, `nieve`, `viento`). Responde `map.light` y, con la visión puesta, lo que se descubra. |
 | `map.vis` | `id`, `on?`, `range?`, `lines?` | DM | Visión de los personajes: prenderla prende la niebla; `range` en casillas (0 = sin límite); `lines`: `auto` (los jugadores ven las líneas de pared si no hay imagen de fondo), `yes` o `no`. Responde `map.vis` y `map.fog`. |
 | `wall.add` / `wall.upd` | `id`, `walls: [{id, a: [x, y], b: [x, y], t, open?, lock?, found?, side?}]` | dueño / DM | Pone o cambia paredes (`wall.add` también reemplaza si el id ya existe). Tipos: `wall`, `door`, `secret`, `window`, `oneway`, `low`, `curtain`, `barrier`. Hasta 3000 por mapa. |
 | `wall.rm` | `id`, `wids` | dueño / DM | Quita paredes. |
 | `door` | `id`, `wid`, `open?` | cualquiera (de cerca) / DM | Abre o cierra una puerta (sin `open`, la alterna). Un jugador necesita una ficha suya a 2 casillas o menos y que no tenga llave (`locked`, `far`). Abrir una secreta la marca encontrada. |
-| `tok.add` | `id`, `tok: {x, y, s, name, color, img?, kind, ref?, hidden?, comp?}` | cualquiera | Pone una ficha. `kind`: `pc`, `npc`, `obj`. La ficha propia de un jugador es única por mapa: ponerla otra vez la mueve. Hasta 5 fichas por jugador y 120 por mapa. |
+| `tok.add` | `id`, `tok: {x, y, s, name, color, img?, kind, ref?, hidden?, comp?, lt?, sn?}` | cualquiera | Pone una ficha. `kind`: `pc`, `npc`, `obj`. La ficha propia de un jugador es única por mapa: ponerla otra vez la mueve. Hasta 5 fichas por jugador y 120 por mapa. |
 | `tok.move` | `id`, `tid`, `x`, `y` | dueño / DM | Mueve una ficha. Con paredes, la de un jugador va en recto o rodeando; si no hay camino, el servidor le regresa la ficha (`tok`) y un `error` `blocked`. El DM pasa por donde sea. Con la visión puesta, descubre lo que la ficha ve en el camino. |
-| `tok.set` | `id`, `tid`, `name?`, `s?`, `color?`, `img?`, `hidden?`, `ref?` | dueño / DM (`hidden`, `ref` solo DM) | Ajusta una ficha. |
+| `tok.set` | `id`, `tid`, `name?`, `s?`, `color?`, `img?`, `hidden?`, `ref?`, `lt?`, `sn?` | dueño / DM (`hidden`, `ref` solo DM) | Ajusta una ficha. `lt: {k?, b, d, c, f?}` es la luz que lleva (radios en casillas: `b` brillante y `d` penumbra más allá; `null` la quita). `sn: {dv?, bs?}` cambia sus sentidos en pies (lo que no se ponga sale de la hoja). |
 | `tok.del` | `id`, `tid` | dueño / DM | Quita una ficha. |
 | `scene.set` | `id?` | DM | Muestra ese mapa a todos (lo destapa si estaba oculto). Sin `id` lo quita. |
 | `map.ping` | `id`, `x`, `y`, `color?` | quien lo ve | Señala un punto (pulsación larga). |
 
 La niebla viaja como base64 de un bit por casilla (`fog.cells`, 1 = descubierta). Los jugadores no reciben capas del DM, fichas ocultas ni mapas ocultos, y las puertas secretas sin encontrar les llegan como paredes (`wall`); ya encontradas, como puertas.
 
-### Paredes y visión
+### Paredes, visión y luz
 
 Una pared es un segmento entre dos puntos en casillas (`a`, `b`) con un tipo (`t`):
 
@@ -97,6 +98,8 @@ Una pared es un segmento entre dos puntos en casillas (`a`, `b`) con un tipo (`t
 
 El servidor y el navegador usan el mismo motor (`web/src/vision.cjs`). Con `vis.on`, el servidor descubre en la niebla lo que ven las fichas de personaje del grupo (visión compartida; no cuentan las ocultas, las caídas ni las cegadas o inconscientes) cuando se ponen, se mueven, se abre una puerta o cambian las paredes, y manda `map.fog` si algo cambió. Lo que el grupo ve en este momento lo calcula cada navegador.
 
+La luz cuenta para lo que se descubre: con luz brillante o penumbra en el lugar se ve todo lo que está a la vista; a oscuras, solo lo que alumbra alguna luz o lo que alcanzan los sentidos de la ficha (visión en la oscuridad, vista ciega o su propia luz). Las luces son las de las fichas (`lt`) y las de los objetos que alumbran solos (antorcha, brasero, fogata, candelabro, vela, farol, cristal y la luz invisible `luz`) o los que tienen `lt` puesto (`{off: 1}` apaga uno); las paredes que tapan la vista también tapan la luz, y las luces de capas solo-DM no alumbran. Con niebla espesa no se ve más allá de 9 m.
+
 
 ### Editar el mapa
 
@@ -105,7 +108,7 @@ El servidor y el navegador usan el mismo motor (`web/src/vision.cjs`). Con `vis.
 | `map.add` | `id`, `stroke` o `strokes[]` (hasta 100) | quien ve el mapa (capas «Solo DM», el DM) | Agrega elementos. El id lo propone el cliente (`k…`); si está repetido o no sirve, el servidor pone otro. |
 | `map.upd` | `id`, `strokes[]` (con su `id`) | el DM todo; cada quien lo suyo | Reemplaza elementos ya puestos: mover, girar, escalar, color, capa o texto. Si el DM pasa uno a una capa secreta, a los jugadores les llega `map.rm`. |
 
-Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `text` \| `asset` \| `img`. `rect`, `text`, `asset` e `img` aceptan `r` (grados); `text` lleva `t` y puede llevar `fs` (tamaño en casillas); `asset` lleva `a` (clave del objeto), `s` y `h` (casillas); `img` lleva `img` (id de una imagen de la campaña), `s` y `h`.
+Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `text` \| `asset` \| `img`. `rect`, `text`, `asset` e `img` aceptan `r` (grados); `text` lleva `t` y puede llevar `fs` (tamaño en casillas); `asset` lleva `a` (clave del objeto), `s` y `h` (casillas); `img` lleva `img` (id de una imagen de la campaña), `s` y `h`. `asset` e `img` aceptan `lt` (su luz: `{k?, b, d, c, f?}` o `{off: 1}` para apagar la propia).
 
 ## Bestiario del grupo
 
@@ -141,7 +144,7 @@ Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `t
 | `ended` | `snapshot` | Terminó la sesión: título, horas, chat visible, tablero, hojas de la pizarra y participantes. |
 | `mesa.init` | chat, trazos, mapas | Al entrar. |
 | `chat`, `draw`, `draw.undo`, `draw.clear` | | Eventos sueltos de la mesa. |
-| `map`, `map.meta`, `map.add`, `map.rm`, `map.bg`, `map.fog`, `map.vis`, `tok`, `tok.del`, `scene`, `ping` | | Cambios de mapas, solo a quien puede verlos. |
+| `map`, `map.meta`, `map.add`, `map.rm`, `map.bg`, `map.fog`, `map.vis`, `map.light`, `tok`, `tok.del`, `scene`, `ping` | | Cambios de mapas, solo a quien puede verlos. |
 | `walls` | `id`, `put`, `del`, `wrev` | | Paredes nuevas o cambiadas (`put`) y quitadas (`del`); a los jugadores, con las secretas disfrazadas. |
 | `beast`, `beast.saved` | | Ficha de una criatura; confirmación al DM. |
 | `applied` | `kind`, `amount`, `cond`, `note`, `from` | Alguien te aplicó algo: tu hoja lo aplica y responde con `char`. |
@@ -155,7 +158,8 @@ Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `t
 
 ```json
 { "name": "Lyra", "cls": "Paladin 9 / Warlock 2", "lvl": 11, "ac": 21, "hp": 78, "hpMax": 103, "temp": 0, "speed": 30,
-  "initMod": 0, "conc": "Bless", "conds": ["prone"], "comps": [{ "name": "Homunculus Servant", "ac": 13, "hp": 10, "hpMax": 10 }] }
+  "initMod": 0, "conc": "Bless", "conds": ["prone"], "comps": [{ "name": "Homunculus Servant", "ac": 13, "hp": 10, "hpMax": 10 }],
+  "img": null, "tok": null, "form": null, "dv": 60, "bs": 0 }
 ```
 
 ## Guardado

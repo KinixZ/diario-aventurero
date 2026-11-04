@@ -31,6 +31,7 @@ export const NPC_HP = ['none', 'state', 'bar', 'pct', 'num']; // lo que ven los 
 const MAPS_MAX = 40, MAP_STROKES_MAX = 6000, MAP_PTS_MAX = 600, MAP_LAYERS_MAX = 8, MAP_TOOLS = ['pen', 'line', 'rect', 'text', 'asset', 'img'];
 const TOKENS_MAX = 120, PLAYER_TOKENS_MAX = 5, TOKEN_KINDS = ['pc', 'npc', 'obj'];
 const WALLS_MAX = 3000, WALL_LINES = ['auto', 'yes', 'no'], DOOR_REACH = 2;
+const LIGHT_TIMES = ['dia', 'amanecer', 'atardecer', 'noche'], LIGHT_AMB = ['auto', 'bright', 'dim', 'dark'], WEATHER = ['despejado', 'lluvia', 'tormenta', 'niebla', 'nieve', 'viento'];
 const BEASTS_MAX = 400, NOTES_MAX = 60, STAT_MAX = 80000;
 export const BEAST_KINDS = ['enemigo', 'pnj', 'criatura'];
 
@@ -70,6 +71,9 @@ export function cleanChar(c = {}) {
     img: IMG_ID_RE.test(c.img || '') ? c.img : null,
     tok: IMG_ID_RE.test(c.tok || '') ? c.tok : null,
     form: str(c.form, 40) || null,
+    // sentidos (en pies) para la luz del mapa: visión en la oscuridad y vista ciega
+    dv: int(c.dv, 0, 300, 0),
+    bs: int(c.bs, 0, 120, 0),
   };
 }
 const IMG_ID_RE = /^[\w-]{1,30}$/;
@@ -202,7 +206,7 @@ export class Campaigns {
     c.order = Array.isArray(d.order) ? d.order : []; c.turn = int(d.turn, -1, 999, -1); c.round = int(d.round, 0, 999, 0);
     c.log = Array.isArray(d.log) ? d.log.slice(-LOG_LEN) : [];
     c.chat = Array.isArray(d.chat) ? d.chat.slice(-CHAT_MAX) : []; c.board = Array.isArray(d.board) ? d.board : []; c.strokes = Array.isArray(d.strokes) ? d.strokes : []; c.pages = Array.isArray(d.pages) ? d.pages.slice(-PAGES_MAX) : [];
-    for (const mp of d.maps || []) { const m = { ...mp, layers: mp.layers || [], strokes: mp.strokes || [], tokens: mp.tokens || [], bg: mp.bg || null, walls: Array.isArray(mp.walls) ? mp.walls : [], vis: cleanVis(mp.vis), wrev: 0 }; m.fog = { on: !!(mp.fog && mp.fog.on), cells: mp.fog && mp.fog.cells ? Buffer.from(mp.fog.cells, 'base64') : null }; if (!m.fog.cells || m.fog.cells.length !== Math.ceil(m.cols * m.rows / 8)) m.fog.cells = fogNew(m, false); c.maps.set(m.id, m); }
+    for (const mp of d.maps || []) { const m = { ...mp, layers: mp.layers || [], strokes: mp.strokes || [], tokens: mp.tokens || [], bg: mp.bg || null, walls: Array.isArray(mp.walls) ? mp.walls : [], vis: cleanVis(mp.vis), wrev: 0, light: cleanLightSet(mp.light) }; m.fog = { on: !!(mp.fog && mp.fog.on), cells: mp.fog && mp.fog.cells ? Buffer.from(mp.fog.cells, 'base64') : null }; if (!m.fog.cells || m.fog.cells.length !== Math.ceil(m.cols * m.rows / 8)) m.fog.cells = fogNew(m, false); c.maps.set(m.id, m); }
     c.scene = d.scene && c.maps.has(d.scene) ? d.scene : null;
     for (const im of d.images || []) { c.images.set(im.id, im); c.imgBytes += im.size || 0; }
     c.beasts = Array.isArray(d.beasts) ? d.beasts : []; c.autoBeasts = d.autoBeasts !== false; c.amb = cleanAmb(d.amb);
@@ -379,7 +383,7 @@ export class Campaigns {
         const old = c.maps.get(mp.id);
         if (!old && c.maps.size >= MAPS_MAX) throw err('too_many', 'La campaña ya tiene demasiados mapas.');
         if (old && !isDm && old.by !== me.id) throw err('dm_only', 'Solo el DM o quien lo creó puede reemplazar este mapa.');
-        if (old && !isDm) { mp.hidden = old.hidden; mp.tokens = old.tokens; mp.fog = old.fog; mp.bg = old.bg; mp.walls = old.walls; mp.vis = old.vis; mp.layers = old.layers.filter((l) => l.dm).concat(mp.layers); mp.strokes = old.strokes.filter((k) => layerDm(old, k.l)).concat(mp.strokes); }
+        if (old && !isDm) { mp.hidden = old.hidden; mp.tokens = old.tokens; mp.fog = old.fog; mp.bg = old.bg; mp.walls = old.walls; mp.vis = old.vis; mp.light = old.light; mp.layers = old.layers.filter((l) => l.dm).concat(mp.layers); mp.strokes = old.strokes.filter((k) => layerDm(old, k.l)).concat(mp.strokes); }
         if (!old && !isDm) mp.hidden = false;
         mp.updated = this.now(); c.maps.set(mp.id, mp);
         this.sendMap(c, mp, out);
@@ -423,6 +427,7 @@ export class Campaigns {
         for (const k of ks) { k.id = strokeId(mp, k.id); mp.strokes.push(k); }
         mp.updated = this.now();
         for (const k of ks) { const secret = layerDm(mp, k.l); for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm) && (!secret || mm.role === 'dm')) out.push({ to: mm.id, msg: { t: 'map.add', id: mp.id, stroke: k, updated: mp.updated } }); }
+        if (ks.some(lightStroke)) this.explore(c, mp, out); // una antorcha nueva alumbra
         out.quiet = true;
         break;
       }
@@ -446,6 +451,7 @@ export class Campaigns {
             if (vis.length) out.push({ to: mm.id, msg: { t: 'map.upd', id: mp.id, strokes: vis, updated: mp.updated } });
             if (mm.role !== 'dm' && hidden.length) out.push({ to: mm.id, msg: { t: 'map.rm', id: mp.id, sids: hidden, updated: mp.updated } });
           }
+          if (done.some(lightStroke)) this.explore(c, mp, out);
         }
         out.quiet = true;
         break;
@@ -497,6 +503,16 @@ export class Campaigns {
         mp.updated = this.now();
         for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm)) out.push({ to: mm.id, msg: { t: 'map.vis', id: mp.id, vis: mp.vis, updated: mp.updated } });
         if (!this.explore(c, mp, out)) this.sendFog(c, mp, out);
+        out.quiet = true;
+        break;
+      }
+      case 'map.light': {
+        dmOnly('Solo el DM cambia la hora, la luz y el clima.');
+        const mp = this.mapFor(c, me, msg.id);
+        mp.light = cleanLightSet({ ...mp.light, ...(msg.light && typeof msg.light === 'object' ? msg.light : {}) });
+        mp.updated = this.now();
+        for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm)) out.push({ to: mm.id, msg: { t: 'map.light', id: mp.id, light: mp.light, updated: mp.updated } });
+        this.explore(c, mp, out);
         out.quiet = true;
         break;
       }
@@ -593,9 +609,14 @@ export class Campaigns {
           if (msg.img !== undefined) { if (!msg.img) t.img = null; else if (c.images.has(str(msg.img, 30))) t.img = str(msg.img, 30); }
           if (msg.hidden != null && isDm) t.hidden = !!msg.hidden;
           if (msg.ref !== undefined && isDm) t.ref = msg.ref ? str(msg.ref, 20) : null;
+          if (msg.lt !== undefined) { const lt = cleanLight(msg.lt); if (lt && !lt.off) t.lt = lt; else delete t.lt; }
+          if (msg.sn !== undefined) { const sn = cleanSenses(msg.sn); if (sn) t.sn = sn; else delete t.sn; }
+          if (msg.lt !== undefined || msg.sn !== undefined || msg.hidden != null) cells = 'all';
         }
         mp.updated = this.now();
-        this.sendTok(c, mp, t, out, wasHidden); this.explore(c, mp, out, [t], from, cells); out.quiet = true;
+        this.sendTok(c, mp, t, out, wasHidden);
+        if (cells === 'all') this.explore(c, mp, out); else this.explore(c, mp, out, [t], from, cells);
+        out.quiet = true;
         break;
       }
       case 'tok.del': {
@@ -732,7 +753,7 @@ export class Campaigns {
     const dm = mm.role === 'dm';
     const secret = new Set(mp.layers.filter((l) => l.dm).map((l) => l.id));
     return { id: mp.id, name: mp.name, cols: mp.cols, rows: mp.rows, grid: mp.grid, by: mp.by, created: mp.created, updated: mp.updated, hidden: !!mp.hidden, bg: mp.bg || null, fog: fogOut(mp),
-      walls: dm ? mp.walls : mp.walls.map(Vision.forPlayer), vis: mp.vis, wrev: mp.wrev || 0,
+      walls: dm ? mp.walls : mp.walls.map(Vision.forPlayer), vis: mp.vis, wrev: mp.wrev || 0, light: mp.light,
       layers: dm ? mp.layers : mp.layers.filter((l) => !l.dm), strokes: dm ? mp.strokes : mp.strokes.filter((k) => !secret.has(k.l)), tokens: dm ? mp.tokens : mp.tokens.filter((t) => !t.hidden) };
   }
   sendMap(c, mp, out, filter) { for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm) && (!filter || filter(mm))) out.push({ to: mm.id, msg: { t: 'map', map: this.mapView(mp, mm) } }); }
@@ -755,14 +776,11 @@ export class Campaigns {
      Con `from` y `cells` se descubre también lo que vio en el camino. Devuelve cuántas casillas nuevas. */
   explore(c, mp, out, toks, from, cells) {
     if (!mp.vis || !mp.vis.on) return 0;
-    const ix = Vision.sightOf(mp), range = mp.vis.range;
-    const charOf = (t) => { const m = t.ref && !t.comp ? c.members.get(t.ref) : null; return m && m.role !== 'dm' ? m.char : null; };
-    let n = 0;
-    for (const t of toks || mp.tokens) {
-      if (!Vision.isViewer(t, charOf(t))) continue;
-      const pts = toks && from ? Vision.trail(from, Vision.center(t), cells, t.s) : [Vision.center(t)];
-      for (const p of pts) n += Vision.explore(mp.fog.cells, mp.cols, mp.rows, Vision.poly(ix, p[0], p[1], range, mp.cols, mp.rows));
-    }
+    // la luz cuenta: a oscuras solo se descubre lo iluminado o lo que alcanzan los sentidos (las luces de capas del DM no alumbran)
+    const o = { charOf: (t) => { const m = t.ref && !t.comp ? c.members.get(t.ref) : null; return m && m.role !== 'dm' ? m.char : null; }, skipLayer: (l) => layerDm(mp, l) };
+    let n = Vision.exploreParty(mp, mp.fog.cells, toks ? { ...o, toks, from, cells } : o);
+    // una ficha que lleva luz alumbra también lo que ven las demás
+    if (toks && toks.some((t) => t.lt)) n += Vision.exploreParty(mp, mp.fog.cells, o);
     if (n) { mp.updated = this.now(); this.sendFog(c, mp, out); }
     return n;
   }
@@ -844,7 +862,7 @@ function cleanMapStroke(k, by, mp, c) {
   if (k.k === 'rect' && k.f) o.f = 1;
   if (k.k === 'asset') { if (!ASSET_RE.test(k.a || '')) return null; o.a = k.a; }
   if (k.k === 'img') { const im = str(k.img, 30); if (!/^[\w-]{1,30}$/.test(im) || (c && !c.images.has(im))) return null; o.img = im; }
-  if (k.k === 'asset' || k.k === 'img') { o.s = r2(num(k.s, 0.25, 30, 1)); o.h = r2(num(k.h, 0.25, 30, o.s)); delete o.w; }
+  if (k.k === 'asset' || k.k === 'img') { o.s = r2(num(k.s, 0.25, 30, 1)); o.h = r2(num(k.h, 0.25, 30, o.s)); delete o.w; const lt = cleanLight(k.lt); if (lt) o.lt = lt; }
   if ((k.k === 'rect' || one) && Number(k.r)) o.r = Math.round(num(k.r, -360, 360, 0) * 10) / 10;
   if (k.v != null) o.v = int(k.v, 0, 1e6, 0);
   return o;
@@ -858,6 +876,8 @@ function cleanToken(t, mp, c, me) {
   if (t.img && c.images.has(str(t.img, 30))) o.img = str(t.img, 30);
   if (kind === 'pc') { o.ref = me.role === 'dm' && t.ref && c.members.has(str(t.ref, 20)) ? str(t.ref, 20) : me.role === 'dm' ? null : me.id; if (t.comp) o.comp = 1; }
   if (kind === 'npc' && t.ref && c.npcs.has(str(t.ref, 20))) o.ref = str(t.ref, 20);
+  const lt = cleanLight(t.lt); if (lt && !lt.off) o.lt = lt;
+  const sn = cleanSenses(t.sn); if (sn) o.sn = sn;
   return o;
 }
 function cleanMap(m, by, isDm, c) {
@@ -875,7 +895,7 @@ function cleanMap(m, by, isDm, c) {
   // paredes y visión: la visión dinámica es cosa del DM (como la niebla)
   const wids = new Set();
   mp.walls = (Array.isArray(m.walls) ? m.walls : []).slice(0, WALLS_MAX).map((w) => cleanWall(w, mp)).filter((w) => { if (!w || wids.has(w.id)) return false; wids.add(w.id); return true; });
-  mp.vis = cleanVis(isDm ? m.vis : null); mp.wrev = 0;
+  mp.vis = cleanVis(isDm ? m.vis : null); mp.wrev = 0; mp.light = cleanLightSet(isDm ? m.light : null);
   if (mp.vis.on) mp.fog.on = true;
   const me = c.members.get(by) || { id: by, role: isDm ? 'dm' : 'player' };
   mp.tokens = isDm && Array.isArray(m.tokens) ? m.tokens.slice(0, TOKENS_MAX).map((t) => { try { const o = cleanToken(t, mp, c, me); if (t.id && /^[\w-]{2,20}$/.test(t.id)) o.id = t.id; if (t.by && c.members.has(t.by)) o.by = t.by; if (t.kind === 'pc' && t.ref && c.members.has(t.ref)) o.ref = t.ref; return o; } catch { return null; } }).filter(Boolean) : [];
@@ -892,6 +912,28 @@ function cleanWall(w, mp) {
   if (t === 'secret' && (w.found || w.open)) o.found = true;
   if (t === 'oneway') o.side = w.side < 0 ? -1 : 1;
   return o;
+}
+/* ¿Este elemento del mapa alumbra? (los objetos de luz, o cualquiera con luz puesta) */
+function lightStroke(k) { return (k.k === 'asset' || k.k === 'img') && (k.lt ? !k.lt.off : !!Vision.LIGHTS[k.a]); }
+/* Luz de una ficha o de un objeto: radios en casillas (brillante y penumbra), color y si parpadea; {off} la apaga */
+function cleanLight(L) {
+  if (!L || typeof L !== 'object') return null;
+  if (L.off) return { off: 1 };
+  const o = { b: num(L.b, 0, 60, 0), d: num(L.d, 0, 60, 0), c: COLOR_RE.test(L.c) ? L.c : '#ffd27a' };
+  if (!o.b && !o.d) return null;
+  if (L.k && /^[a-z]{2,12}$/.test(L.k)) o.k = L.k; if (L.f) o.f = 1;
+  return o;
+}
+/* Sentidos de una ficha (en pies); lo que no se ponga sale de la hoja */
+function cleanSenses(sn) {
+  if (!sn || typeof sn !== 'object') return null;
+  const o = {}; if (sn.dv != null && sn.dv !== '') o.dv = int(sn.dv, 0, 300, 0); if (sn.bs != null && sn.bs !== '') o.bs = int(sn.bs, 0, 120, 0);
+  return Object.keys(o).length ? o : null;
+}
+/* Hora, luz del lugar y clima del mapa */
+function cleanLightSet(v) {
+  v = v && typeof v === 'object' ? v : {};
+  return { time: LIGHT_TIMES.includes(v.time) ? v.time : 'dia', amb: LIGHT_AMB.includes(v.amb) ? v.amb : 'auto', wx: WEATHER.includes(v.wx) ? v.wx : 'despejado' };
 }
 function cleanVis(v) {
   v = v && typeof v === 'object' ? v : {};

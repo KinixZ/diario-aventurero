@@ -122,3 +122,40 @@ test('visión del grupo: descubre al moverse, no atraviesa paredes y las fichas 
   assert.equal(c.maps.get(MAP.id).vis.on, false);
   assert.ok(to(n, a.id).some((m) => m.t === 'map.vis'));
 });
+
+test('luz: de noche solo se descubre lo iluminado o lo que alcanzan los sentidos', async () => {
+  const { R, c, dm, a } = await mesa();
+  const BIG = { ...MAP, id: 'mapa-noche', cols: 30, rows: 12 };
+  R.act(c, dm.id, { t: 'map.save', map: BIG });
+  R.act(c, dm.id, { t: 'map.vis', id: BIG.id, on: true });
+  let n = R.act(c, dm.id, { t: 'map.light', id: BIG.id, light: { time: 'noche' } });
+  assert.deepEqual(to(n, a.id).find((m) => m.t === 'map.light').light, { time: 'noche', amb: 'auto', wx: 'despejado' });
+  assert.throws(() => R.act(c, a.id, { t: 'map.light', id: BIG.id, light: { time: 'dia' } }), /Solo el DM/);
+  // Lyra (sin visión en la oscuridad) a oscuras: solo su casilla
+  n = R.act(c, a.id, { t: 'tok.add', id: BIG.id, tok: { kind: 'pc', name: 'Lyra', x: 2, y: 5 } });
+  const fogOf = () => ({ cells: c.maps.get(BIG.id).fog.cells.toString('base64') });
+  assert.equal(bit(fogOf(), 30, 2, 5), 1); assert.equal(bit(fogOf(), 30, 6, 5), 0, 'a oscuras no ve a 4 casillas');
+  // una antorcha en el mapa alumbra 8 casillas (6 m brillante + 6 m penumbra)
+  R.act(c, dm.id, { t: 'map.add', id: BIG.id, strokes: [{ id: 'ktorch1', k: 'asset', a: 'antorcha', l: 'l1', pts: [12.5, 5.5], s: 1, h: 1 }] });
+  assert.equal(bit(fogOf(), 30, 12, 5), 1, 've la zona de la antorcha'); assert.equal(bit(fogOf(), 30, 19, 5), 1, 'hasta la penumbra');
+  assert.equal(bit(fogOf(), 30, 25, 5), 0, 'más allá, oscuro');
+  // su propia antorcha: ve alrededor suyo
+  const tok = c.maps.get(BIG.id).tokens[0];
+  R.act(c, a.id, { t: 'tok.set', id: BIG.id, tid: tok.id, lt: { k: 'antorcha', b: 4, d: 4, c: '#ffb050', f: 1 } });
+  assert.equal(tok.lt.b, 4); assert.equal(bit(fogOf(), 30, 2, 0), 1);
+  // la visión en la oscuridad de la hoja: 18 m = 12 casillas
+  R.act(c, a.id, { t: 'tok.set', id: BIG.id, tid: tok.id, lt: null });
+  assert.equal(tok.lt, undefined);
+  R.act(c, a.id, { t: 'char', char: { ...c.members.get(a.id).char, dv: 60 } });
+  R.act(c, dm.id, { t: 'fog.all', id: BIG.id, value: 0 });
+  assert.equal(bit(fogOf(), 30, 13, 5), 1, 've a 11 casillas con visión en la oscuridad'); assert.equal(bit(fogOf(), 30, 23, 5), 0);
+  // niebla espesa: no se ve más allá de 9 m aunque sea de día
+  R.act(c, dm.id, { t: 'map.light', id: BIG.id, light: { time: 'dia', wx: 'niebla' } });
+  R.act(c, dm.id, { t: 'fog.all', id: BIG.id, value: 0 });
+  assert.equal(bit(fogOf(), 30, 7, 5), 1); assert.equal(bit(fogOf(), 30, 12, 5), 0);
+  // el objeto de luz con la luz apagada ya no alumbra; se guarda y vuelve a cargar
+  R.act(c, dm.id, { t: 'map.upd', id: BIG.id, strokes: [{ id: 'ktorch1', k: 'asset', a: 'antorcha', l: 'l1', pts: [12.5, 5.5], s: 1, h: 1, lt: { off: 1 } }] });
+  assert.deepEqual(c.maps.get(BIG.id).strokes[0].lt, { off: 1 });
+  const back = R.fromDoc(JSON.parse(JSON.stringify(R.toDoc(c))));
+  assert.equal(back.maps.get(BIG.id).light.wx, 'niebla');
+});
