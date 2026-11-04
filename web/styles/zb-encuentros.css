@@ -1,0 +1,153 @@
+/* ==================== ESTADOS DEL MAPA Y ENCUENTROS ==================== */
+/* Colores de cada estado: preparación (acero), exploración (verde), combate (carmesí) */
+.map-ed{--st-prep:#7d9bc4;--st-explore:#6fbf73;--st-combat:#e0574a;--st-dep:#5fb85a}
+
+/* La barra: estado (el DM lo cambia; los jugadores lo ven) y herramientas encima */
+.map-ed.vtt .map-state{flex:none;display:flex}
+.map-ed.vtt .map-state button{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 11px;font-size:13.5px;position:relative}
+.map-ed.vtt .map-state .ic{width:17px;height:17px}
+.map-state button.st-prep{--sc:var(--st-prep)}
+.map-state button.st-explore{--sc:var(--st-explore)}
+.map-state button.st-combat{--sc:var(--st-combat)}
+.map-state button .ic{color:var(--sc)}
+.map-state button[aria-pressed="true"]{background:linear-gradient(180deg, color-mix(in srgb, var(--sc) 34%, transparent), color-mix(in srgb, var(--sc) 12%, transparent));border-color:var(--sc);color:#fff;box-shadow:0 0 12px color-mix(in srgb, var(--sc) 35%, transparent),inset 0 -2px 0 var(--sc)}
+.map-state button[aria-pressed="true"] .ic{color:#fff}
+@media (max-width:760px){ .map-ed.vtt .map-state button span{display:none} .map-ed.vtt .map-state button{padding:0 9px} }
+.map-st{flex:none;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;border-radius:16px;font-family:var(--display);font-size:12.5px;letter-spacing:.04em;color:#fff;border:1px solid var(--sc,var(--gold));background:color-mix(in srgb, var(--sc,var(--gold)) 22%, rgba(18,13,11,.6))}
+.map-st .ic{width:16px;height:16px}
+.map-st.st-prep{--sc:var(--st-prep)} .map-st.st-explore{--sc:var(--st-explore)} .map-st.st-combat{--sc:var(--st-combat)}
+.map-st.st-enc{--sc:var(--gold-hi);max-width:40vw}
+.map-st.st-enc span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:520px){ .map-st span{display:none} .map-st{padding:0 8px} }
+.map-tbx{flex:none;display:flex;gap:4px;padding-left:6px;border-left:1px solid var(--rule)}
+.map-tbx .tool-b[aria-pressed="true"]{background:color-mix(in srgb, var(--gold) 30%, transparent);border-color:var(--gold-hi);color:#fff;box-shadow:0 0 10px color-mix(in srgb, var(--gold-hi) 35%, transparent)}
+.map-seal.fight{left:8px;right:auto;background:#a8322a;color:#fff;border:1px solid #e0574a}
+.map-where .tag.frozen{background:color-mix(in srgb, #5fc6e8 25%, var(--parch-3));border-color:#5fc6e8}
+.map-pal .pal-done{color:var(--st-explore,#6fbf73)}
+.vtt-hud .sc-head{display:flex;align-items:center;gap:6px}
+.vtt-hud .sc-head .sc-tabs{flex:1}
+
+/* HUD: lo que pide cada estado */
+.hud-st{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:3px 11px 3px 8px;border-radius:17px;border:1px solid var(--sc,rgba(217,184,102,.5));background:color-mix(in srgb, var(--sc,var(--gold)) 16%, transparent);font-size:13px;line-height:1.2}
+.hud-st .ic{flex:none;width:18px;height:18px;color:var(--sc,var(--gold-hi))}
+.hud-st b{font-family:var(--display);font-weight:600;letter-spacing:.04em;color:#fff}
+.hud-row.st-prep .hud-st{--sc:var(--st-prep)}
+.hud-st.dep{--sc:var(--st-dep)}
+.hud-st.wait{--sc:#c9a24a}
+.hud-st.frozen{--sc:#5fc6e8}
+.hud-row.dm.fight .hud-st:not(.dep){--sc:var(--st-combat)}
+.hud-row .btn small{font-size:11px;opacity:.75;margin-left:2px}
+.hud-n{font-style:normal;display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--gold);color:#1c1512;font-size:11px;font-weight:700}
+.hud-row .btn.wave{border-color:color-mix(in srgb, var(--st-combat) 70%, transparent);background:color-mix(in srgb, var(--st-combat) 14%, transparent);color:#fff}
+.hud-row .btn.wave .ic{color:#ff9c8c}
+.hud-row .icon-btn.frz[aria-pressed="true"]{background:color-mix(in srgb, #5fc6e8 35%, transparent);border-color:#5fc6e8;color:#fff;box-shadow:0 0 12px rgba(95,198,232,.4)}
+.hud-row [data-act="mapturnonly"][aria-pressed="true"]{border-color:var(--gold-hi);color:var(--gold-hi)}
+.hud-row.pj.st{gap:8px}
+.hud-init{flex-wrap:wrap;align-items:center}
+.hud-init .btn .ic{width:17px;height:17px}
+.vi-round .ic{width:16px;height:16px;color:var(--st-dep,#5fb85a)}
+.sala-initf .btn .ic{width:16px;height:16px}
+
+/* En pantallas angostas los botones secundarios del DM quedan en su icono (con su título) */
+.hud-n.sm-only{display:none}
+@media (max-width:560px){
+  .vtt-hud .hud-row.dm .btn .lb{display:none}
+  .vtt-hud .hud-row.dm .btn{padding:0 10px;min-width:40px;justify-content:center}
+  .hud-n.sm-only{display:inline-grid}
+  .hud-st{font-size:12px;padding:2px 9px 2px 6px}
+}
+
+/* El encuentro abierto en el mapa: enemigos por oleada y zonas de despliegue */
+.vtt-hud .enc-h .seg button{display:inline-flex;align-items:center;gap:5px}
+.vtt-hud .enc-waves button{min-width:40px}
+.vtt-hud .enc-sel{padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.04);border:1px solid rgba(217,184,102,.25)}
+.vtt-hud .enc-sel b{font-family:var(--display);color:#fff;letter-spacing:.03em}
+.vtt-hud .enc-sel .fl{display:flex;flex-direction:column;gap:2px;font-size:11.5px;color:var(--on-dark-2);min-width:140px}
+.vtt-hud .enc-sel .field{height:36px;font-size:13px;background-color:rgba(255,255,255,.06);color:var(--on-dark)}
+.vtt-hud .enc-sel .btn.del{color:#ff9c8c}
+.vtt-hud .enc-tray{gap:5px}
+.vtt-hud .enc-tray small{color:var(--on-dark-2)}
+.vtt-hud .enc-tray .chip{cursor:pointer;border:1px solid rgba(217,184,102,.45);background:rgba(255,255,255,.05);color:var(--on-dark);font:inherit;font-size:12.5px;padding:4px 10px;border-radius:14px}
+.vtt-hud .enc-tray .chip.on{border-color:var(--gold-hi);background:color-mix(in srgb, var(--gold) 35%, transparent);color:#fff;box-shadow:0 0 10px color-mix(in srgb, var(--gold-hi) 35%, transparent)}
+
+/* Popover del mapa: los encuentros de este mapa */
+.map-pop.p-encs{left:auto;right:8px;width:min(420px,calc(100% - 16px))}
+.encpop{display:flex;flex-direction:column;gap:8px}
+.encpop .row b{display:inline-flex;align-items:center;gap:6px}
+.encpop .note{margin:0;color:var(--on-dark-2)}
+.enc-line{display:flex;align-items:center;gap:6px;padding:7px 8px;border-radius:4px;border:1px solid color-mix(in srgb, var(--gold) 30%, transparent);background:rgba(255,255,255,.03)}
+.enc-line .enc-txt b{color:#fff}
+.enc-line .enc-txt small{color:var(--on-dark-2)}
+.encpop .dm-row{display:flex;gap:6px;justify-content:space-between;flex-wrap:wrap}
+
+/* ---------- Pestaña Encuentros ---------- */
+.combat[data-tab="encuentros"] #mesaEnc{display:block}
+#mesaEnc{padding:14px 16px 28px}
+.enc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.enc-head b{font-family:var(--display);font-size:20px;letter-spacing:.04em;color:var(--gold-hi)}
+.enc-head .note{margin:4px 0 0;max-width:560px}
+.enc-acts{display:flex;gap:8px;flex-wrap:wrap}
+.enc-acts .btn,.enc-btns .btn,.enc-ed-h .btn,.enc-onmap .btn,.enc-run .btn,.enc-waves>.btn,.encpop .btn,.enc-ed .dm-row .btn{display:inline-flex;align-items:center;gap:6px}
+.enc-acts .btn .ic{width:17px;height:17px}
+.enc-sec{margin:14px 0}
+.enc-sec>.label{display:block;margin-bottom:8px}
+.enc-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.enc-txt b{font-family:var(--display);letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis}
+.enc-txt small{color:var(--ink-2);font-size:12.5px}
+.enc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+.enc-card{display:flex;flex-direction:column;gap:8px;padding:10px;animation:dropDown .3s ease both;animation-delay:var(--d,0ms);border-left:3px solid var(--gold)}
+.enc-card.live{border-left-color:#e0574a;box-shadow:0 0 0 1px rgba(224,87,74,.35),0 6px 18px rgba(0,0,0,.18)}
+.enc-open{display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.enc-ic{flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:8px;background:radial-gradient(circle at 40% 30%, #4a3424, #1c1512);border:1px solid var(--gold);color:var(--gold-hi)}
+.enc-ic .ic{width:22px;height:22px}
+.enc-card .tag{align-self:flex-start;margin-top:3px}
+.enc-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.enc-btns .btn .ic{width:15px;height:15px}
+.enc-btns .icon-btn.del{margin-left:auto}
+.enc-run{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;margin-bottom:8px;border-left:3px solid #e0574a}
+.enc-run>.ic{width:22px;height:22px;color:#e0574a}
+.enc-run .btn .ic{width:15px;height:15px}
+.enc-old{gap:8px}
+
+/* Ficha del encuentro */
+.enc-ed{display:flex;flex-direction:column;gap:10px;max-width:880px}
+.enc-ed-h{gap:8px;flex-wrap:wrap}
+.enc-ed-h .btn .ic{width:16px;height:16px}
+.enc-ed .hud-sp{flex:1}
+.enc-ed textarea.field{min-height:54px;resize:vertical}
+.enc-onmap{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px;border-left:3px solid var(--st-dep,#5fb85a)}
+.enc-onmap>.ic{width:24px;height:24px;color:var(--gold)}
+.enc-onmap .btn .ic{width:15px;height:15px}
+.enc-npcs{display:flex;flex-direction:column;gap:6px}
+.enc-npc{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;border-radius:6px;border:1px solid var(--rule);background:var(--parch-2)}
+.enc-av{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;overflow:hidden;background:#8c2626;color:#fff;font-family:var(--display);font-size:13px;border:2px solid rgba(20,12,8,.7)}
+.enc-av img{width:100%;height:100%;object-fit:cover}
+.enc-npc .enc-txt{flex:1 1 200px}
+.enc-npc .enc-nm{height:32px;font-family:var(--display);font-size:14px;padding:0 6px}
+.field.mini{width:58px;height:30px;padding:0 6px;text-align:center;display:inline-block}
+.enc-npc small .field.mini{width:52px;height:26px;font-size:12.5px}
+.enc-w{width:auto;max-width:160px;height:34px;font-size:13px}
+.toggle.sm{font-size:13px}
+.enc-add{display:flex;flex-direction:column;gap:8px;padding:10px;margin-top:8px}
+.enc-add .row{gap:8px;flex-wrap:wrap;margin:0;align-items:flex-end}
+.enc-add #encQ{flex:1 1 220px;height:38px}
+.enc-add .fl.sm{display:flex;flex-direction:column;gap:2px;font-size:12px}
+.enc-hits{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px}
+.enc-hit{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:7px 10px;border-radius:6px;border:1px solid var(--rule);background:var(--parch);color:inherit;font:inherit;text-align:left;cursor:pointer}
+.enc-hit:hover{border-color:var(--gold)}
+.enc-hit b{font-family:var(--display);font-size:13.5px}
+.enc-hit small{color:var(--ink-2);font-size:12px}
+.enc-hand{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.enc-hand .field{height:36px}
+.enc-hand [name="name"]{flex:1 1 160px}
+.enc-waves{display:flex;flex-direction:column;gap:6px}
+.enc-wave{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 8px;border-radius:6px;border:1px solid var(--rule);background:var(--parch-2)}
+.enc-wave>.ic{width:18px;height:18px;color:#e0574a}
+.enc-wave>b{font-family:var(--display);min-width:18px}
+.enc-wave>.field{flex:1 1 160px;height:34px}
+.enc-wave .fl.sm{display:flex;align-items:center;gap:6px;font-size:12.5px}
+.enc-wave small{color:var(--ink-2)}
+.enc-waves>.btn{align-self:flex-start}
+.enc-ed .dm-row{display:flex;justify-content:flex-end}
+.enc-ed .btn.del{color:var(--bad)}
+@media (prefers-reduced-motion:reduce){ .enc-card{animation:none} }

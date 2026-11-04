@@ -79,7 +79,9 @@ ok('de día: luz brillante', await p.evaluate(() => Mapas._vis().il.amb === 2));
 // lluvia
 await act(p, 'mapsctab', 'clima'); await p.waitForTimeout(100); await act(p, 'mapwx', 'lluvia'); await p.waitForTimeout(500);
 m = await M(); ok('llueve', m.light.wx === 'lluvia');
-ok('la lluvia se dibuja encima del mapa', await p.evaluate(() => { const c = document.getElementById('mapWx'); if (!c || c.hidden || !c.width) return false; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4 * 7) if (d[i]) n++; return n > 50; }));
+// con WebGL por software el primer cuadro de la lluvia puede tardar: se espera hasta 4 s
+let rain = false; for (let i = 0; i < 12 && !rain; i++) { rain = await p.evaluate(() => { const c = document.getElementById('mapWx'); if (!c || c.hidden || !c.width) return false; const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4 * 7) if (d[i]) n++; return n > 50; }); if (!rain) await p.waitForTimeout(350); }
+ok('la lluvia se dibuja encima del mapa', rain);
 if (out) await p.screenshot({ path: out + '-lluvia.png' });
 await act(p, 'mapwx', 'niebla'); await p.waitForTimeout(300);
 ok('la niebla espesa limita la vista a 9 m', await p.evaluate(() => Vision.effRange(Object.values(Mapas._maps())[0]) === 6));

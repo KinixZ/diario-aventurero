@@ -51,6 +51,7 @@ var Mesa = (function(){
     else if (tab === 'chat') renderChat(false);
     else if (tab === 'tablero') renderBoard();
     else if (tab === 'mapas' && window.Mapas) Mapas.render();
+    else if (tab === 'encuentros' && window.Encuentros) Encuentros.render();
   }
   function lobby(where){ var e = Sala.active(), conn = e && Sala.status() === 'connecting'; return '<div class="mesa-lobby card">' + (endedSnap ? endedBanner() : '') + '<p class="note">' + (where || 'Esto vive dentro de una campaña.') + '</p>' + (conn ? '<p class="note"><b>Entrando a ' + esc(e.name || e.code) + '…</b> ' + esc(Sala.error() || '') + '</p>' : '<button class="btn main" type="button" data-act="mesatab" data-v="inicio">Elegir campaña</button>') + '</div>'; }
   function mountLobby(){}

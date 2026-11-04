@@ -38,7 +38,8 @@ const pick = (p, sel, v) => p.evaluate(([sel, v]) => { const el = document.query
   const me = await p.evaluate(() => Object.values(Mapas._maps()).find((m) => m.name === 'Cueva baja').tokens[0]);
   await drag(p, [me.x + 0.5, me.y + 0.5], [6.5, 8.5]); await p.waitForTimeout(300);
   ok('en tu copia: el texto se lee al cruzar la zona', await p.evaluate(() => /Gotea agua/.test(document.getElementById('mapAsk').textContent)));
-  await act(p, 'mapaskno'); await drag(p, [6.5, 8.5], [20.5, 8.5]); await p.waitForTimeout(300);
+  // el panel de la ficha elegida puede tapar la ficha: se cierra antes de arrastrarla otra vez
+  await act(p, 'mapaskno'); await p.evaluate(() => { const x = document.querySelector('[data-act="maptokx"]'); if (x) x.click(); }); await drag(p, [6.5, 8.5], [20.5, 8.5]); await p.waitForTimeout(300);
   ok('en tu copia: la escalera pregunta', await p.evaluate(() => /Cueva alta/.test(document.getElementById('mapAsk').textContent)));
   await act(p, 'mapaskgo'); await p.waitForTimeout(900);
   ok('en tu copia: pasas al otro mapa con tu ficha', await p.evaluate((id) => Mapas._cur() === id && Mapas._maps()[id].tokens.length === 1, L.alta));
