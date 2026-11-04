@@ -77,6 +77,8 @@ if (out) await pj.screenshot({ path: out + '-movimiento.png' });
 /* ---------- Altura ---------- */
 await pj.evaluate(() => { const x = document.querySelector('[data-act="maptokx"]'); if (x) x.click(); });
 const meS = await scr(pj, 3.5, 8.5); await pj.mouse.click(meS[0], meS[1]); await pj.waitForTimeout(250);
+// tocar tu ficha abre el abanico; su panel está en «Ficha»
+await pj.evaluate(() => { const b = [...document.querySelectorAll('.fan-i')].find((x) => /Ficha/.test(x.textContent)); if (b) b.click(); }); await pj.waitForTimeout(200);
 ok('el panel de la ficha tiene la altura', await has(pj, '[data-act="maptokz"][data-v="1"]'));
 await act(pj, 'maptokz', '1'); await act(pj, 'maptokz', '1');
 ok('vuela a 3 m', await until(pj, (mid) => (Mapas._maps()[mid].tokens.find((t) => t.kind === 'pc').z || 0) === 2, MID));
