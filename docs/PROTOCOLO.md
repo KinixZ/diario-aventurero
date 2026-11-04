@@ -71,9 +71,14 @@ Cuando un monstruo **de los manuales** (con `ref`) entra visible al combate (o e
 | `map.vis` | `id`, `on?`, `range?`, `lines?` | DM | Visión de los personajes: prenderla prende la niebla; `range` en casillas (0 = sin límite); `lines`: `auto` (los jugadores ven las líneas de pared si no hay imagen de fondo), `yes` o `no`. Responde `map.vis` y `map.fog`. |
 | `wall.add` / `wall.upd` | `id`, `walls: [{id, a: [x, y], b: [x, y], t, open?, lock?, found?, side?}]` | dueño / DM | Pone o cambia paredes (`wall.add` también reemplaza si el id ya existe). Tipos: `wall`, `door`, `secret`, `window`, `oneway`, `low`, `curtain`, `barrier`. Hasta 3000 por mapa. |
 | `wall.rm` | `id`, `wids` | dueño / DM | Quita paredes. |
+| `trig.add` / `trig.upd` | `id`, `trig: {id, k, x, y, w, h, name, to?: {map, zid?}, lock?, hidden?, text?, once?, fired?, say?, all?}` | DM | Pone o cambia una zona (rectángulo de casillas). `k`: `paso` (lleva a otro mapa y a una zona de llegada; `lock` no deja pasar a los jugadores; `hidden` no la ven), `trampa` (avisa al DM; con `say` también al jugador), `texto` (descripción para quien entra; con `all`, para todos los del mapa) y `encuentro` (destapa a los enemigos ocultos del mapa). `once`: se dispara una sola vez (`fired` queda puesto; quitarlo la rearma). Hasta 200 por mapa. |
+| `trig.rm` | `id`, `zid` | DM | Quita una zona. |
+| `travel` | `id`, `zid` (jugador o DM) · o `id`, `tid` o `all`, `to: {map, zid?}` (DM) | jugador de cerca / DM | Pasa por una zona de paso: el jugador lleva su ficha y sus compañeros (tiene que estar a 1,5 casillas o menos; bloqueada no). El DM lleva una ficha (`tid`) o a todas las de personaje (`all`) a otro mapa. Llegan a la zona `zid` del destino (o al centro), en casillas libres; si el destino estaba oculto, se destapa. A cada jugador que llega le llega `goto`. |
+| `fight.split` | `value` | DM | Separa el combate: un orden, turno y ronda por mapa (cada quien en el mapa donde está su ficha). `false` los une en uno solo (sigue el turno del mapa que el DM tiene abierto). |
+| `fight.focus` | `map` | DM | El combate que ve y maneja el DM con el combate separado (lo manda el diario al abrir un mapa). |
 | `door` | `id`, `wid`, `open?` | cualquiera (de cerca) / DM | Abre o cierra una puerta (sin `open`, la alterna). Un jugador necesita una ficha suya a 2 casillas o menos y que no tenga llave (`locked`, `far`). Abrir una secreta la marca encontrada. |
 | `tok.add` | `id`, `tok: {x, y, s, name, color, img?, kind, ref?, hidden?, comp?, lt?, sn?}` | cualquiera | Pone una ficha. `kind`: `pc`, `npc`, `obj`. La ficha propia de un jugador es única por mapa: ponerla otra vez la mueve. Hasta 5 fichas por jugador y 120 por mapa. |
-| `tok.move` | `id`, `tid`, `x`, `y` | dueño / DM | Mueve una ficha. Con paredes, la de un jugador va en recto o rodeando; si no hay camino, el servidor le regresa la ficha (`tok`) y un `error` `blocked`. El DM pasa por donde sea. Con la visión puesta, descubre lo que la ficha ve en el camino. |
+| `tok.move` | `id`, `tid`, `x`, `y` | dueño / DM | Mueve una ficha. Si una ficha de personaje entra a una zona (o la cruza), se dispara: ver `trig`. Con paredes, la de un jugador va en recto o rodeando; si no hay camino, el servidor le regresa la ficha (`tok`) y un `error` `blocked`. El DM pasa por donde sea. Con la visión puesta, descubre lo que la ficha ve en el camino. |
 | `tok.set` | `id`, `tid`, `name?`, `s?`, `color?`, `img?`, `hidden?`, `ref?`, `lt?`, `sn?` | dueño / DM (`hidden`, `ref` solo DM) | Ajusta una ficha. `lt: {k?, b, d, c, f?}` es la luz que lleva (radios en casillas: `b` brillante y `d` penumbra más allá; `null` la quita). `sn: {dv?, bs?}` cambia sus sentidos en pies (lo que no se ponga sale de la hoja). |
 | `tok.del` | `id`, `tid` | dueño / DM | Quita una ficha. |
 | `scene.set` | `id?` | DM | Muestra ese mapa a todos (lo destapa si estaba oculto). Sin `id` lo quita. |
@@ -146,13 +151,16 @@ Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `t
 | `chat`, `draw`, `draw.undo`, `draw.clear` | | Eventos sueltos de la mesa. |
 | `map`, `map.meta`, `map.add`, `map.rm`, `map.bg`, `map.fog`, `map.vis`, `map.light`, `tok`, `tok.del`, `scene`, `ping` | | Cambios de mapas, solo a quien puede verlos. |
 | `walls` | `id`, `put`, `del`, `wrev` | | Paredes nuevas o cambiadas (`put`) y quitadas (`del`); a los jugadores, con las secretas disfrazadas. |
+| `trigs` | `id`, `put`, `del` | | Zonas nuevas, cambiadas o quitadas. Los jugadores solo reciben los pasos que no están ocultos (con `to.name`, el nombre del mapa al que llevan). |
+| `trig` | `id`, `k`, `zid`, `name`, `text?`, `who?`, `to?`, `lock?`, `dm?` | | Alguien entró a una zona. Al jugador que pisa un paso le pregunta si pasa; el texto, a quien entra (o a todos los del mapa); la trampa, al DM (y al jugador si `say`); la emboscada, a los del mapa. Al DM le llega todo con `dm: true` y `who`. |
+| `goto` | `map`, `name` | | Tu ficha pasó a ese mapa: el diario lo abre. |
 | `beast`, `beast.saved` | | Ficha de una criatura; confirmación al DM. |
 | `applied` | `kind`, `amount`, `cond`, `note`, `from` | Alguien te aplicó algo: tu hoja lo aplica y responde con `char`. |
 | `yourturn` | `round` | Empieza tu turno. |
 | `kicked` | — | El DM te quitó de la campaña. |
 | `error` | `code`, `msg` | `msg` ya viene en español. |
 
-`room` incluye `name`, `live`, `session {n, title, started, ended}`, `members` (con `online` y `seen`), `npcs`, `order`, `turnId`, `round`, `maps` (resumen), `scene`, `beasts` (resumen, sin `stat`), `autoBeasts`, `board` y `log`. Para el DM cada PNJ trae además `ac`, `hp`, `hpMax`, `temp` y `hidden`.
+`room` incluye `name`, `live`, `session {n, title, started, ended}`, `members` (con `online`, `seen` y `at`, el mapa donde está su ficha), `npcs` (con `at`), `order`, `turnId`, `round` (con el combate separado, los del combate de tu mapa; además `split`, `fight` y, para el DM, `fights: [{map, name, round, turnId, n}]`), `maps` (resumen), `scene`, `beasts` (resumen, sin `stat`), `autoBeasts`, `board` y `log`. Para el DM cada PNJ trae además `ac`, `hp`, `hpMax`, `temp` y `hidden`.
 
 `char` (resumen del personaje):
 

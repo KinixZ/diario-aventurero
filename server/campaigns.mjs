@@ -31,6 +31,7 @@ export const NPC_HP = ['none', 'state', 'bar', 'pct', 'num']; // lo que ven los 
 const MAPS_MAX = 40, MAP_STROKES_MAX = 6000, MAP_PTS_MAX = 600, MAP_LAYERS_MAX = 8, MAP_TOOLS = ['pen', 'line', 'rect', 'text', 'asset', 'img'];
 const TOKENS_MAX = 120, PLAYER_TOKENS_MAX = 5, TOKEN_KINDS = ['pc', 'npc', 'obj'];
 const WALLS_MAX = 3000, WALL_LINES = ['auto', 'yes', 'no'], DOOR_REACH = 2;
+const TRIG_KINDS = ['paso', 'trampa', 'texto', 'encuentro'], TRIGS_MAX = 200;
 const LIGHT_TIMES = ['dia', 'amanecer', 'atardecer', 'noche'], LIGHT_AMB = ['auto', 'bright', 'dim', 'dark'], WEATHER = ['despejado', 'lluvia', 'tormenta', 'niebla', 'nieve', 'viento'];
 const BEASTS_MAX = 400, NOTES_MAX = 60, STAT_MAX = 80000;
 export const BEAST_KINDS = ['enemigo', 'pnj', 'criatura'];
@@ -113,7 +114,8 @@ export class Campaigns {
     const t = this.now();
     return { code, name: str(name, 60) || 'Campaña sin nombre', dmHash, created: t, touched: t, dirty: false, members: new Map(), npcs: new Map(), order: [], turn: -1, round: 0, hidePc: false, log: [],
       npcHp: 'state', pcInit: {}, maps: new Map(), scene: null, chat: [], board: [], strokes: [], pages: [], images: new Map(), imgBytes: 0,
-      live: false, session: { n: 0, title: '', started: null, ended: null }, beasts: [], autoBeasts: true, amb: null };
+      live: false, session: { n: 0, title: '', started: null, ended: null }, beasts: [], autoBeasts: true, amb: null,
+      split: false, fights: {} }; // combates separados por mapa: {mapa: {cur, round}}
   }
 
   /* El DM crea la campaña: queda guardada de inmediato */
@@ -191,17 +193,17 @@ export class Campaigns {
 
   toDoc(c) {
     return { v: 2, code: c.code, name: c.name, dmHash: c.dmHash, created: c.created, live: c.live, session: c.session, npcHp: c.npcHp, hidePc: c.hidePc, pcInit: c.pcInit,
-      members: [...c.members.values()].map((m) => ({ id: m.id, token: m.token, role: m.role, name: m.name, init: m.init, char: m.char, seen: m.seen })),
+      members: [...c.members.values()].map((m) => ({ id: m.id, token: m.token, role: m.role, name: m.name, init: m.init, char: m.char, seen: m.seen, at: m.at || null })),
       npcs: [...c.npcs.values()], order: c.order, turn: c.turn, round: c.round, log: c.log, chat: c.chat, board: c.board, strokes: c.strokes, pages: c.pages,
       maps: [...c.maps.values()].map((mp) => ({ ...mp, fog: { on: mp.fog.on, cells: mp.fog.cells.toString('base64') } })), scene: c.scene,
-      images: [...c.images.values()], beasts: c.beasts, autoBeasts: c.autoBeasts, amb: c.amb || null };
+      images: [...c.images.values()], beasts: c.beasts, autoBeasts: c.autoBeasts, amb: c.amb || null, split: c.split, fights: c.fights };
   }
   fromDoc(d) {
     const c = this.blank(str(d.code, 8), d.name, d.dmHash);
     c.created = Number(d.created) || this.now(); c.live = !!d.live; c.hidePc = !!d.hidePc; if (NPC_HP.includes(d.npcHp)) c.npcHp = d.npcHp;
     c.session = { n: int(d.session && d.session.n, 0, 99999, 0), title: str(d.session && d.session.title, 80), started: (d.session && d.session.started) || null, ended: (d.session && d.session.ended) || null };
     c.pcInit = d.pcInit && typeof d.pcInit === 'object' ? d.pcInit : {};
-    for (const m of d.members || []) c.members.set(m.id, { id: m.id, token: m.token, role: m.role === 'dm' ? 'dm' : 'player', name: str(m.name, 40), init: m.init ?? null, char: m.role === 'dm' ? null : cleanChar(m.char || {}), seen: m.seen || 0, conns: 0 });
+    for (const m of d.members || []) c.members.set(m.id, { id: m.id, token: m.token, role: m.role === 'dm' ? 'dm' : 'player', name: str(m.name, 40), init: m.init ?? null, char: m.role === 'dm' ? null : cleanChar(m.char || {}), seen: m.seen || 0, conns: 0, at: m.at ? str(m.at, 24) : null });
     for (const n of d.npcs || []) c.npcs.set(n.id, n);
     c.order = Array.isArray(d.order) ? d.order : []; c.turn = int(d.turn, -1, 999, -1); c.round = int(d.round, 0, 999, 0);
     c.log = Array.isArray(d.log) ? d.log.slice(-LOG_LEN) : [];
@@ -210,6 +212,9 @@ export class Campaigns {
     c.scene = d.scene && c.maps.has(d.scene) ? d.scene : null;
     for (const im of d.images || []) { c.images.set(im.id, im); c.imgBytes += im.size || 0; }
     c.beasts = Array.isArray(d.beasts) ? d.beasts : []; c.autoBeasts = d.autoBeasts !== false; c.amb = cleanAmb(d.amb);
+    c.split = !!d.split; c.fights = {};
+    if (c.split && d.fights && typeof d.fights === 'object') for (const [k, f] of Object.entries(d.fights).slice(0, MAPS_MAX + 1)) c.fights[str(k, 24)] = { cur: f && f.cur ? str(f.cur, 20) : null, round: int(f && f.round, 0, 999, 0) };
+    for (const mp of c.maps.values()) mp.trig = Array.isArray(mp.trig) ? mp.trig : [];
     c.dirty = false;
     return c;
   }
@@ -308,6 +313,7 @@ export class Campaigns {
             ref: msg.ref ? str(msg.ref, 120) : null, initMod: int(msg.initMod, -10, 20, 0), formula: msg.formula ? str(msg.formula, 30) : null,
             binfo: msg.binfo && typeof msg.binfo === 'object' ? { type: str(msg.binfo.type, 40), size: str(msg.binfo.size, 40) } : null,
             img: msg.img && c.images.has(str(msg.img, 30)) ? str(msg.img, 30) : null };
+          if (msg.map && c.maps.has(str(msg.map, 24))) n.at = str(msg.map, 24);
           c.npcs.set(n.id, n);
           if (!n.hidden && i === 0) this.autoBeast(c, n);
         }
@@ -345,6 +351,7 @@ export class Campaigns {
         break;
       }
       case 'turn': {
+        if (c.split) { this.splitTurn(c, me, msg, out); break; }
         if (!c.order.length) throw err('no_order', 'Primero tiren iniciativa.');
         const cur = c.order[c.turn];
         if (!isDm && cur !== me.id) throw err('not_your_turn', 'Solo el DM o quien tiene el turno puede pasarlo.');
@@ -355,7 +362,75 @@ export class Campaigns {
         out.push({ to: c.order[c.turn], msg: { t: 'yourturn', round: c.round } });
         break;
       }
-      case 'end': dmOnly('Solo el DM termina el combate.'); c.turn = -1; c.round = 0; for (const n of c.npcs.values()) n.init = null; for (const m of c.members.values()) m.init = null; c.pcInit = {}; c.order = []; this.log(c, 'Terminó el combate'); break;
+      case 'end': dmOnly('Solo el DM termina el combate.');
+        if (c.split && !msg.all) {
+          // termina solo el combate de ese mapa
+          const key = this.fightKey(c, me, msg), mp0 = c.maps.get(key);
+          for (const x of this.fightOrder(c, key)) { const m = c.members.get(x); if (m) { m.init = null; if (m.char) delete c.pcInit[m.char.name]; } const n = c.npcs.get(x); if (n) n.init = null; }
+          delete c.fights[key]; this.sortOrder(c); this.log(c, `Terminó el combate${mp0 ? ' en ' + mp0.name : ''}`); break;
+        }
+        c.split = false; c.fights = {}; c.turn = -1; c.round = 0; for (const n of c.npcs.values()) n.init = null; for (const m of c.members.values()) m.init = null; c.pcInit = {}; c.order = []; this.log(c, 'Terminó el combate'); break;
+      case 'fight.split': {
+        dmOnly('Solo el DM separa o une los combates.');
+        if (msg.value && !c.split) {
+          // cada mapa sigue con su propio orden; el turno de quien lo tenía se queda en su mapa
+          const cur = c.order[c.turn]; c.split = true; c.fights = {};
+          for (const key of new Set(c.order.map((x) => this.locOf(c, x)))) { const ord = this.fightOrder(c, key); c.fights[key] = { cur: c.round > 0 ? (ord.includes(cur) ? cur : ord[0] || null) : null, round: c.round }; }
+          this.log(c, 'El DM separó el combate: uno por mapa');
+        } else if (!msg.value && c.split) {
+          const fs = Object.values(c.fights), f = c.fights[me.focus || c.scene] || fs.find((x) => x.cur) || null;
+          c.round = fs.reduce((a, x) => Math.max(a, x.round || 0), 0); c.split = false; c.fights = {};
+          c.turn = f && f.cur && c.order.includes(f.cur) ? c.order.indexOf(f.cur) : c.round && c.order.length ? 0 : -1;
+          this.log(c, 'El DM unió los combates en uno solo');
+        }
+        break;
+      }
+      case 'fight.focus': { dmOnly(); const k = str(msg.map, 24); me.focus = c.maps.has(k) ? k : null; break; }
+      case 'trig.add': case 'trig.upd': {
+        dmOnly('Solo el DM pone zonas.');
+        const mp = this.mapFor(c, me, msg.id);
+        const z = cleanTrig(msg.trig, mp, c); if (!z) throw err('bad_msg', 'Zona inválida.');
+        const i = mp.trig.findIndex((x) => x.id === z.id), old = i >= 0 ? mp.trig[i] : null, was = new Set(old && old.k === 'paso' && !old.hidden ? [old.id] : []);
+        if (i >= 0) mp.trig[i] = z; else { if (msg.t === 'trig.upd') break; if (mp.trig.length >= TRIGS_MAX) throw err('too_many', 'Este mapa ya tiene demasiadas zonas.'); mp.trig.push(z); }
+        mp.updated = this.now(); this.sendTrigs(c, mp, out, [z], [], was); out.quiet = true;
+        break;
+      }
+      case 'trig.rm': {
+        dmOnly('Solo el DM quita zonas.');
+        const mp = this.mapFor(c, me, msg.id), zid = str(msg.zid, 20);
+        if (!mp.trig.some((x) => x.id === zid)) { out.quiet = true; break; }
+        const oz = mp.trig.find((x) => x.id === zid), seen = oz.k === 'paso' && !oz.hidden;
+        mp.trig = mp.trig.filter((x) => x.id !== zid); mp.updated = this.now();
+        for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm) && (mm.role === 'dm' || seen)) out.push({ to: mm.id, msg: { t: 'trigs', id: mp.id, put: [], del: [zid], updated: mp.updated } });
+        out.quiet = true;
+        break;
+      }
+      /* ---------- Viajes entre mapas: escaleras, salidas, o el DM que lleva a quien quiera ---------- */
+      case 'travel': {
+        const from = this.mapFor(c, me, msg.id);
+        let toks = [], dest = null, zid = null;
+        if (msg.zid) {
+          const z = from.trig.find((x) => x.id === str(msg.zid, 20) && x.k === 'paso');
+          if (!z || !z.to || !c.maps.has(z.to.map)) throw err('no_target', 'Esa salida no lleva a ningún lado.');
+          if (z.lock && !isDm) throw err('locked', 'Está bloqueado: el DM no deja pasar por aquí.');
+          dest = c.maps.get(z.to.map); zid = z.to.zid || null;
+          if (isDm) toks = msg.all ? from.tokens.filter((t) => t.kind === 'pc') : from.tokens.filter((t) => t.id === str(msg.tid, 20));
+          else {
+            toks = from.tokens.filter((t) => !t.hidden && t.kind === 'pc' && (t.comp ? t.by === me.id : t.ref === me.id));
+            const main = toks.find((t) => !t.comp); if (!main) throw err('no_token', 'Primero pon tu ficha en el mapa.');
+            const s0 = main.s || 1, cx = main.x + s0 / 2, cy = main.y + s0 / 2, dx = Math.max(z.x - cx, 0, cx - (z.x + z.w)), dy = Math.max(z.y - cy, 0, cy - (z.y + z.h));
+            if (Math.max(dx, dy) > 1.5) throw err('far', 'Acércate a la salida.');
+          }
+        } else {
+          dmOnly('Solo el DM lleva fichas a otro mapa.');
+          dest = c.maps.get(str(msg.to && msg.to.map, 24)); zid = str(msg.to && msg.to.zid, 20) || null;
+          toks = msg.all ? from.tokens.filter((t) => t.kind === 'pc') : from.tokens.filter((t) => t.id === str(msg.tid, 20));
+        }
+        if (!dest || dest === from) throw err('no_map', 'Elige otro mapa.');
+        if (!toks.length) throw err('no_target', 'No hay fichas que llevar.');
+        this.moveTokens(c, from, dest, toks, zid, out);
+        break;
+      }
       case 'apply': {
         const kind = ['damage', 'heal', 'temp', 'cond+', 'cond-'].includes(msg.kind) ? msg.kind : null;
         if (!kind) throw err('bad_kind', 'Acción desconocida.');
@@ -383,7 +458,7 @@ export class Campaigns {
         const old = c.maps.get(mp.id);
         if (!old && c.maps.size >= MAPS_MAX) throw err('too_many', 'La campaña ya tiene demasiados mapas.');
         if (old && !isDm && old.by !== me.id) throw err('dm_only', 'Solo el DM o quien lo creó puede reemplazar este mapa.');
-        if (old && !isDm) { mp.hidden = old.hidden; mp.tokens = old.tokens; mp.fog = old.fog; mp.bg = old.bg; mp.walls = old.walls; mp.vis = old.vis; mp.light = old.light; mp.layers = old.layers.filter((l) => l.dm).concat(mp.layers); mp.strokes = old.strokes.filter((k) => layerDm(old, k.l)).concat(mp.strokes); }
+        if (old && !isDm) { mp.hidden = old.hidden; mp.tokens = old.tokens; mp.fog = old.fog; mp.bg = old.bg; mp.walls = old.walls; mp.vis = old.vis; mp.light = old.light; mp.trig = old.trig; mp.layers = old.layers.filter((l) => l.dm).concat(mp.layers); mp.strokes = old.strokes.filter((k) => layerDm(old, k.l)).concat(mp.strokes); }
         if (!old && !isDm) mp.hidden = false;
         mp.updated = this.now(); c.maps.set(mp.id, mp);
         this.sendMap(c, mp, out);
@@ -578,14 +653,14 @@ export class Campaigns {
         }
         if (mp.tokens.length >= TOKENS_MAX) throw err('too_many', 'Este mapa ya tiene demasiadas fichas.');
         mp.tokens.push(t); mp.updated = this.now();
-        this.sendTok(c, mp, t, out, t.hidden); this.explore(c, mp, out, [t]); out.quiet = true;
+        this.sendTok(c, mp, t, out, t.hidden); this.explore(c, mp, out, [t]); out.quiet = !this.place(c, mp, t);
         break;
       }
       case 'tok.move': case 'tok.set': {
         const mp = this.mapFor(c, me, msg.id);
         const t = mp.tokens.find((x) => x.id === str(msg.tid, 20)); if (!t) throw err('no_target', 'Esa ficha ya no está.');
         if (!isDm && t.by !== me.id && t.ref !== me.id) throw err('not_yours', 'Solo puedes mover tus fichas; el DM mueve todas.');
-        const wasHidden = t.hidden;
+        const wasHidden = t.hidden, ox = t.x, oy = t.y;
         let from = null, cells = null;
         if (msg.t === 'tok.move') {
           const s0 = t.s || 1, nx = num(msg.x, 0, mp.cols - s0, t.x), ny = num(msg.y, 0, mp.rows - s0, t.y);
@@ -616,7 +691,9 @@ export class Campaigns {
         mp.updated = this.now();
         this.sendTok(c, mp, t, out, wasHidden);
         if (cells === 'all') this.explore(c, mp, out); else this.explore(c, mp, out, [t], from, cells);
-        out.quiet = true;
+        let moved = false;
+        if (msg.t === 'tok.move') { moved = this.place(c, mp, t); this.zonesFire(c, mp, t, ox, oy, Array.isArray(cells) ? cells : null, isDm, out); }
+        out.quiet = !moved && !out.state;
         break;
       }
       case 'tok.del': {
@@ -753,7 +830,7 @@ export class Campaigns {
     const dm = mm.role === 'dm';
     const secret = new Set(mp.layers.filter((l) => l.dm).map((l) => l.id));
     return { id: mp.id, name: mp.name, cols: mp.cols, rows: mp.rows, grid: mp.grid, by: mp.by, created: mp.created, updated: mp.updated, hidden: !!mp.hidden, bg: mp.bg || null, fog: fogOut(mp),
-      walls: dm ? mp.walls : mp.walls.map(Vision.forPlayer), vis: mp.vis, wrev: mp.wrev || 0, light: mp.light,
+      walls: dm ? mp.walls : mp.walls.map(Vision.forPlayer), vis: mp.vis, wrev: mp.wrev || 0, light: mp.light, trig: this.trigsFor(mp, mm),
       layers: dm ? mp.layers : mp.layers.filter((l) => !l.dm), strokes: dm ? mp.strokes : mp.strokes.filter((k) => !secret.has(k.l)), tokens: dm ? mp.tokens : mp.tokens.filter((t) => !t.hidden) };
   }
   sendMap(c, mp, out, filter) { for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm) && (!filter || filter(mm))) out.push({ to: mm.id, msg: { t: 'map', map: this.mapView(mp, mm) } }); }
@@ -764,6 +841,119 @@ export class Campaigns {
       else if (!wasHidden) out.push({ to: mm.id, msg: { t: 'tok.del', id: mp.id, tid: t.id } });
     }
   }
+  /* Zonas que ve cada quien: el DM todas; los jugadores solo los pasos visibles (con el nombre del mapa al que llevan) */
+  trigsFor(mp, mm) {
+    if (mm.role === 'dm') return mp.trig || [];
+    return (mp.trig || []).filter((z) => z.k === 'paso' && !z.hidden).map((z) => this.trigForPlayer(mp, z));
+  }
+  trigForPlayer(mp, z) { const o = { id: z.id, k: 'paso', x: z.x, y: z.y, w: z.w, h: z.h, name: z.name }; if (z.lock) o.lock = true; if (z.to) o.to = { map: z.to.map, name: z.toName || '' }; return o; }
+  sendTrigs(c, mp, out, put, del, wasVis) {
+    for (const z of put) if (z.to) { const tm = c.maps.get(z.to.map); z.toName = tm ? tm.name : ''; }
+    for (const mm of c.members.values()) {
+      if (!this.canSeeMap(c, mp, mm)) continue;
+      const dm = mm.role === 'dm', vis = dm ? put : put.filter((z) => z.k === 'paso' && !z.hidden).map((z) => this.trigForPlayer(mp, z));
+      // a un jugador, una zona que dejó de ser visible le llega como borrada
+      const gone = dm ? del : del.concat(put.filter((z) => (z.k !== 'paso' || z.hidden) && wasVis && wasVis.has(z.id)).map((z) => z.id));
+      if (vis.length || gone.length) out.push({ to: mm.id, msg: { t: 'trigs', id: mp.id, put: vis, del: gone, updated: mp.updated } });
+    }
+  }
+  /* Una ficha del grupo se movió de (ox, oy): ¿entró a alguna zona? (también las que cruzó en el camino) */
+  zonesFire(c, mp, t, ox, oy, cells, isDm, out) {
+    if (!mp.trig || !mp.trig.length || t.kind !== 'pc' || t.hidden) return;
+    const s = t.s || 1, at = (x, y) => mp.trig.filter((z) => x >= z.x && x < z.x + z.w && y >= z.y && y < z.y + z.h);
+    const before = new Set(at(ox + s / 2, oy + s / 2).map((z) => z.id)), pts = [];
+    if (cells && cells.length) for (const p of cells) pts.push([p[0] + s / 2, p[1] + s / 2]);
+    else { const ax = ox + s / 2, ay = oy + s / 2, bx = t.x + s / 2, by = t.y + s / 2, n = Math.min(400, Math.ceil(Math.max(Math.abs(bx - ax), Math.abs(by - ay)) * 2)); for (let i = 1; i <= n; i++) pts.push([ax + (bx - ax) * i / n, ay + (by - ay) * i / n]); }
+    pts.push([t.x + s / 2, t.y + s / 2]);
+    const fin = new Set(at(t.x + s / 2, t.y + s / 2).map((z) => z.id)), hit = new Map();
+    for (const p of pts) for (const z of at(p[0], p[1])) if (!before.has(z.id)) hit.set(z.id, z);
+    if (!hit.size) return;
+    const owner = c.members.get(t.comp ? t.by : t.ref), who = (owner && owner.char && !t.comp ? owner.char.name : t.name) || 'Alguien';
+    const dms = [...c.members.values()].filter((m) => m.role === 'dm'), fired = [];
+    const onMap = () => [...c.members.values()].filter((m) => m.role !== 'dm' && (m.at === mp.id || mp.tokens.some((x) => x.ref === m.id && !x.comp)));
+    for (const z of hit.values()) {
+      if (z.k === 'paso') {
+        if (!isDm && fin.has(z.id) && z.to && owner && owner.role !== 'dm') out.push({ to: owner.id, msg: { t: 'trig', id: mp.id, k: 'paso', zid: z.id, name: z.name, to: { map: z.to.map, name: (c.maps.get(z.to.map) || {}).name || '' }, lock: !!z.lock } });
+        continue;
+      }
+      if (z.once && z.fired) continue;
+      z.fired = true; fired.push(z);
+      const note = { t: 'trig', id: mp.id, k: z.k, zid: z.id, name: z.name, text: z.text || '', who };
+      for (const d of dms) out.push({ to: d.id, msg: { ...note, dm: true } });
+      if (z.k === 'trampa') { if (z.say && owner && owner.role !== 'dm') { out.push({ to: owner.id, msg: note }); this.log(c, `${who} activó ${z.name || 'una trampa'}`); } }
+      else if (z.k === 'texto') { for (const m of z.all ? onMap() : owner && owner.role !== 'dm' ? [owner] : []) out.push({ to: m.id, msg: note }); }
+      else if (z.k === 'encuentro') {
+        // destapa a los enemigos ocultos de este mapa (fichas y su lugar en el combate)
+        for (const x of mp.tokens) if (x.hidden && x.kind === 'npc') { x.hidden = false; this.sendTok(c, mp, x, out, true); const n = x.ref && c.npcs.get(x.ref); if (n && n.hidden) { n.hidden = false; this.autoBeast(c, n); } }
+        for (const m of onMap()) out.push({ to: m.id, msg: note });
+        this.log(c, `¡${z.name || 'Emboscada'}! ${who} entró y aparecen los enemigos`);
+        out.state = true;
+      }
+    }
+    if (fired.length) { mp.updated = this.now(); this.sendTrigs(c, mp, out, fired, []); }
+  }
+  /* Lleva fichas de un mapa a otro: llegan a la zona `zid` del destino (o al centro), en casillas libres alrededor */
+  moveTokens(c, from, dest, toks, zid, out) {
+    if (dest.hidden) { dest.hidden = false; this.sendMap(c, dest, out, (mm) => mm.role !== 'dm'); }
+    const z = zid && (dest.trig || []).find((x) => x.id === zid);
+    const ax = z ? z.x + z.w / 2 : dest.cols / 2, ay = z ? z.y + z.h / 2 : dest.rows / 2;
+    const used = new Set(dest.tokens.map((x) => Math.round(x.x) + ',' + Math.round(x.y)));
+    const spot = (sz) => {
+      const bx = Math.round(ax - sz / 2), by = Math.round(ay - sz / 2);
+      for (let r = 0; r < 24; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; const x = bx + dx, y = by + dy;
+        if (x < 0 || y < 0 || x > dest.cols - sz || y > dest.rows - sz || used.has(x + ',' + y)) continue; used.add(x + ',' + y); return [x, y];
+      }
+      return [Math.max(0, Math.min(dest.cols - sz, bx)), Math.max(0, Math.min(dest.rows - sz, by))];
+    };
+    const moved = [], gone = (mp, t) => { mp.tokens = mp.tokens.filter((x) => x !== t); for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm)) out.push({ to: mm.id, msg: { t: 'tok.del', id: mp.id, tid: t.id } }); };
+    for (const t of toks) {
+      gone(from, t);
+      // si ya tenía su ficha en el destino (de antes), se quita: un personaje está en un solo lugar
+      if (t.kind === 'pc' && !t.comp && t.ref) for (const o of dest.tokens.filter((x) => x.kind === 'pc' && !x.comp && x.ref === t.ref)) gone(dest, o);
+      if (dest.tokens.length >= TOKENS_MAX) throw err('too_many', 'El mapa de llegada ya tiene demasiadas fichas.');
+      const p = spot(t.s || 1); t.x = p[0]; t.y = p[1];
+      if (dest.tokens.some((x) => x.id === t.id)) t.id = 't' + id(5);
+      dest.tokens.push(t); this.sendTok(c, dest, t, out, t.hidden);
+      if (t.kind === 'pc' && !t.comp && t.ref) { const m = c.members.get(t.ref); if (m) m.at = dest.id; }
+      if (t.kind === 'npc' && t.ref) { const n = c.npcs.get(t.ref); if (n) n.at = dest.id; }
+      moved.push(t);
+    }
+    from.updated = dest.updated = this.now();
+    this.explore(c, dest, out, moved);
+    const owners = new Set(moved.filter((t) => t.kind === 'pc').map((t) => (t.comp ? t.by : t.ref)));
+    for (const mid of owners) { const m = c.members.get(mid); if (m && m.role !== 'dm') out.push({ to: mid, msg: { t: 'goto', map: dest.id, name: dest.name } }); }
+    const names = moved.filter((t) => t.kind === 'pc' && !t.comp).map((t) => { const m = c.members.get(t.ref); return (m && m.char && m.char.name) || t.name; });
+    if (names.length) this.log(c, `${names.join(', ')} ${names.length > 1 ? 'pasan' : 'pasa'} a ${dest.name}`);
+    return moved;
+  }
+  /* Una ficha puesta o movida dice en qué mapa está su dueño (personaje) o su enemigo; true si cambió (con combate separado importa) */
+  place(c, mp, t) {
+    let who = null;
+    if (t.kind === 'pc' && !t.comp && t.ref) who = c.members.get(t.ref); else if (t.kind === 'npc' && t.ref) who = c.npcs.get(t.ref);
+    if (!who || who.at === mp.id) return false;
+    who.at = mp.id; return c.split;
+  }
+  /* Turnos con el combate separado: cada mapa lleva su propio orden, turno y ronda */
+  splitTurn(c, me, msg, out) {
+    const isDm = me.role === 'dm', key = this.fightKey(c, me, msg), ord = this.fightOrder(c, key);
+    if (!ord.length) throw err('no_order', 'Primero tiren iniciativa en este mapa.');
+    const F = c.fights[key] || (c.fights[key] = { cur: null, round: 0 });
+    if (!isDm && F.cur !== me.id) throw err('not_your_turn', 'Solo el DM o quien tiene el turno puede pasarlo.');
+    let i = ord.indexOf(F.cur);
+    if (msg.dir === 'start' || !F.round) { i = 0; F.round = Math.max(1, F.round); }
+    else if (i < 0) i = 0;
+    else if (msg.dir === 'prev') { i -= 1; if (i < 0) { i = ord.length - 1; F.round = Math.max(1, F.round - 1); } }
+    else { i += 1; if (i >= ord.length) { i = 0; F.round += 1; } }
+    F.cur = ord[i];
+    const mp = c.maps.get(key);
+    this.log(c, `${mp ? mp.name + ' · ' : ''}Ronda ${F.round}: turno de ${this.nameOf(c, F.cur)}`);
+    out.push({ to: F.cur, msg: { t: 'yourturn', round: F.round } });
+  }
+  /* Dónde está cada quien (para separar el combate por mapa): el mapa donde está su ficha; si no, la escena */
+  locOf(c, cid) { const m = c.members.get(cid); if (m) return m.at && c.maps.has(m.at) ? m.at : c.scene || null; const n = c.npcs.get(cid); return n ? (n.at && c.maps.has(n.at) ? n.at : c.scene || null) : null; }
+  fightKey(c, me, msg) { return me.role === 'dm' ? (str(msg && msg.map, 24) || me.focus || c.scene || null) : this.locOf(c, me.id); }
+  fightOrder(c, key) { return c.order.filter((x) => this.locOf(c, x) === key); }
   sendFog(c, mp, out) { for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm)) out.push({ to: mm.id, msg: { t: 'map.fog', id: mp.id, fog: fogOut(mp), updated: mp.updated } }); }
   /* Paredes que cambiaron (put) o se quitaron (del): a los jugadores, con las secretas disfrazadas */
   sendWalls(c, mp, out, put, del) {
@@ -820,12 +1010,17 @@ export class Campaigns {
   /* Lo que ve cada quien: los jugadores no ven PNJ ocultos, ni PG exactos de enemigos, ni mapas o criaturas en preparación */
   view(c, forId) {
     const me = c.members.get(forId), dm = !!me && me.role === 'dm';
-    const members = [...c.members.values()].map(m => ({ id: m.id, role: m.role, name: m.name, online: m.conns > 0, seen: m.seen, init: m.init, char: m.char && (dm || m.id === forId || !c.hidePc ? m.char : { ...m.char, hp: null, temp: null }) }));
-    const npcs = [...c.npcs.values()].filter(n => dm || !n.hidden).map(n => dm ? n : npcForPlayers(n, c.npcHp));
+    const members = [...c.members.values()].map(m => ({ id: m.id, role: m.role, name: m.name, online: m.conns > 0, seen: m.seen, init: m.init, at: m.at || null, char: m.char && (dm || m.id === forId || !c.hidePc ? m.char : { ...m.char, hp: null, temp: null }) }));
+    const npcs = [...c.npcs.values()].filter(n => dm || !n.hidden).map(n => dm ? n : { ...npcForPlayers(n, c.npcHp), at: n.at || null });
+    // con el combate separado, cada quien ve el de su mapa (el DM, el del mapa que tiene abierto)
+    const key = c.split ? (dm ? (me.focus || c.scene || null) : this.locOf(c, forId)) : null, F = c.split ? c.fights[key] || { cur: null, round: 0 } : null;
+    const ord = c.split ? this.fightOrder(c, key) : c.order;
+    const fights = dm && c.split ? [...new Set(c.order.map((x) => this.locOf(c, x)))].map((k) => { const f = c.fights[k] || {}, mp = c.maps.get(k); return { map: k, name: mp ? mp.name : 'Sin mapa', round: f.round || 0, turnId: f.cur || null, n: this.fightOrder(c, k).length }; }) : undefined;
     const maps = [...c.maps.values()].filter((mp) => dm || !mp.hidden).map((mp) => ({ id: mp.id, name: mp.name, cols: mp.cols, rows: mp.rows, grid: mp.grid, n: mp.strokes.length, tokens: mp.tokens.length, by: mp.by, updated: mp.updated, hidden: !!mp.hidden, bg: !!mp.bg }));
     const beasts = c.beasts.filter((b) => dm || !b.hidden).map((b) => ({ id: b.id, name: b.name, kind: b.kind, img: b.img, info: b.info, hasStat: !!b.stat, ref: dm || b.manual ? b.ref : undefined, manual: !!(b.manual && b.ref), hidden: !!b.hidden, auto: !!b.auto, seen: b.seen, ses: b.ses, notes: b.notes.length }));
     return { code: c.code, name: c.name, you: forId, role: me ? me.role : null, live: c.live, session: c.session, members, npcs, npcHp: c.npcHp, maps, scene: c.scene && (dm || !c.maps.get(c.scene)?.hidden) ? c.scene : null, board: c.board, pages: c.pages.length,
-      beasts, autoBeasts: c.autoBeasts, amb: c.amb || null, order: c.order.filter(x => dm || !c.npcs.get(x)?.hidden), turnId: c.order[c.turn] || null, round: c.round, hidePc: c.hidePc, log: c.log.slice(-25) };
+      beasts, autoBeasts: c.autoBeasts, amb: c.amb || null, order: ord.filter(x => dm || !c.npcs.get(x)?.hidden), turnId: c.split ? F.cur : c.order[c.turn] || null, round: c.split ? F.round : c.round, hidePc: c.hidePc, log: c.log.slice(-25),
+      split: c.split, fight: key, fights };
   }
   /* Lo que se ve de una campaña en el selector, sin entrar */
   peek(c) { return { code: c.code, name: c.name, live: c.live, session: c.session.n, title: c.session.title, online: this.online(c), players: [...c.members.values()].filter((m) => m.role === 'player').length }; }
@@ -896,6 +1091,7 @@ function cleanMap(m, by, isDm, c) {
   const wids = new Set();
   mp.walls = (Array.isArray(m.walls) ? m.walls : []).slice(0, WALLS_MAX).map((w) => cleanWall(w, mp)).filter((w) => { if (!w || wids.has(w.id)) return false; wids.add(w.id); return true; });
   mp.vis = cleanVis(isDm ? m.vis : null); mp.wrev = 0; mp.light = cleanLightSet(isDm ? m.light : null);
+  mp.trig = isDm && Array.isArray(m.trig) ? m.trig.slice(0, TRIGS_MAX).map((z) => cleanTrig(z, mp, c)).filter(Boolean) : [];
   if (mp.vis.on) mp.fog.on = true;
   const me = c.members.get(by) || { id: by, role: isDm ? 'dm' : 'player' };
   mp.tokens = isDm && Array.isArray(m.tokens) ? m.tokens.slice(0, TOKENS_MAX).map((t) => { try { const o = cleanToken(t, mp, c, me); if (t.id && /^[\w-]{2,20}$/.test(t.id)) o.id = t.id; if (t.by && c.members.has(t.by)) o.by = t.by; if (t.kind === 'pc' && t.ref && c.members.has(t.ref)) o.ref = t.ref; return o; } catch { return null; } }).filter(Boolean) : [];
@@ -911,6 +1107,26 @@ function cleanWall(w, mp) {
   if (Vision.TYPES[t].door) { if (w.open) o.open = true; if (w.lock) o.lock = true; }
   if (t === 'secret' && (w.found || w.open)) o.found = true;
   if (t === 'oneway') o.side = w.side < 0 ? -1 : 1;
+  return o;
+}
+/* Una zona del mapa (rectángulo de casillas) que hace algo cuando entra una ficha del grupo:
+   paso (escalera o salida a otro mapa: pregunta antes; el DM la puede bloquear), trampa (avisa al DM), texto (una descripción
+   para quien entra o para todos los del mapa) y encuentro (destapa a los enemigos ocultos del mapa). */
+function cleanTrig(z, mp, c) {
+  if (!z || typeof z !== 'object') return null;
+  const k = TRIG_KINDS.includes(z.k) ? z.k : 'paso';
+  const x = int(z.x, 0, mp.cols - 1, 0), y = int(z.y, 0, mp.rows - 1, 0), w = int(z.w, 1, mp.cols - x, 1), h = int(z.h, 1, mp.rows - y, 1);
+  const o = { id: /^z[\w-]{2,18}$/.test(z.id || '') ? z.id : 'z' + id(5), k, x, y, w, h, name: str(z.name, 50) };
+  if (k === 'paso') {
+    const tm = str(z.to && z.to.map, 24);
+    if (tm && tm !== mp.id && c.maps.has(tm)) { o.to = { map: tm }; const tz = str(z.to.zid, 20); if (/^z[\w-]{2,18}$/.test(tz)) o.to.zid = tz; o.toName = c.maps.get(tm).name; }
+    if (z.lock) o.lock = true; if (z.hidden) o.hidden = true;
+  } else {
+    o.text = txt(z.text, 600);
+    if (z.once) o.once = true; if (z.fired) o.fired = true;
+    if (k === 'trampa' && z.say) o.say = true;
+    if (k === 'texto' && z.all) o.all = true;
+  }
   return o;
 }
 /* ¿Este elemento del mapa alumbra? (los objetos de luz, o cualquiera con luz puesta) */
