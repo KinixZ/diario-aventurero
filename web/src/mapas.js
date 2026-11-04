@@ -1,9 +1,11 @@
 /* ==================== MAPAS: TABLERO VIRTUAL ==================== */
-/* Lienzos con cuadrícula, capas, fichas y niebla. Tres modos:
-   Jugar   — mueves tu ficha (el DM, todas) y ves la distancia en metros; mantén presionado para señalar un punto.
-   Dibujar — lápiz, líneas, rectángulos y texto por capas, como antes.
-   Niebla  — solo el DM: arrastra para descubrir o cubrir casillas; con la visión de los personajes, se descubre sola
-             con lo que ven las fichas del grupo, y las paredes (Dibujar → Paredes) tapan la vista y el paso.
+/* Lienzos con cuadrícula, capas, fichas y niebla. En una campaña cada mapa tiene un estado que pone el DM:
+   Preparación — solo el DM lo ve: lo arma, prepara encuentros y coloca enemigos.
+   Exploración — cada quien mueve su ficha (con paredes, visión y zonas); el DM puede congelar el movimiento.
+   Combate     — antes de empezar, cada quien se acomoda en su zona de despliegue y tira iniciativa; luego, cada quien en su turno.
+   Encima de cualquier estado van las herramientas: Dibujar (lápiz, líneas, objetos, paredes, zonas por capas) y
+   Escena (solo el DM: niebla, luz y hora, clima). Mantén presionado para señalar un punto.
+   Con un encuentro abierto (Encuentros → Colocar en el mapa) el DM acomoda sus enemigos, oleadas y zonas de despliegue.
    En una campaña todo viaja por el servidor; cada teléfono guarda su copia (IndexedDB) para verla sin conexión.
    Fuera de una campaña dibujas y pones fichas solo en tu copia. */
 var Mapas = (function(){
@@ -27,6 +29,7 @@ var Mapas = (function(){
   var edOn = false; // un gesto del editor (seleccionar, mover, girar…) en curso
   var gl = null, glRaf = 0, fogSeq = 0, preloaded = false; // motor WebGL (mapa-gl.js) cuando el aparato lo permite; si no, Canvas 2D
   var selZone = null, zop = null, ask = null; // zona elegida, gesto de zona y la pregunta abierta (subir, leer…)
+  var encEd = null, eop = null, encPend = null; // el encuentro que el DM acomoda en el mapa ({id, k:'npc'|'deploy', wave, pick, sel, zsel}) y su gesto
   var selWall = null, wop = null, viewAs = false, doorAnim = {}, visCache = {}, visSeq = 0; // paredes elegida y en edición; el DM viendo como jugador
 
   /* ---------- Guardado en el dispositivo ---------- */
@@ -55,6 +58,21 @@ var Mapas = (function(){
   function me(){ var r = room(); return r ? r.you : 'yo'; }
   function isDm(){ var r = room(); return !!r && r.role === 'dm'; }
   function canAdmin(mp){ return !shared(mp.id) || isDm() || mp.by === me(); }
+  /* Estado del mapa (en tu copia siempre se explora) y si su combate ya empezó */
+  var STATES = [['prep','Preparación','i-prep','Solo tú lo ves: ármalo, prepara encuentros y coloca enemigos.'],['explore','Exploración','i-compass','Cada quien mueve su ficha; las paredes, la visión y las zonas cuentan.'],['combat','Combate','i-swords','Se acomodan, tiran iniciativa y cada quien se mueve en su turno.']];
+  function stateOf(mp){ if (!mp || !shared(mp.id)) return 'explore'; var m = roomMeta(mp.id); return mp.state || (m && m.state) || (mp.hidden || (m && m.hidden) ? 'prep' : 'explore'); }
+  function started(mp){ var r = room(); return !!r && r.round > 0 && (!r.split || r.fight === mp.id); }
+  function deploying(mp){ return stateOf(mp) === 'combat' && !started(mp); }
+  function deployZ(mp, owner){ return (mp.trig || []).filter(function(z){ return z.k === 'despliegue' && (!z.for || !owner || z.for === owner); }); }
+  function inDeploy(zs, x, y, s){ return zs.some(function(z){ return s <= z.w && s <= z.h ? x >= z.x - 0.01 && y >= z.y - 0.01 && x + s <= z.x + z.w + 0.01 && y + s <= z.y + z.h + 0.01 : x + s / 2 >= z.x && x + s / 2 <= z.x + z.w && y + s / 2 >= z.y && y + s / 2 <= z.y + z.h; }); }
+  function ownerOf(t){ return t.kind === 'pc' && !t.comp ? t.ref : t.by; }
+  /* ¿Puede un jugador mover esta ficha ahora? (el servidor decide; esto evita el viaje de ida y vuelta) */
+  function moveBlock(mp, t){
+    if (master(mp) || !shared(mp.id)) return null;
+    if (mp.frozen) return 'El DM detuvo el movimiento por ahora.';
+    if (stateOf(mp) !== 'combat' || !started(mp) || mp.turnOnly === false) return null;
+    var r = room(); return r.turnId && r.turnId !== ownerOf(t) ? 'Espera tu turno para moverte.' : null;
+  }
   function master(mp){ return !shared(mp.id) || isDm(); } // niebla, fichas de enemigos, ocultar
   function mine(t){ var mp = maps[cur]; return !mp || !shared(mp.id) || isDm() || t.by === me() || t.ref === me(); }
   function visible(){ var c = document.getElementById('combat'); return c && !c.hidden && c.getAttribute('data-tab') === 'mapas'; }
@@ -63,6 +81,7 @@ var Mapas = (function(){
     Sala.on('state', function(r){
       if (!preloaded && window.Gfx) { preloaded = true; setTimeout(Gfx.preload, 1500); } // el motor del mapa se baja en segundo plano al entrar a la campaña
       (r.maps || []).forEach(function(m){
+        if (maps[m.id] && m.state) { maps[m.id].state = m.state; maps[m.id].frozen = !!m.frozen; maps[m.id].hidden = !!m.hidden; }
         var have = maps[m.id] || index().filter(function(x){ return x.id === m.id; })[0];
         if ((!have || (have.updated || 0) < m.updated) && asked[m.id] !== m.updated) { asked[m.id] = m.updated; Sala.send({t:'map.get', id:m.id}); }
       });
@@ -95,6 +114,14 @@ var Mapas = (function(){
       mp.updated = m.updated || mp.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); }
     });
     Sala.on('trig', function(m){ trigEvent(m); });
+    Sala.on('map.play', function(m){ var mp = maps[m.id]; if (!mp) return; mp.state = m.state; mp.frozen = !!m.frozen; mp.turnOnly = m.turnOnly !== false; mp.hidden = m.state === 'prep'; mp.updated = m.updated || mp.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
+    /* El DM prepara un combate (o empieza un encuentro): quien está ahí se acomoda; quien no, se puede unir */
+    Sala.on('combat', function(m){
+      if (isDm()) return; var mp = m.map && maps[m.map], here = mp && myTok(mp);
+      if (!m.map || here) { if (window.Fx) Fx.announce('¡Combate!', m.map ? 'Acomódate y tira iniciativa' : 'Tiren iniciativa', 'fight'); else Sala.toast('¡Combate! Tira iniciativa.'); if (window.Sfx) Sfx.play('turn'); if (m.map && cur !== m.map) Sala.toast('Hay combate en «' + m.name + '».', {act:'mapgoscene', v:m.map, label:'Ver mapa'}); return; }
+      Sala.toast('El DM preparó un combate en «' + (m.name || 'otro mapa') + '».', {act:'mapjoin', v:m.map, label:'Unirme'}); if (window.Sfx) Sfx.play('turn');
+    });
+    Sala.on('wave', function(m){ if (window.Fx) Fx.announce('¡Refuerzos!', m.name || 'Llega la oleada ' + m.n, 'round'); else Sala.toast('¡Llegan refuerzos!'); if (window.Sfx) Sfx.play('turn'); });
     Sala.on('goto', function(m){ arrive(m.map, m.name); });
     Sala.on('map.light', function(m){ var mp = maps[m.id]; if (!mp) return; mp.light = m.light; mp.updated = m.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
     Sala.on('map.vis', function(m){ var mp = maps[m.id]; if (!mp) return; mp.vis = m.vis; if (m.vis.on) mp.fog.on = true; mp.updated = m.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
@@ -389,6 +416,85 @@ var Mapas = (function(){
     });
   }
 
+  /* ---------- Encuentro abierto en el mapa: el DM acomoda enemigos (por oleada) y zonas de despliegue ----------
+     Los datos viven en Encuentros (encuentros.js); aquí solo se dibujan y se arrastran. Cada cambio se guarda solo. */
+  function encData(){ return encEd && window.Encuentros ? Encuentros.get(encEd.id) : null; }
+  function encHere(mp){ var e = encData(); return !!(e && mp && e.map === mp.id); }
+  function encSave(e){ if (window.Encuentros) Encuentros.put(e); toolbar(); paint(); }
+  function encGhosts(){
+    var e = encData(); if (!e) return [];
+    return e.npcs.filter(function(d){ return d.x != null; }).map(function(d){ var nm = d.name + (d.wave > 1 ? ' · O' + d.wave : ''); return {id:'E:' + d.k, x:d.x, y:d.y, s:d.s || 1, color:d.color || '#8c2626', img:d.img ? Mesa.imgUrl(d.img) : null, imgId:d.img || null, ini:ini(d.name), name:nm, pct:null, turn:false, down:false, hidden:d.wave !== encEd.wave || !!d.hidden, sel:encEd.sel === d.k, late:false, label:true}; });
+  }
+  function encHit(e, m){ var hit = null; e.npcs.forEach(function(d){ if (d.x == null) return; var s = d.s || 1; if (Math.hypot(m[0] - (d.x + s / 2), m[1] - (d.y + s / 2)) <= Math.max(s * 0.5 + 0.15, 24 / V().s)) hit = d; }); return hit; }
+  function encDown(mp, m, ev, p){
+    var e = encData(); if (!e) return; var tol = (ev.pointerType === 'touch' ? 22 : 12) / V().s;
+    if (encEd.k === 'deploy') {
+      var sz = encEd.zsel && e.deploy.filter(function(z){ return z.id === encEd.zsel; })[0];
+      if (sz && Math.hypot(m[0] - (sz.x + sz.w), m[1] - (sz.y + sz.h)) < tol) { eop = {k:'size', z:sz, orig:JSON.parse(JSON.stringify(sz)), m0:m, moved:false}; return; }
+      var hit = null; e.deploy.forEach(function(z){ if (inZone(z, m[0], m[1])) hit = z; });
+      if (hit) { eop = {k:'zmove', z:hit, orig:JSON.parse(JSON.stringify(hit)), m0:m, moved:false}; return; }
+      var c0 = zcell(mp, m); eop = {k:'znew', a:c0, b:c0, m0:m, moved:false}; return;
+    }
+    var d = encHit(e, m);
+    eop = d ? {k:'npc', d:d, ox:m[0] - d.x, oy:m[1] - d.y, m0:m, moved:false} : {k:'tap', m0:m, px:p[0], py:p[1], moved:false};
+  }
+  function encMove(mp, m, p){
+    var o = eop;
+    if (o.k === 'tap') { if (!o.moved && Math.hypot(p[0] - o.px, p[1] - o.py) < 8) return; o.moved = true; var v = V(); v.x += p[0] - o.px; v.y += p[1] - o.py; o.px = p[0]; o.py = p[1]; paint(); return; }
+    if (!o.moved && Math.hypot(m[0] - o.m0[0], m[1] - o.m0[1]) * V().s < 6) return; o.moved = true;
+    if (o.k === 'npc') { var s = o.d.s || 1; o.d.x = Math.max(0, Math.min(mp.cols - s, m[0] - o.ox)); o.d.y = Math.max(0, Math.min(mp.rows - s, m[1] - o.oy)); }
+    else if (o.k === 'znew') o.b = zcell(mp, m);
+    else if (o.k === 'zmove') { var q = o.orig, dx = Math.round(m[0] - o.m0[0]), dy = Math.round(m[1] - o.m0[1]); o.z.x = Math.max(0, Math.min(mp.cols - q.w, q.x + dx)); o.z.y = Math.max(0, Math.min(mp.rows - q.h, q.y + dy)); }
+    else { var q2 = o.orig; o.z.w = Math.max(1, Math.min(mp.cols - q2.x, Math.round(m[0] - q2.x))); o.z.h = Math.max(1, Math.min(mp.rows - q2.y, Math.round(m[1] - q2.y))); }
+    paint();
+  }
+  function encUp(mp){
+    var o = eop, e = encData(); eop = null; if (!e) return;
+    if (o.k === 'tap') {
+      if (o.moved) return;
+      var pk = encEd.pick && e.npcs.filter(function(d){ return d.k === encEd.pick; })[0];
+      if (pk) { encPlace(mp, pk, o.m0); var nx = e.npcs.filter(function(d){ return d.x == null; })[0]; encEd.pick = nx ? nx.k : null; encEd.sel = pk.k; encSave(e); return; }
+      encEd.sel = null; toolbar(); paint(); return;
+    }
+    if (o.k === 'npc') { if (o.moved) { if (mp.grid !== 'none') { o.d.x = Math.round(o.d.x); o.d.y = Math.round(o.d.y); } encEd.sel = o.d.k; encSave(e); return; } encEd.sel = encEd.sel === o.d.k ? null : o.d.k; toolbar(); paint(); return; }
+    if (o.k === 'znew') {
+      if (!o.moved) { encEd.zsel = null; toolbar(); paint(); return; }
+      if (e.deploy.length >= 12) { Sala.toast('Un encuentro lleva hasta 12 zonas de despliegue.'); paint(); return; }
+      var z = {id:newZid(), k:'despliegue', x:Math.min(o.a[0], o.b[0]), y:Math.min(o.a[1], o.b[1]), w:Math.abs(o.a[0] - o.b[0]) + 1, h:Math.abs(o.a[1] - o.b[1]) + 1, name:''};
+      e.deploy.push(z); encEd.zsel = z.id; if (window.Sfx) Sfx.play('click'); encSave(e); return;
+    }
+    encEd.zsel = o.z.id; if (o.moved) encSave(e); else { toolbar(); paint(); }
+  }
+  /* Pone un enemigo del encuentro en la casilla tocada (centrado) */
+  function encPlace(mp, d, m){ var s = d.s || 1; d.x = Math.max(0, Math.min(mp.cols - s, Math.round(m[0] - s / 2))); d.y = Math.max(0, Math.min(mp.rows - s, Math.round(m[1] - s / 2))); }
+  function encHud(mp){
+    var e = encData(); if (!e) return '';
+    var waves = [1].concat(e.waves.map(function(w){ return w.n; })), un = e.npcs.filter(function(d){ return d.x == null; }), sel = encEd.sel && e.npcs.filter(function(d){ return d.k === encEd.sel; })[0], zs = encEd.zsel && e.deploy.filter(function(z){ return z.id === encEd.zsel; })[0], r = room();
+    var wname = function(n){ var w = e.waves.filter(function(x){ return x.n === n; })[0]; return n === 1 ? 'Al empezar' : (w && w.name) || 'Oleada ' + n; };
+    var h = '<div class="hud-row enc-h"><div class="seg sm" role="group" aria-label="Qué acomodas"><button type="button" data-act="mapenck" data-v="npc" aria-pressed="' + (encEd.k === 'npc') + '"><svg class="ic"><use href="#i-paw"/></svg>Enemigos</button><button type="button" data-act="mapenck" data-v="deploy" aria-pressed="' + (encEd.k === 'deploy') + '"><svg class="ic"><use href="#i-flag"/></svg>Despliegue</button></div>'
+      + (encEd.k === 'npc' && waves.length > 1 ? '<div class="seg sm enc-waves" role="group" aria-label="Oleada que se resalta">' + waves.map(function(n){ return '<button type="button" data-act="mapencw" data-v="' + n + '" aria-pressed="' + (encEd.wave === n) + '" title="' + attr(wname(n)) + '"><svg class="ic"><use href="#i-wave"/></svg>' + n + '</button>'; }).join('') + '</div>' : '')
+      + '<span class="hud-sp"></span><button class="btn sm" type="button" data-act="encopen" data-id="' + attr(e.id) + '"><svg class="ic"><use href="#i-scroll"/></svg>Ficha del encuentro</button></div>';
+    if (encEd.k === 'npc') {
+      if (sel) h += '<div class="hud-row enc-sel"><b>' + esc(sel.name) + '</b><label class="fl sm">Llega<select class="field" data-encnpc="wave">' + waves.map(function(n){ return '<option value="' + n + '"' + (sel.wave === n ? ' selected' : '') + '>' + esc(wname(n)) + '</option>'; }).join('') + '</select></label>'
+        + '<label class="toggle"><input type="checkbox" data-encnpc="hidden"' + (sel.hidden ? ' checked' : '') + '> Oculto</label>' + (sel.x != null ? '<button class="btn sm" type="button" data-act="mapencun">Quitar del mapa</button>' : '') + '</div>';
+      if (un.length) h += '<div class="hud-row enc-tray"><small>Sin lugar:</small>' + un.map(function(d){ return '<button type="button" class="chip' + (encEd.pick === d.k ? ' on' : '') + '" data-act="mapencpick" data-v="' + attr(d.k) + '">' + esc(d.name) + (d.wave > 1 ? ' · O' + d.wave : '') + '</button>'; }).join('') + '<button class="btn sm" type="button" data-act="mapencall">Todos cerca del centro</button></div>';
+      h += '<p class="hud-hint">' + (!e.npcs.length ? 'Este encuentro no tiene enemigos: agrégalos en su ficha.' : encEd.pick ? 'Toca el mapa para poner a ' + esc((e.npcs.filter(function(d){ return d.k === encEd.pick; })[0] || {}).name || '') + '.' : 'Arrastra a cada enemigo a su lugar; toca uno para cambiar su oleada.' + (un.length ? ' Los que no tengan lugar llegan cerca del centro.' : '')) + '</p>';
+    } else {
+      if (zs) h += '<div class="hud-row enc-sel"><label class="fl sm">Nombre<input class="field" id="mapEncZName" maxlength="50" value="' + attr(zs.name || '') + '" placeholder="Orilla" autocomplete="off"></label><label class="fl sm">Para<select class="field" id="mapEncZFor"><option value="">Todo el grupo</option>' + (r ? r.members.filter(function(m){ return m.role !== 'dm'; }).map(function(m){ return '<option value="' + attr(m.id) + '"' + (zs.for === m.id ? ' selected' : '') + '>' + esc(m.char ? m.char.name : m.name) + '</option>'; }).join('') : '') + '</select></label><button class="btn sm del" type="button" data-act="mapenczdel"><svg class="ic"><use href="#i-trash"/></svg>Quitar</button></div>';
+      h += '<p class="hud-hint">Arrastra para marcar dónde se acomoda el grupo antes de empezar (' + e.deploy.length + ' de 12). Sin zonas, cada quien se pone donde quiera.</p>';
+    }
+    return h;
+  }
+  /* Abre el mapa del encuentro para acomodarlo (lo llama Encuentros) */
+  function editEnc(id, k){
+    var e = window.Encuentros && Encuentros.get(id); if (!e || !e.map) return;
+    var ed = {id:id, k:k || 'npc', wave:1, pick:null, sel:null, zsel:null}, un = e.npcs.filter(function(d){ return d.x == null; })[0]; if (un && ed.k === 'npc') ed.pick = un.k;
+    if (window.Mesa && !visible()) Mesa.show('mapas');
+    if (cur === e.map && canvas && document.contains(canvas)) { encEd = ed; selTok = null; pop = null; mode = 'jugar'; toolbar(); paint(); tokPanel(); return; }
+    encPend = {map:e.map, ed:ed}; openMap(e.map);
+  }
+  function encDone(){ encEd = null; eop = null; if (cur) { toolbar(); paint(); } }
+
   /* ---------- Visión del grupo ---------- */
   function charOf(mp, t){ var r = room(); if (!r || !shared(mp.id) || !t.ref || t.comp) return null; var m = r.members.filter(function(x){ return x.id === t.ref; })[0]; return m && m.role !== 'dm' ? m.char : null; }
   /* Polígonos de lo que ve ahora el grupo (se recalculan solo si algo cambió) */
@@ -498,7 +604,7 @@ var Mapas = (function(){
     var r = room(), scene = r && r.scene === m.id, dm = isDm(), th = thumbOf(m), nt = m.tokens != null ? m.tokens : m.t || 0;
     var meta = m.cols + ' × ' + m.rows + (nt ? ' · ' + nt + ' ficha' + (nt === 1 ? '' : 's') : '') + (m.updated ? ' · ' + new Date(m.updated).toLocaleDateString('es-MX', {day:'numeric', month:'short'}) : '');
     var h = '<div class="map-card ' + kind + (m.hidden ? ' prep' : '') + (scene ? ' scene' : '') + '" style="--d:' + ((i || 0) * 45) + 'ms;--r:' + (kind === 'pj' ? ((((m.id.charCodeAt(m.id.length - 1) || 0) % 5) - 2) * 0.6) : 0) + 'deg"><button type="button" class="map-open" data-act="mapopen" data-id="' + attr(m.id) + '">'
-      + '<span class="map-thumb' + (th ? ' img' : '') + '"' + (th ? ' style="background-image:url(\'' + attr(th) + '\')"' : '') + '>' + (th ? '' : '<svg class="ic"><use href="#' + (kind === 'pj' ? 'i-pencil' : 'i-map') + '"/></svg>') + (scene ? '<i class="map-seal">En pantalla</i>' : '') + (m.hidden ? '<i class="map-seal off">Oculto</i>' : '') + '</span>'
+      + '<span class="map-thumb' + (th ? ' img' : '') + '"' + (th ? ' style="background-image:url(\'' + attr(th) + '\')"' : '') + '>' + (th ? '' : '<svg class="ic"><use href="#' + (kind === 'pj' ? 'i-pencil' : 'i-map') + '"/></svg>') + (scene ? '<i class="map-seal">En pantalla</i>' : '') + (m.hidden ? '<i class="map-seal off">En preparación</i>' : m.state === 'combat' ? '<i class="map-seal fight">Combate</i>' : '') + '</span>'
       + '<span class="map-info"><b>' + esc(m.name) + '</b><small>' + (kind === 'pj' && inRoom ? 'por ' + esc(who(m.by) || 'alguien') + ' · ' : '') + meta + (!inRoom && m.room ? ' · de ' + esc(m.room) : '') + '</small></span></button>'
       + '<div class="map-btns">' + (inRoom && dm ? '<button class="icon-btn sm' + (scene ? ' on' : '') + '" type="button" data-act="mapscene" data-id="' + attr(m.id) + '" aria-label="' + (scene ? 'Ya está en pantalla' : 'Mostrar a todos') + '" title="' + (scene ? 'En pantalla' : 'Mostrar a todos') + '"><svg class="ic"><use href="#i-screen"/></svg></button>' : '')
       + (!inRoom && r ? '<button class="icon-btn sm" type="button" data-act="mapshare" data-id="' + attr(m.id) + '" aria-label="Llevar a la campaña" title="Llevar a la campaña"><svg class="ic"><use href="#i-up"/></svg></button>' : '')
@@ -523,14 +629,22 @@ var Mapas = (function(){
   function toolbar(){
     var bar = $('#mapBar'), mp = maps[cur]; if (!bar || !mp) return;
     if (!tool.layer || !mp.layers.some(function(l){ return l.id === tool.layer; })) tool.layer = mp.layers[0].id;
-    var admin = canAdmin(mp), sh = shared(mp.id), dm = master(mp), r = room(), meta = roomMeta(mp.id), scene = r && r.scene === mp.id;
+    var admin = canAdmin(mp), sh = shared(mp.id), dm = master(mp), r = room(), scene = r && r.scene === mp.id;
     if (mode === 'niebla' && !dm) mode = 'jugar';
-    var modes = [['jugar','Jugar','i-token'],['dibujar','Dibujar','i-pencil']]; if (dm) modes.push(['niebla','Escena','i-fog']);
+    if (encEd && !encHere(mp)) { encEd = null; eop = null; }
+    if (encEd) mode = 'jugar';
+    // el estado lo cambia el DM; los jugadores lo ven. Dibujar y Escena son herramientas que se abren encima
+    var st = stateOf(mp), dmc = sh && isDm(), ee = encEd && encData();
+    var tb = function(v, label, ic){ return '<button type="button" class="icon-btn sm tool-b" data-act="mapmode" data-v="' + v + '" aria-pressed="' + (mode === v) + '" aria-label="' + attr(label) + '" title="' + attr(label) + '"><svg class="ic"><use href="#' + ic + '"/></svg></button>'; };
+    var stH = ee ? '<span class="map-st st-enc"><svg class="ic"><use href="#i-scroll"/></svg><span>' + esc(ee.name) + '</span></span>'
+      : dmc ? '<div class="seg map-state" role="group" aria-label="Estado del mapa">' + STATES.map(function(x){ return '<button type="button" class="st-' + x[0] + '" data-act="mapstate" data-v="' + x[0] + '" aria-pressed="' + (st === x[0]) + '" title="' + attr(x[1] + ': ' + x[3]) + '"><svg class="ic"><use href="#' + x[2] + '"/></svg><span>' + x[1] + '</span></button>'; }).join('') + '</div>'
+      : sh ? '<span class="map-st st-' + st + '" title="' + attr(stateT(st)[3]) + '"><svg class="ic"><use href="#' + stateT(st)[2] + '"/></svg><span>' + (st === 'combat' ? (started(mp) ? 'Combate' : 'Despliegue') : stateT(st)[1]) + '</span></span>' : '';
     put(bar, '<button class="icon-btn sm" type="button" data-act="mapback" aria-label="Volver a los mapas" title="Mapas"><svg class="ic"><use href="#i-back"/></svg></button>'
-      + (admin ? '<input class="field map-name" id="mapName" value="' + attr(mp.name) + '" aria-label="Nombre del mapa">' : '<b class="map-name ro">' + esc(mp.name) + '</b>')
-      + '<span class="map-where">' + (scene ? '<i class="tag new">en pantalla</i>' : '') + (meta && meta.hidden ? '<i class="tag">oculto</i>' : '') + (sh ? '' : '<i class="tag">solo tu copia</i>') + (viewAs && dm ? '<button type="button" class="tag vis-as" data-act="mapviewas" title="Dejar de ver como jugador">como jugador ×</button>' : '') + '</span>'
-      + '<div class="seg map-modes" role="tablist" aria-label="Modo">' + modes.map(function(x){ return '<button type="button" data-act="mapmode" data-v="' + x[0] + '" aria-pressed="' + (mode === x[0]) + '" title="' + x[1] + '"><svg class="ic"><use href="#' + x[2] + '"/></svg><span>' + x[1] + '</span></button>'; }).join('') + '</div>'
-      + (admin ? '<button class="icon-btn sm" type="button" data-act="mapset" aria-expanded="' + (pop === 'set') + '" aria-label="Ajustes del mapa" title="Ajustes del mapa"><svg class="ic"><use href="#i-gear"/></svg></button>' : ''));
+      + (admin && !ee ? '<input class="field map-name" id="mapName" value="' + attr(mp.name) + '" aria-label="Nombre del mapa">' : '<b class="map-name ro">' + esc(mp.name) + '</b>')
+      + '<span class="map-where">' + (scene ? '<i class="tag new">en pantalla</i>' : '') + (mp.frozen && sh ? '<i class="tag frozen">quietos</i>' : '') + (sh ? '' : '<i class="tag">solo tu copia</i>') + (viewAs && dm ? '<button type="button" class="tag vis-as" data-act="mapviewas" title="Dejar de ver como jugador">como jugador ×</button>' : '') + '</span>'
+      + stH
+      + (ee ? '<button class="btn main sm" type="button" data-act="mapencdone">Listo</button>' : '<div class="map-tbx" role="group" aria-label="Herramientas">' + tb('dibujar', 'Dibujar: lápiz, objetos, paredes y zonas', 'i-pencil') + (dm ? tb('niebla', 'Escena: niebla, luz y clima', 'i-fog') : '') + '</div>'
+      + (admin ? '<button class="icon-btn sm" type="button" data-act="mapset" aria-expanded="' + (pop === 'set') + '" aria-label="Ajustes del mapa" title="Ajustes del mapa"><svg class="ic"><use href="#i-gear"/></svg></button>' : '')));
     palette(mp, dm, sh); popover(mp, dm, sh, admin); hud(mp, dm, sh, scene); initStrip(mp); wxSync(mp);
     var sb = $('#mapSel'); if (sb) { var bh = mode === 'dibujar' && !pop ? (tool.k === 'wall' ? wallBar(mp) : MapEd.barHtml(mp)) : ''; put(sb, bh); sb.hidden = !bh; }
   }
@@ -549,7 +663,8 @@ var Mapas = (function(){
       + tb('erase', 'Borrar', 'i-eraser')
       + '<span class="pal-sep"></span><button type="button" class="icon-btn" data-act="maplayers" aria-expanded="' + (pop === 'layers') + '" aria-label="Capas" title="Capas"><svg class="ic"><use href="#i-layers"/></svg></button>'
       + '<button type="button" class="icon-btn" data-act="mapundo" aria-label="Deshacer" title="Deshacer (Ctrl+Z)"' + (MapEd.canUndo(mp) ? '' : ' disabled') + '><svg class="ic"><use href="#i-undo"/></svg></button>'
-      + '<button type="button" class="icon-btn" data-act="mapredo" aria-label="Rehacer" title="Rehacer (Ctrl+Y)"' + (MapEd.canRedo(mp) ? '' : ' disabled') + '><svg class="ic"><use href="#i-redo"/></svg></button>';
+      + '<button type="button" class="icon-btn" data-act="mapredo" aria-label="Rehacer" title="Rehacer (Ctrl+Y)"' + (MapEd.canRedo(mp) ? '' : ' disabled') + '><svg class="ic"><use href="#i-redo"/></svg></button>'
+      + '<span class="pal-sep"></span><button type="button" class="icon-btn pal-done" data-act="mapmode" data-v="jugar" aria-label="Listo: guardar las herramientas" title="Listo"><svg class="ic"><use href="#i-check"/></svg></button>';
   }
   function penHtml(){
     return '<div class="penpop"><span class="label">trazo</span><div class="pen-ws" role="group" aria-label="Grosor">' + WIDTHS.map(function(x, i){ return '<button type="button" data-act="mapw" data-v="' + x[0] + '" aria-pressed="' + (tool.w === x[0]) + '" aria-label="' + x[1] + '" title="' + x[1] + '"><svg viewBox="0 0 60 20" aria-hidden="true"><path d="M6 14 Q20 2 32 10 T54 6" stroke="' + attr(tool.c) + '" stroke-width="' + [2, 4.5, 8][i] + '" fill="none" stroke-linecap="round"/></svg></button>'; }).join('') + '</div>'
@@ -557,6 +672,7 @@ var Mapas = (function(){
       + '<label class="toggle"><input type="checkbox" id="mapSnap"' + (tool.snap ? ' checked' : '') + '> Ajustar a la cuadrícula</label><label class="toggle"><input type="checkbox" id="mapFill"' + (tool.fill ? ' checked' : '') + '> Rellenar rectángulos</label></div>';
   }
   function wallT(k){ return WALLT.filter(function(x){ return x[0] === k; })[0] || WALLT[0]; }
+  function stateT(k){ return STATES.filter(function(x){ return x[0] === k; })[0] || STATES[1]; }
   /* Paredes: el tipo que vas a trazar y si es un tramo o una habitación entera */
   function wallsHtml(mp){
     var dm = master(mp);
@@ -616,7 +732,8 @@ var Mapas = (function(){
     if (pop === 'pen' && mode !== 'dibujar') pop = null;
     if ((pop === 'layers' || pop === 'assets' || pop === 'walls' || pop === 'zone') && mode !== 'dibujar') pop = null;
     if (pop === 'zone' && !(selZone && zoneById(mp, selZone))) pop = null;
-    var h = pop === 'set' && admin ? setHtml(mp, dm, sh) : pop === 'layers' ? layersHtml(mp, dm, sh, admin) : pop === 'pen' ? penHtml() : pop === 'add' ? addHtml(mp, dm) : pop === 'assets' && window.Assets ? Assets.pickerHtml(tool.k === 'asset' ? tool.asset : null) : pop === 'walls' && admin ? wallsHtml(mp) : pop === 'zone' && dm ? zoneHtml(mp) : pop === 'travel' ? travelHtml(mp) : '';
+    if (pop === 'encs' && !(isDm() && sh && window.Encuentros)) pop = null;
+    var h = pop === 'encs' ? Encuentros.mapPop(mp) : pop === 'set' && admin ? setHtml(mp, dm, sh) : pop === 'layers' ? layersHtml(mp, dm, sh, admin) : pop === 'pen' ? penHtml() : pop === 'add' ? addHtml(mp, dm) : pop === 'assets' && window.Assets ? Assets.pickerHtml(tool.k === 'asset' ? tool.asset : null) : pop === 'walls' && admin ? wallsHtml(mp) : pop === 'zone' && dm ? zoneHtml(mp) : pop === 'travel' ? travelHtml(mp) : '';
     p.className = 'map-pop' + (pop ? ' p-' + pop : ''); put(p, h); p.hidden = !h;
   }
   function setHtml(mp, dm, sh){
@@ -624,7 +741,7 @@ var Mapas = (function(){
     return '<div class="map-set"><div class="row"><b>Ajustes del mapa</b><button class="icon-btn sm" type="button" data-act="mappopx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div><div class="two"><label class="fl">Cuadrícula<select class="field" id="mapGrid">' + [['square','Cuadrada'],['hex','Hexagonal'],['none','Sin cuadrícula']].map(function(x){ return '<option value="' + x[0] + '"' + (mp.grid === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label>'
       + '<div class="fl"><span>Imagen de fondo</span><div class="row" style="gap:6px;flex-wrap:wrap"><label class="btn sm pickbtn">' + (busyUp ? 'Subiendo…' : bg ? 'Cambiar' : 'Subir imagen') + '<input type="file" id="mapBgFile" accept="image/*"></label>' + (bg ? '<button class="btn sm" type="button" data-act="mapbgx">Quitar</button>' : '') + '</div></div></div>'
       + (bg ? '<label class="fl">Opacidad del fondo<input type="range" id="mapBgOp" min="0.2" max="1" step="0.1" value="' + (bg.op || 1) + '"></label>' : '')
-      + (dm && sh ? '<label class="toggle"><input type="checkbox" id="mapHide"' + (meta && meta.hidden ? ' checked' : '') + '> Oculto para los jugadores</label>' : '')
+      + (dm && sh ? '<label class="toggle"><input type="checkbox" id="mapHide"' + (meta && meta.hidden ? ' checked' : '') + '> En preparación (oculto para los jugadores)</label>' : '')
       + '<p class="note">La imagen se estira sobre todas las casillas (' + mp.cols + ' × ' + mp.rows + '). Si la cuadrícula no coincide, crea el mapa «Desde una imagen» con las casillas que tiene a lo ancho.</p></div>';
   }
   function addHtml(mp, dm){
@@ -659,10 +776,10 @@ var Mapas = (function(){
   function chipImg(x, t){ if (x.pc) return x.m.char && (x.m.char.img || x.m.char.tok) || (t && t.img) || null; return x.n.img || (t && t.img) || null; }
   function initStrip(mp){
     var el = $('#vttInit'); if (!el) return;
-    var r = fight(); if (!r || mode !== 'jugar') { el.hidden = true; el.innerHTML = ''; return; }
+    var r = fight(); if (!r || encEd || (stateOf(mp) !== 'combat' && !(r.round > 0))) { el.hidden = true; el.innerHTML = ''; return; }
     var list = combatants(r), onMap = {}; mp.tokens.forEach(function(t){ if (t.ref && !t.comp) onMap[t.ref] = t; });
     el.hidden = false;
-    el.innerHTML = '<span class="vi-round">' + (r.round ? '<small>ronda</small><b>' + r.round + '</b>' : '<small>combate</small><b>·</b>') + '</span><div class="vi-list">' + list.map(function(x, i){
+    el.innerHTML = '<span class="vi-round">' + (r.round ? '<small>ronda</small><b>' + r.round + '</b>' : '<small>despliegue</small><b><svg class="ic"><use href="#i-flag"/></svg></b>') + '</span><div class="vi-list">' + list.map(function(x, i){
       var o = cInfo(x, r), t = onMap[x.id], turn = r.round && r.turnId === x.id, col = t ? t.color : x.pc ? '#2f5d8a' : '#8c2626', p = o.pct == null ? null : Math.max(0, Math.min(1, o.pct));
       return '<button type="button" class="vi-chip' + (turn ? ' turn' : '') + (x.pc ? ' pc' : ' npc') + (o.down ? ' down' : '') + (x.id === r.you ? ' me' : '') + (x.n && x.n.hidden ? ' hid' : '') + (r.order.indexOf(x.id) < 0 ? ' noinit' : '') + '" data-act="mapchip" data-id="' + attr(x.id) + '" style="--d:' + (i * 35) + 'ms" title="' + attr(o.name + (o.label ? ' · ' + o.label : '')) + '">'
         + '<span class="vi-av" style="background:' + attr(col) + '">' + (chipImg(x, t) ? '<img alt="" src="' + attr(Mesa.imgUrl(chipImg(x, t))) + '">' : !x.pc && window.Retratos ? '<svg class="gi"><use href="#gi-' + Retratos.typeIcon(x.n.binfo ? x.n.binfo.type : x.n.ty) + '"/></svg>' : esc(ini(o.name))) + '</span><span class="vi-init">' + (o.init == null ? '–' : o.init) + '</span>'
@@ -685,32 +802,73 @@ var Mapas = (function(){
         + '<div class="hud-row"><div class="seg sm" role="group" aria-label="Al arrastrar"><button type="button" data-act="mapfogv" data-v="1" aria-pressed="' + (tool.fogV === 1) + '">Descubrir</button><button type="button" data-act="mapfogv" data-v="0" aria-pressed="' + (tool.fogV === 0) + '">Cubrir</button></div><button class="btn sm" type="button" data-act="mapfogall" data-v="1">Todo visible</button><button class="btn sm" type="button" data-act="mapfogall" data-v="0">Todo cubierto</button></div>'
         + '<p class="hud-hint">' + (vo ? 'Se descubre solo lo que ven las fichas del grupo al moverse; las paredes tapan la vista.' + (mp.walls.length ? '' : ' Todavía no hay paredes: ponlas en Dibujar → Paredes.') + ' Tú ves en penumbra lo que ellos no ven ahora.'
           : fo ? 'Arrastra sobre el mapa para ' + (tool.fogV ? 'descubrir' : 'cubrir') + '. Tú la ves translúcida; los jugadores, negra.' : 'Actívala para que los jugadores solo vean lo descubierto.') + '</p>';
-    } else if (mode === 'jugar') {
-      var f = fight(), mt = myTok(mp), canPut = !(isDm() && sh) && (!!(window.Sala && Sala.summary && Sala.summary()) || !sh), noTp = mt && sh && mp.vis && mp.vis.on; // con la visión, tu ficha camina: no se trae
-      var tokBtns = (canPut ? (noTp ? '' : '<button class="btn main sm" type="button" data-act="mapputme"><svg class="ic"><use href="#i-token"/></svg>' + (mt ? 'Traer mi ficha' : 'Poner mi ficha') + '</button>') + (mt ? '<button class="icon-btn sm" type="button" data-act="mapfindme" aria-label="Ir a mi ficha" title="Ir a mi ficha"><svg class="ic"><use href="#i-target"/></svg></button>' : '') : '')
+    } else if (mode === 'jugar' && encEd) h = encHud(mp);
+    else if (mode === 'jugar') {
+      var f = fight(), mt = myTok(mp), st = stateOf(mp), dep = deploying(mp), zs = dep ? deployZ(mp, me()) : [];
+      var canPut = !(isDm() && sh) && (!!(window.Sala && Sala.summary && Sala.summary()) || !sh);
+      // con la visión, en pleno combate o congelados, tu ficha camina: no se trae (en el despliegue, sí: a tu zona)
+      var noTp = mt && sh && !dep && ((mp.vis && mp.vis.on) || st === 'combat' || mp.frozen);
+      var tokBtns = (canPut ? (noTp ? '' : '<button class="btn main sm" type="button" data-act="mapputme"><svg class="ic"><use href="#' + (dep && zs.length ? 'i-flag' : 'i-token') + '"/></svg>' + (mt ? (dep && zs.length ? 'A mi zona' : 'Traer mi ficha') : 'Poner mi ficha') + '</button>') + (mt ? '<button class="icon-btn sm" type="button" data-act="mapfindme" aria-label="Ir a mi ficha" title="Ir a mi ficha"><svg class="ic"><use href="#i-target"/></svg></button>' : '') : '')
         + '<button class="icon-btn sm" type="button" data-act="mapadd" aria-expanded="' + (pop === 'add') + '" aria-label="' + (dm ? 'Agregar ficha' : 'Otra ficha (familiar, montura)') + '" title="' + (dm ? 'Agregar ficha' : 'Otra ficha') + '"><svg class="ic"><use href="#i-plus"/></svg></button>';
-      if (r && isDm() && sh) {
-        var fsplit = fightsHtml(r), missing = f ? combatants(f).filter(function(x){ return !mp.tokens.some(function(t){ return t.ref === x.id && !t.comp; }); }).length : 0;
-        h = '<div class="hud-row dm">' + tokBtns + (!scene ? '<button class="btn sm" type="button" data-act="mapscene" data-id="' + attr(mp.id) + '"><svg class="ic"><use href="#i-screen"/></svg>Mostrar a todos</button>' : '')
-          + (otherMaps(mp).length && mp.tokens.some(function(t){ return t.kind === 'pc'; }) ? '<button class="btn sm" type="button" data-act="maptravelp" aria-expanded="' + (pop === 'travel') + '"><svg class="ic"><use href="#i-group"/></svg>Llevar al grupo</button>' : '')
-          + (f && !r.split && spread(r) ? '<button class="btn sm" type="button" data-act="mapsplit" data-v="1" title="El grupo está en varios mapas: cada mapa con su propio combate"><svg class="ic"><use href="#i-swords"/></svg>Combate por mapa</button>' : '')
-          + '<span class="hud-sp"></span><button class="btn sm" type="button" data-act="bestopen"><svg class="ic"><use href="#i-paw"/></svg>Enemigo</button>' + (missing ? '<button class="btn sm" type="button" data-act="mapplaceall"><svg class="ic"><use href="#i-token"/></svg>Poner ' + missing + ' en el mapa</button>' : '')
-          + (f ? (f.round ? '<button class="icon-btn sm" type="button" data-act="salaturn" data-v="prev" aria-label="Turno anterior"><svg class="ic"><use href="#i-back"/></svg></button><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Siguiente</button><button class="icon-btn sm" type="button" data-act="salaend" aria-label="Terminar combate" title="Terminar combate"><svg class="ic"><use href="#i-stop"/></svg></button>' : '<button class="btn main sm" type="button" data-act="salaturn" data-v="start"' + (f.order.length ? '' : ' disabled title="Falta iniciativa"') + '><svg class="ic"><use href="#i-swords"/></svg>Empezar combate</button>') : '') + '</div>' + fsplit;
-      } else if (r && sh) {
-        var meM = r.members.filter(function(m){ return m.id === r.you; })[0] || {}, c = meM.char || {}, myTurn = f && f.round && f.turnId === r.you, p = c.hpMax ? Math.max(0, Math.min(1, c.hp / c.hpMax)) : null;
-        h = '<div class="hud-row pj' + (myTurn ? ' myturn' : '') + '">' + (c.name ? '<span class="hud-me"><b>' + esc(c.name) + '</b><span class="hud-hp"><i style="width:' + Math.round((p || 0) * 100) + '%;background:' + (p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a') + '"></i></span><small>PG ' + (c.hp != null ? c.hp + '/' + c.hpMax : '–') + (c.temp ? ' +' + c.temp : '') + ' · CA ' + (c.ac || '–') + '</small></span>' : '')
-          + (myTurn ? '<span class="hud-turn">¡Tu turno!</span><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Terminar turno</button>'
-            : f && meM.init == null ? '<form class="hud-init" data-form="salainit"><input class="field" name="v" inputmode="numeric" autocomplete="off" placeholder="Inic." aria-label="Tu iniciativa"><button class="btn main sm" type="submit">Iniciativa</button></form>' : '')
-          + litChip(mp, mt)
-          + '<span class="hud-sp"></span>' + tokBtns + '<button class="icon-btn sm" type="button" data-act="mapsheet" aria-label="Mi hoja de combate" title="Mi hoja de combate"><svg class="ic"><use href="#i-swords"/></svg></button></div>'
-          + (c.conds && c.conds.length ? '<div class="hud-conds">' + c.conds.map(function(k){ return '<span class="chip">' + esc((Sala.COND || {})[k] || k) + '</span>'; }).join('') + '</div>' : '');
-      } else h = '<div class="hud-row">' + tokBtns + '</div>';
+      if (r && isDm() && sh) h = dmHud(mp, r, f, st, dep, scene, tokBtns);
+      else if (r && sh) h = pjHud(mp, r, f, st, dep, zs, mt, tokBtns);
+      else h = '<div class="hud-row">' + tokBtns + '</div>';
     }
     if (mode === 'niebla') h = scTabs() + h;
     put(el, h); el.hidden = !h;
   }
+  /* HUD del DM según el estado: preparación (armar), exploración (mostrar, llevar, congelar) y combate (despliegue, iniciativa, oleadas, turnos) */
+  function dmHud(mp, r, f, st, dep, scene, tokBtns){
+    var encN = (r.encs || []).filter(function(e){ return e.map === mp.id; }).length, run = (r.runs || []).filter(function(x){ return x.map === mp.id; })[0];
+    var encB = '<button class="btn sm" type="button" data-act="mapencs" aria-expanded="' + (pop === 'encs') + '" title="Encuentros de este mapa"><svg class="ic"><use href="#i-scroll"/></svg><span class="lb">Encuentros</span>' + (encN ? ' <i class="hud-n">' + encN + '</i>' : '') + '</button>';
+    var bestB = '<button class="btn sm" type="button" data-act="bestopen" title="Agregar un enemigo del bestiario"><svg class="ic"><use href="#i-paw"/></svg><span class="lb">Enemigo</span></button>';
+    var frz = '<button class="icon-btn sm frz" type="button" data-act="mapfreeze" aria-pressed="' + !!mp.frozen + '" aria-label="' + (mp.frozen ? 'Dejar que se muevan' : 'Congelar: nadie se mueve') + '" title="' + (mp.frozen ? 'Congelados: toca para que se muevan' : 'Congelar el movimiento') + '"><svg class="ic"><use href="#i-snow"/></svg></button>';
+    if (st === 'prep') return '<div class="hud-row dm st-prep"><span class="hud-st"><svg class="ic"><use href="#i-prep"/></svg><span><b>Preparación</b> · solo tú lo ves</span></span><span class="hud-sp"></span>' + tokBtns + bestB + encB
+      + '<button class="btn main sm" type="button" data-act="mapstate" data-v="explore"><svg class="ic"><use href="#i-compass"/></svg>Mostrar y explorar</button></div>';
+    var fsplit = fightsHtml(r), missing = f ? combatants(f).filter(function(x){ return !mp.tokens.some(function(t){ return t.ref === x.id && !t.comp; }); }).length : 0, inFight = st === 'combat' || !!(f && f.round);
+    var row = '<div class="hud-row dm">' + tokBtns + (!scene ? '<button class="btn sm" type="button" data-act="mapscene" data-id="' + attr(mp.id) + '" title="Mostrar a todos"><svg class="ic"><use href="#i-screen"/></svg><span class="lb">Mostrar a todos</span></button>' : '')
+      + (otherMaps(mp).length && mp.tokens.some(function(t){ return t.kind === 'pc'; }) ? '<button class="btn sm" type="button" data-act="maptravelp" aria-expanded="' + (pop === 'travel') + '" title="Llevar al grupo a otro mapa"><svg class="ic"><use href="#i-group"/></svg><span class="lb">Llevar al grupo</span></button>' : '')
+      + (f && !r.split && spread(r) ? '<button class="btn sm" type="button" data-act="mapsplit" data-v="1" title="El grupo está en varios mapas: cada mapa con su propio combate"><svg class="ic"><use href="#i-swords"/></svg><span class="lb">Combate por mapa</span></button>' : '')
+      + '<span class="hud-sp"></span>' + bestB + (missing && inFight ? '<button class="btn sm" type="button" data-act="mapplaceall" title="Poner en el mapa a ' + missing + ' del combate sin ficha"><svg class="ic"><use href="#i-token"/></svg><span class="lb">Poner ' + missing + ' en el mapa</span><i class="hud-n sm-only">' + missing + '</i></button>' : '') + encB + frz + '</div>';
+    if (!inFight) return row + fsplit;
+    var here = function(n){ return !r.split || (n.at || r.scene) === r.fight; };
+    var noInit = (r.npcs || []).filter(function(n){ return n.init == null && here(n); }).length;
+    var pcs = r.members.filter(function(m){ return m.role !== 'dm' && mp.tokens.some(function(t){ return t.kind === 'pc' && !t.comp && t.ref === m.id; }); }), ready = pcs.filter(function(m){ return m.init != null; }).length;
+    var waves = run ? run.waves.map(function(w){ return '<button class="btn sm wave" type="button" data-act="mapwave" data-v="' + w.n + '" title="' + attr(w.round ? 'Llega sola al empezar la ronda ' + w.round + '; tócala para que llegue ya' : 'Tócala para que llegue') + '"><svg class="ic"><use href="#i-wave"/></svg><span class="lb">' + esc(w.name || 'Oleada ' + w.n) + '</span><small>' + w.count + (w.round ? ' · r' + w.round : '') + '</small></button>'; }).join('') : '';
+    var ctl = f && f.round ? '<button class="icon-btn sm" type="button" data-act="salaturn" data-v="prev" aria-label="Turno anterior"><svg class="ic"><use href="#i-back"/></svg></button><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Siguiente</button><button class="icon-btn sm" type="button" data-act="salaend" aria-label="Terminar combate" title="Terminar combate"><svg class="ic"><use href="#i-stop"/></svg></button>'
+      : '<button class="btn main sm" type="button" data-act="salaturn" data-v="start"' + (f && f.order.length ? '' : ' disabled title="Falta iniciativa"') + '><svg class="ic"><use href="#i-swords"/></svg>Empezar combate</button>';
+    var lead = dep ? '<span class="hud-st dep"><svg class="ic"><use href="#i-flag"/></svg><span><b>Despliegue</b> · ' + (pcs.length ? ready + ' de ' + pcs.length + ' con iniciativa' : 'esperando al grupo') + '</span></span>'
+      : '<span class="hud-st"><svg class="ic"><use href="#i-swords"/></svg><span><b>Ronda ' + (f ? f.round : 0) + '</b>' + (f && f.turnId ? ' · ' + esc(nameIn(r, f.turnId)) : '') + '</span></span>';
+    var row2 = '<div class="hud-row dm fight">' + lead + '<span class="hud-sp"></span>' + (noInit ? '<button class="btn sm" type="button" data-act="mapnpcinit" title="Tira 1d20 + su modificador a cada enemigo sin iniciativa (los iguales comparten tirada)"><svg class="ic"><use href="#i-d20"/></svg><span class="lb">Iniciativa de enemigos</span><small>' + noInit + '</small></button>' : '') + waves
+      + '<button class="icon-btn sm" type="button" data-act="mapturnonly" aria-pressed="' + (mp.turnOnly !== false) + '" aria-label="' + (mp.turnOnly !== false ? 'Cada quien se mueve en su turno (toca para dejarlos libres)' : 'Se mueven libres (toca para que sea en su turno)') + '" title="' + (mp.turnOnly !== false ? 'Se mueve quien tiene el turno' : 'Se mueven libres') + '"><svg class="ic"><use href="#i-turn"/></svg></button>' + ctl + '</div>';
+    return row2 + row + fsplit;
+  }
+  function nameIn(r, id){ var m = r.members.filter(function(x){ return x.id === id; })[0]; if (m) return m.char ? m.char.name : m.name; var n = (r.npcs || []).filter(function(x){ return x.id === id; })[0]; return n ? n.name : ''; }
+  function pjHud(mp, r, f, st, dep, zs, mt, tokBtns){
+    var meM = r.members.filter(function(m){ return m.id === r.you; })[0] || {}, c = meM.char || {}, myTurn = f && f.round && f.turnId === r.you, p = c.hpMax ? Math.max(0, Math.min(1, c.hp / c.hpMax)) : null;
+    var h = '<div class="hud-row pj' + (myTurn ? ' myturn' : '') + '">' + (c.name ? '<span class="hud-me"><b>' + esc(c.name) + '</b><span class="hud-hp"><i style="width:' + Math.round((p || 0) * 100) + '%;background:' + (p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a') + '"></i></span><small>PG ' + (c.hp != null ? c.hp + '/' + c.hpMax : '–') + (c.temp ? ' +' + c.temp : '') + ' · CA ' + (c.ac || '–') + '</small></span>' : '')
+      + (myTurn ? '<span class="hud-turn">¡Tu turno!</span><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Terminar turno</button>' : '')
+      + litChip(mp, mt) + '<span class="hud-sp"></span>' + tokBtns + '<button class="icon-btn sm" type="button" data-act="mapsheet" aria-label="Mi hoja de combate" title="Mi hoja de combate"><svg class="ic"><use href="#i-swords"/></svg></button></div>';
+    // lo que pide el estado: acomodarse, tirar iniciativa, esperar el turno o unirse al combate de otro mapa
+    var bits = '';
+    if (mp.frozen) bits += '<span class="hud-st frozen"><svg class="ic"><use href="#i-snow"/></svg><span>El DM detuvo el movimiento</span></span>';
+    if (dep) bits += '<span class="hud-st dep"><svg class="ic"><use href="#i-flag"/></svg><span><b>¡Combate!</b> ' + (mt ? (zs.length ? 'Acomódate en la zona marcada.' : 'Acomódate donde quieras.') : 'Únete para ponerte en el mapa.') + '</span></span>';
+    else if (st === 'combat' && f && f.round && !myTurn && mp.turnOnly !== false && mt) bits += '<span class="hud-st wait"><svg class="ic"><use href="#i-turn"/></svg><span>Te mueves en tu turno</span></span>';
+    if (st === 'combat' && meM.init == null) bits += initForm(c);
+    var cm = (r.maps || []).filter(function(x){ return x.state === 'combat'; }), herec = cm.some(function(x){ return x.id === mp.id; });
+    if (herec && !mt) bits += '<button class="btn main sm" type="button" data-act="mapjoin" data-v="' + attr(mp.id) + '"><svg class="ic"><use href="#i-swords"/></svg>Unirme al combate</button>';
+    else if (!herec && cm.length && !cm.some(function(x){ return x.id === meM.at; })) bits += '<button class="btn sm" type="button" data-act="mapjoin" data-v="' + attr(cm[0].id) + '"><svg class="ic"><use href="#i-swords"/></svg>Combate en «' + esc(cm[0].name) + '» · Unirme</button>';
+    if (bits) h += '<div class="hud-row pj st">' + bits + '</div>';
+    return h + (c.conds && c.conds.length ? '<div class="hud-conds">' + c.conds.map(function(k){ return '<span class="chip">' + esc((Sala.COND || {})[k] || k) + '</span>'; }).join('') + '</div>' : '');
+  }
+  /* Iniciativa: tirarla en la app (1d20 + tu modificador, con ventaja si toca) o escribir el total de tus dados */
+  function initForm(c){
+    var mod = c.initMod || 0;
+    return '<form class="hud-init" data-form="salainit"><button class="btn main sm" type="button" data-act="salaroll" data-v="n"><svg class="ic"><use href="#i-d20"/></svg>Tirar 1d20 ' + (mod < 0 ? '− ' : '+ ') + Math.abs(mod) + '</button><button class="btn sm" type="button" data-act="salaroll" data-v="adv" title="Tira dos d20 y se queda con el mayor">Con ventaja</button>'
+      + '<input class="field" name="v" inputmode="numeric" autocomplete="off" placeholder="o escribe" aria-label="Tu iniciativa (el total de tus dados)"><button class="btn sm" type="submit">Listo</button></form>';
+  }
   /* Escena (solo el DM): pestañas de niebla, luz y clima */
-  function scTabs(){ var t = tool.sc || 'niebla'; return '<div class="seg sm sc-tabs" role="tablist" aria-label="Escena">' + [['niebla','Niebla','i-fog'],['luz','Luz y hora','i-sun'],['clima','Clima','i-rain']].map(function(x){ return '<button type="button" role="tab" data-act="mapsctab" data-v="' + x[0] + '" aria-selected="' + (t === x[0]) + '" aria-pressed="' + (t === x[0]) + '"><svg class="ic"><use href="#' + x[2] + '"/></svg>' + x[1] + '</button>'; }).join('') + '</div>'; }
+  function scTabs(){ var t = tool.sc || 'niebla'; return '<div class="sc-head"><div class="seg sm sc-tabs" role="tablist" aria-label="Escena">' + [['niebla','Niebla','i-fog'],['luz','Luz y hora','i-sun'],['clima','Clima','i-rain']].map(function(x){ return '<button type="button" role="tab" data-act="mapsctab" data-v="' + x[0] + '" aria-selected="' + (t === x[0]) + '" aria-pressed="' + (t === x[0]) + '"><svg class="ic"><use href="#' + x[2] + '"/></svg>' + x[1] + '</button>'; }).join('') + '</div><button class="icon-btn sm" type="button" data-act="mapmode" data-v="jugar" aria-label="Cerrar la escena" title="Listo"><svg class="ic"><use href="#i-check"/></svg></button></div>'; }
   var TIMES = [['dia','Día','i-sun'],['amanecer','Amanecer','i-dawn'],['atardecer','Atardecer','i-dusk'],['noche','Noche','i-moon']];
   var AMBS = [['auto','Según la hora'],['bright','Luz brillante'],['dim','Penumbra'],['dark','Oscuridad (interior, mazmorra)']];
   function lightHud(mp){
@@ -975,7 +1133,8 @@ var Mapas = (function(){
   /* Lo que se ve, ya resuelto, para el motor WebGL (las mismas reglas que draw()/overlay()) */
   function scene(mp, v, W, H){
     var hid = hidden[mp.id] || {}, dmView = master(mp) && !viewAs, vs = visOf(mp), toks = [], now = Date.now(), lvl = window.Gfx ? Gfx.level() : 'media';
-    (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; if (viewAs && t.hidden) return; if (!tokShown(mp, t, vs, dmView)) return; toks.push(tokScene(t, v, !dmView && (ownT(t) || (!!vs && t.kind === 'pc')))); });
+    if (encEd && encHere(mp)) toks = encGhosts();
+    else (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; if (viewAs && t.hidden) return; if (!tokShown(mp, t, vs, dmView)) return; toks.push(tokScene(t, v, !dmView && (ownT(t) || (!!vs && t.kind === 'pc')))); });
     var strokes = MapEd.strokes(mp); if (!dmView && strokes.some(hiddenObj)) strokes = strokes.filter(function(k){ return !hiddenObj(k); });
     var anim = Object.keys(doorAnim).length || (wop && wop.prev);
     var sc = {W:W, H:H, v:v, tokens:toks,
@@ -1001,6 +1160,7 @@ var Mapas = (function(){
   }
   /* La regla de la ficha que arrastras: en recto o rodeando paredes; si no hay camino, avisa */
   function ruler(mp){
+    if (drag.dep) { var dz = deployZ(mp, ownerOf(drag.tok)), s0 = drag.tok.s || 1, rx = mp.grid !== 'none' ? Math.round(drag.x) : drag.x, ry = mp.grid !== 'none' ? Math.round(drag.y) : drag.y, out = dz.length && !inDeploy(dz, rx, ry, s0); return {bad:out, text:out ? 'Fuera de tu zona de despliegue' : 'Aquí te acomodas', path:null}; }
     var rt = drag.route, bad = !!(rt && !rt.ok), steps = rt && rt.cells ? rt.steps : Math.max(Math.abs(Math.round(drag.x - drag.sx)), Math.abs(Math.round(drag.y - drag.sy)));
     var text = bad ? (master(mp) ? 'Atraviesa paredes (solo el DM)' : 'Hay una pared en medio') : (steps * 1.5).toString().replace('.', ',') + ' m · ' + steps + ' casilla' + (steps === 1 ? '' : 's') + (rt && rt.cells ? ' · rodeando' : '');
     return {bad:bad, text:text, path:rt && rt.cells ? drag.path : null};
@@ -1063,11 +1223,21 @@ var Mapas = (function(){
   /* Zonas en el mapa: zone {x, y, w, h, c, a (relleno), o, d (guiones px), lw (px)} · path {pts, c, lw, o} · label {x, y, t, c} */
   var GLYPH = {paso:[[[-0.9, 0.8], [-0.3, 0.8], [-0.3, 0.2], [0.3, 0.2], [0.3, -0.4], [0.9, -0.4], [0.9, -0.9]]], trampa:[[[-0.9, 0.7], [-0.6, -0.6], [-0.3, 0.7], [0, -0.6], [0.3, 0.7], [0.6, -0.6], [0.9, 0.7]]],
     texto:[[[-0.8, -0.5], [0.8, -0.5]], [[-0.8, 0], [0.8, 0]], [[-0.8, 0.5], [0.4, 0.5]]], encuentro:[[[0, -0.9], [0, 0.35]], [[0, 0.7], [0, 0.8]], [[-0.8, -0.8], [-0.5, -0.3]], [[0.8, -0.8], [0.5, -0.3]]],
-    lock:[[[-0.5, 0], [0.5, 0], [0.5, 0.8], [-0.5, 0.8], [-0.5, 0]], [[-0.3, 0], [-0.3, -0.4], [0, -0.7], [0.3, -0.4], [0.3, 0]]]};
+    lock:[[[-0.5, 0], [0.5, 0], [0.5, 0.8], [-0.5, 0.8], [-0.5, 0]], [[-0.3, 0], [-0.3, -0.4], [0, -0.7], [0.3, -0.4], [0.3, 0]]],
+    despliegue:[[[-0.6, 0.9], [-0.6, -0.9]], [[-0.6, -0.85], [0.75, -0.85], [0.35, -0.45], [0.75, -0.05], [-0.6, -0.05]]]};
+  var DEPC = '#5fb85a';
+  function deployPrim(out, z, sel, o){
+    var r = Math.max(0.22, Math.min(0.45, Math.min(z.w, z.h) * 0.3)), cx = z.x + z.w / 2, cy = z.y + z.h / 2;
+    out.push({p:'zone', x:z.x, y:z.y, w:z.w, h:z.h, c:DEPC, a:sel ? 0.24 : 0.14, o:o, d:7, lw:sel ? 3 : 2.2});
+    glyph(out, 'despliegue', cx, cy, r, DEPC, o);
+    out.push({p:'label', x:cx, y:z.y + z.h + 0.08, t:(z.name || 'Despliegue') + (z.for ? ' · ' + who(z.for) : ''), c:'#2f6b2a'});
+    if (sel) out.push({p:'dot', x:z.x + z.w, y:z.y + z.h, r:6, c:'#fff8e6'});
+  }
   function glyph(out, k, x, y, r, c, o){ (GLYPH[k] || []).forEach(function(line){ out.push({p:'path', pts:line.map(function(q){ return [x + q[0] * r, y + q[1] * r]; }), c:c, lw:2.2, o:o}); }); }
   function zonePrims(mp, dmView){
-    var ink = [], top = [], edit = mode === 'dibujar' && tool.k === 'zone';
+    var ink = [], top = [], edit = mode === 'dibujar' && tool.k === 'zone', ee = encEd && encHere(mp) ? encData() : null, dep = !ee && deploying(mp);
     (mp.trig || []).forEach(function(z){
+      if (z.k === 'despliegue') { if (dep) deployPrim(top, z, false, 1); return; }
       var T = zoneT(z.k), col = T[3], r = Math.max(0.22, Math.min(0.45, Math.min(z.w, z.h) * 0.3)), cx = z.x + z.w / 2, cy = z.y + z.h / 2;
       if (dmView) {
         var sel = edit && z.id === selZone, o = (z.fired ? 0.45 : 1) * (edit ? 1 : 0.7);
@@ -1082,6 +1252,12 @@ var Mapas = (function(){
       }
     });
     if (zop && zop.k === 'new' && zop.moved) { var a = zop.a, b = zop.b, c0 = zoneT(tool.zk)[3]; top.push({p:'zone', x:Math.min(a[0], b[0]), y:Math.min(a[1], b[1]), w:Math.abs(a[0] - b[0]) + 1, h:Math.abs(a[1] - b[1]) + 1, c:c0, a:0.2, o:1, d:6, lw:2}); }
+    if (ee) {
+      ee.deploy.forEach(function(z){ deployPrim(top, z, encEd.k === 'deploy' && encEd.zsel === z.id, encEd.k === 'deploy' ? 1 : 0.55); });
+      if (eop && eop.k === 'znew' && eop.moved) { var a1 = eop.a, b1 = eop.b; top.push({p:'zone', x:Math.min(a1[0], b1[0]), y:Math.min(a1[1], b1[1]), w:Math.abs(a1[0] - b1[0]) + 1, h:Math.abs(a1[1] - b1[1]) + 1, c:DEPC, a:0.22, o:1, d:7, lw:2}); }
+      var sg = encEd.sel && ee.npcs.filter(function(d){ return d.k === encEd.sel && d.x != null; })[0];
+      if (sg) { var ss = sg.s || 1; top.push({p:'zone', x:sg.x - 0.08, y:sg.y - 0.08, w:ss + 0.16, h:ss + 0.16, c:'#ffd66e', a:0, o:1, d:5, lw:2.5}); }
+    }
     return {ink:ink, top:top};
   }
   /* Canvas 2D: las mismas figuras */
@@ -1121,7 +1297,8 @@ var Mapas = (function(){
     var zp = zonePrims(mp, dmView); primsOn(c, zp.ink, v);
     if (ls.tint) { c.save(); c.globalCompositeOperation = 'multiply'; c.globalAlpha = ls.tint.a; c.fillStyle = ls.tint.c; c.fillRect(v.x, v.y, mp.cols * v.s, mp.rows * v.s); c.restore(); }
     if (ls.glow) { c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = ls.glow.a; c.drawImage(ls.glow.cv, v.x, v.y, mp.cols * v.s, mp.rows * v.s); c.restore(); }
-    (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; if (viewAs && t.hidden) return; if (!tokShown(mp, t, vs, dmView)) return; if (!dmView && (ownT(t) || (vs && t.kind === 'pc'))) late.push(t); else tokOn(c, t, v, mp); });
+    if (encEd && encHere(mp)) encGhosts().forEach(function(g){ tokOn(c, {id:g.id, x:g.x, y:g.y, s:g.s, color:g.color, img:g.imgId, name:g.name, hidden:g.hidden}, v, mp); });
+    else (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; if (viewAs && t.hidden) return; if (!tokShown(mp, t, vs, dmView)) return; if (!dmView && (ownT(t) || (vs && t.kind === 'pc'))) late.push(t); else tokOn(c, t, v, mp); });
     if (mp.fog && mp.fog.on) fogOn(c, mp, v, W, H, dmView, vs);
     late.forEach(function(t){ tokOn(c, t, v, mp); });
     c.strokeStyle = 'rgba(60,40,20,.6)'; c.lineWidth = 1.5; c.strokeRect(v.x, v.y, mp.cols * v.s, mp.rows * v.s);
@@ -1170,7 +1347,7 @@ var Mapas = (function(){
       tag(c, rr.text, bx, by - s * v.s * 0.5 - 21, gold);
     }
     if (mode === 'dibujar' && canAdmin(mp)) primsOn(c, wallTech(mp, tool.k === 'wall'), v);
-    if (master(mp) && !viewAs) primsOn(c, zonePrims(mp, true).top, v);
+    primsOn(c, zonePrims(mp, master(mp) && !viewAs).top, v);
     var wl = wallLabel(); if (wl) tag(c, wl.text, v.x + wl.x * v.s, v.y + wl.y * v.s - 26, '#ffd66e');
     if (mode === 'dibujar' && window.MapEd) editOn(c, MapEd.overlay(mp), v);
     if (fogDrag) { var r = fogDrag; c.save(); c.fillStyle = tool.fogV ? 'rgba(95,184,90,.28)' : 'rgba(10,6,4,.55)'; c.strokeStyle = tool.fogV ? '#5fb85a' : '#ffd66e'; c.lineWidth = 2; var x0 = Math.min(r.a[0], r.b[0]), y0 = Math.min(r.a[1], r.b[1]); c.fillRect(v.x + x0 * v.s, v.y + y0 * v.s, (Math.abs(r.a[0] - r.b[0]) + 1) * v.s, (Math.abs(r.a[1] - r.b[1]) + 1) * v.s); c.strokeRect(v.x + x0 * v.s, v.y + y0 * v.s, (Math.abs(r.a[0] - r.b[0]) + 1) * v.s, (Math.abs(r.a[1] - r.b[1]) + 1) * v.s); c.restore(); }
@@ -1249,11 +1426,12 @@ var Mapas = (function(){
       if (ids.length > 2) return;
       var p = local(ev), m = toMap(p[0], p[1]);
       if (ev.button === 1 || ev.button === 2) { gesture = {pan:true, px:p[0], py:p[1]}; return; }
+      if (encEd && encHere(mp)) { encDown(mp, m, ev, p); return; }
       if (mode === 'jugar') {
         var t = tokAt(mp, m), dw = doorAt(mp, m);
         // junto a una puerta, la ficha solo se toma si tocas su círculo (si no, se toca la puerta)
         if (t && dw) { var tc = Vision.center(t); if (Math.hypot(m[0] - tc[0], m[1] - tc[1]) > (t.s || 1) * 0.44) t = null; }
-        if (t) { drag = {tok:t, ox:m[0] - t.x, oy:m[1] - t.y, sx:t.x, sy:t.y, x:t.x, y:t.y, moved:false, can:mine(t), px:p[0], py:p[1]}; return; }
+        if (t) { var blk = mine(t) ? moveBlock(mp, t) : null; drag = {tok:t, ox:m[0] - t.x, oy:m[1] - t.y, sx:t.x, sy:t.y, x:t.x, y:t.y, moved:false, can:mine(t) && !blk, blk:blk, dep:!master(mp) && shared(mp.id) && deploying(mp), px:p[0], py:p[1]}; return; }
         var zw = !dw && !t && zoneAt(mp, m, 'paso'), vsz = zw && !(master(mp) && !viewAs) && mp.fog && mp.fog.on ? fogBits(mp) : null;
         if (zw && vsz && !seen(vsz, mp, Math.min(mp.cols - 1, Math.floor(m[0])), Math.min(mp.rows - 1, Math.floor(m[1])))) zw = null; // una escalera aún sin descubrir no se toca
         if (zw && zw.hidden && !master(mp)) zw = null;
@@ -1280,8 +1458,9 @@ var Mapas = (function(){
       if (gesture && !gesture.pan && ids.length === 2) { var a = ptr[ids[0]], b = ptr[ids[1]], d = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2, v = V(); v.x += cx - gesture.cx; v.y += cy - gesture.cy; zoomAt(d / gesture.d, cx, cy); gesture.d = d; gesture.cx = cx; gesture.cy = cy; return; }
       if (gesture && gesture.pan) { if (gesture.tap && Math.hypot(p[0] - gesture.x0, p[1] - gesture.y0) > 8) { gesture.tap = false; clearTimeout(press && press.t); } var v2 = V(); v2.x += p[0] - gesture.px; v2.y += p[1] - gesture.py; gesture.px = p[0]; gesture.py = p[1]; paint(); return; }
       var m = toMap(p[0], p[1]);
+      if (eop) { encMove(mp, m, p); return; }
       if (drag) {
-        if (!drag.can) return;
+        if (!drag.can) { if (drag.blk && !drag.told && Math.hypot(p[0] - drag.px, p[1] - drag.py) > 8) { drag.told = true; Sala.toast(drag.blk); if (window.Sfx) Sfx.play('locked'); } return; }
         if (!drag.moved && Math.hypot(p[0] - drag.px, p[1] - drag.py) < 6) return;
         drag.moved = true; var s = drag.tok.s || 1;
         drag.x = Math.max(0, Math.min(mp.cols - s, m[0] - drag.ox)); drag.y = Math.max(0, Math.min(mp.rows - s, m[1] - drag.oy));
@@ -1300,6 +1479,7 @@ var Mapas = (function(){
     var end = function(ev){
       delete ptr[ev.pointerId]; clearTimeout(press && press.t);
       var mp = maps[cur];
+      if (eop) { encUp(mp); return; }
       if (gesture) { var tap = gesture.tap, door = gesture.door, gz = gesture.zone; if (!Object.keys(ptr).length) gesture = null; if (tap && door) { doorClick(mp, door); return; } if (tap && gz) { zoneClick(mp, gz); return; } if (tap && selTok) { selTok = null; tokPanel(); paint(); } return; }
       if (wop) { wallUp(mp); return; }
       if (zop) { zoneUp(mp); return; }
@@ -1307,6 +1487,8 @@ var Mapas = (function(){
         var d = drag; drag = null;
         if (d.moved) {
           var s = d.tok.s || 1, nx = d.x, ny = d.y; if (mp.grid !== 'none') { nx = Math.round(nx); ny = Math.round(ny); } nx = Math.max(0, Math.min(mp.cols - s, nx)); ny = Math.max(0, Math.min(mp.rows - s, ny));
+          // antes de empezar el combate cada quien se acomoda (sin rodear paredes), dentro de su zona si la hay
+          if (d.dep) { var dz = deployZ(mp, ownerOf(d.tok)); if (dz.length && !inDeploy(dz, nx, ny, s)) { Sala.toast('Acomódate dentro de la zona de despliegue.'); if (window.Sfx) Sfx.play('locked'); selTok = d.tok.id; tokPanel(); paint(); return; } tokMove(mp, d.tok, nx, ny, null); selTok = d.tok.id; tokPanel(); paint(); return; }
           var rt = mp.walls.length && window.Vision ? Vision.route(mp, d.tok, nx, ny) : {ok:true};
           if (!rt.ok && !master(mp)) { Sala.toast('Hay una pared en medio: por ahí no se llega.'); if (window.Sfx) Sfx.play('locked'); selTok = d.tok.id; tokPanel(); paint(); return; }
           tokMove(mp, d.tok, nx, ny, rt.cells); selTok = d.tok.id;
@@ -1336,7 +1518,7 @@ var Mapas = (function(){
   function dragRoute(mp){
     if (!window.Vision) return; var t = drag.tok, s = t.s || 1, rx = mp.grid !== 'none' ? Math.round(drag.x) : drag.x, ry = mp.grid !== 'none' ? Math.round(drag.y) : drag.y, ck = rx + ',' + ry;
     if (drag.ck === ck) return; drag.ck = ck;
-    drag.route = mp.walls.length ? Vision.route(mp, t, rx, ry) : null;
+    drag.route = mp.walls.length && !drag.dep ? Vision.route(mp, t, rx, ry) : null;
     drag.path = drag.route && drag.route.cells ? Vision.smooth(Vision.moveOf(mp), drag.route.cells, s) : null;
     drag.pv = master(mp) && !viewAs && mp.vis && mp.vis.on && Vision.isViewer(t, charOf(mp, t)) ? Vision.poly(Vision.sightOf(mp), rx + s / 2, ry + s / 2, mp.vis.range, mp.cols, mp.rows) : null;
   }
@@ -1458,7 +1640,7 @@ var Mapas = (function(){
   function openMap(id){
     load(id).then(function(mp){
       if (!mp) { var meta = roomMeta(id); if (meta) { asked[id] = null; waitOpen = id; Sala.send({t:'map.get', id:id}); Sala.toast('Trayendo el mapa…'); } return; }
-      cur = id; layersOpen = false; pop = null; selTok = null; mode = 'jugar'; var box = document.getElementById('mesaMaps'); if (box && visible()) editor(box); else if (box) { box.innerHTML = ''; }
+      cur = id; layersOpen = false; pop = null; selTok = null; mode = 'jugar'; encEd = encPend && encPend.map === id ? encPend.ed : null; encPend = null; var box = document.getElementById('mesaMaps'); if (box && visible()) editor(box); else if (box) { box.innerHTML = ''; }
       badge();
     });
   }
@@ -1471,7 +1653,7 @@ var Mapas = (function(){
     else if (a === 'mapsrc') { newImg = b.dataset.v === 'img' ? (newImg || {cols:30}) : null; render(); }
     else if (a === 'mapopen') openMap(b.dataset.id);
     else if (a === 'mapgoscene') { if (window.Mesa) { document.getElementById('combat').hidden = false; Mesa.show('mapas'); } openMap(b.dataset.v); }
-    else if (a === 'mapback') { cur = null; canvas = null; dropGL(); selTok = null; render.sceneOpened = room() && room().scene; render(); badge(); }
+    else if (a === 'mapback') { cur = null; canvas = null; dropGL(); selTok = null; encEd = null; eop = null; render.sceneOpened = room() && room().scene; render(); badge(); }
     else if (a === 'mapscene') { Sala.send({t:'scene.set', id:b.dataset.id}); Sala.toast('Todos ven este mapa ahora.'); }
     else if (a === 'mapshare') load(b.dataset.id).then(function(m){
       if (!m || !room()) return;
@@ -1492,8 +1674,32 @@ var Mapas = (function(){
       if (b.dataset.room) Sala.send({t:'map.del', id:b.dataset.id});
       else { delete maps[b.dataset.id]; idbDel('map:' + b.dataset.id); setIndex(index().filter(function(x){ return x.id !== b.dataset.id; })); render(); }
     }
+    else if (a === 'mapjoin') { if (Sala.send({t:'enc.join', map:b.dataset.v})) Sala.toast('Te unes al combate…'); }
     else if (!mp) return;
+    // las herramientas se abren encima del juego; «Listo» (✓) las guarda
     else if (a === 'mapmode') { MapEd.clear(mp); selWall = null; wop = null; mode = b.dataset.v; if (mode === 'dibujar' && (tool.k === 'pan' || !tool.k)) tool.k = 'pen'; pop = null; toolbar(); paint(); }
+    else if (a === 'mapstate') {
+      var sv = b.dataset.v, cs = stateOf(mp); if (sv === cs) return;
+      if (cs === 'combat' && started(mp) && !b.dataset.sure) { b.dataset.sure = 1; Sala.toast('Eso termina el combate de este mapa. Toca otra vez para confirmar.'); setTimeout(function(){ if (b) delete b.dataset.sure; }, 4500); return; }
+      if (Sala.send({t:'map.state', id:mp.id, state:sv})) { pop = null; if (window.Sfx) Sfx.play(sv === 'combat' ? 'turn' : 'click'); }
+    }
+    else if (a === 'mapfreeze') Sala.send({t:'map.play', id:mp.id, frozen:!mp.frozen});
+    else if (a === 'mapturnonly') Sala.send({t:'map.play', id:mp.id, turnOnly:mp.turnOnly === false});
+    else if (a === 'mapnpcinit') Sala.send({t:'init.npcs', map:mp.id, group:true});
+    else if (a === 'mapwave') Sala.send({t:'enc.wave', map:mp.id, n:+b.dataset.v});
+    else if (a === 'mapencs') { pop = pop === 'encs' ? null : 'encs'; toolbar(); }
+    else if (a === 'mapencdone') { encDone(); Sala.toast('El encuentro quedó guardado.'); }
+    else if (a.indexOf('mapenc') === 0) {
+      var ee = encData(); if (!ee || !encEd) return;
+      if (a === 'mapenck') { encEd.k = b.dataset.v; encEd.sel = null; encEd.zsel = null; toolbar(); paint(); }
+      else if (a === 'mapencw') { encEd.wave = +b.dataset.v; toolbar(); paint(); }
+      else if (a === 'mapencpick') { encEd.pick = encEd.pick === b.dataset.v ? null : b.dataset.v; toolbar(); }
+      else if (a === 'mapencall') { var used = {}; ee.npcs.forEach(function(d){ if (d.x != null) used[Math.round(d.x) + ',' + Math.round(d.y)] = 1; }); var cc = [Math.floor(mp.cols / 2), Math.floor(mp.rows / 2)];
+        ee.npcs.forEach(function(d){ if (d.x != null) return; for (var rg = 0, done = false; rg < 20 && !done; rg++) for (var dy = -rg; dy <= rg && !done; dy++) for (var dx = -rg; dx <= rg && !done; dx++) { if (Math.max(Math.abs(dx), Math.abs(dy)) !== rg) continue; var x = cc[0] + dx, y = cc[1] + dy, sz = d.s || 1; if (x < 0 || y < 0 || x > mp.cols - sz || y > mp.rows - sz || used[x + ',' + y]) continue; used[x + ',' + y] = 1; d.x = x; d.y = y; done = true; } });
+        encEd.pick = null; encSave(ee); }
+      else if (a === 'mapencun') { var sd = ee.npcs.filter(function(d){ return d.k === encEd.sel; })[0]; if (sd) { delete sd.x; delete sd.y; encSave(ee); } }
+      else if (a === 'mapenczdel') { ee.deploy = ee.deploy.filter(function(z){ return z.id !== encEd.zsel; }); encEd.zsel = null; encSave(ee); }
+    }
     else if (a === 'mapset') { pop = pop === 'set' ? null : 'set'; toolbar(); }
     else if (a === 'mapadd') { pop = pop === 'add' ? null : 'add'; toolbar(); }
     else if (a === 'mappen') { if (tool.k !== 'pen') { tool.k = 'pen'; pop = 'pen'; } else pop = pop === 'pen' ? null : 'pen'; toolbar(); }
@@ -1504,7 +1710,8 @@ var Mapas = (function(){
     else if (a === 'mapchip') { var tc = mp.tokens.filter(function(t){ return t.ref === b.dataset.id && !t.comp; })[0], vsc = !(master(mp) && !viewAs) && visOf(mp); if (tc && vsc && !tokShown(mp, tc, vsc, false)) { Sala.toast('Ahora nadie del grupo lo ve.'); return; } if (tc) { focus(mp, tc); selTok = tc.id; paint(); tokPanel(); } else Sala.toast(isDm() ? 'No tiene ficha en este mapa: usa «Poner en el mapa».' : 'No está en este mapa.'); }
     else if (a === 'mapputme') {
       var s = Sala.summary ? Sala.summary() : null, t = myTok(mp), c = center(mp);
-      if (t) { tokMove(mp, t, c[0], c[1]); selTok = t.id; tokPanel(); }
+      if (t && shared(mp.id) && deploying(mp)) { Sala.send({t:'tok.add', id:mp.id, tok:{kind:'pc', name:t.name, x:c[0], y:c[1]}}); selTok = t.id; tokPanel(); } // el servidor la acomoda en tu zona
+      else if (t) { tokMove(mp, t, c[0], c[1]); selTok = t.id; tokPanel(); }
       else tokAdd(mp, {kind:'pc', name: s ? s.name : 'Yo', x:c[0], y:c[1], s:1, color:TOKCOL[1], mine:!shared(mp.id)});
     }
     else if (a === 'mapfindme') { var me2 = myTok(mp); if (me2) { focus(mp, me2); selTok = me2.id; paint(); tokPanel(); } }
@@ -1629,6 +1836,8 @@ var Mapas = (function(){
     else if (t.dataset && t.dataset.toksn) { var tk4 = mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (tk4) { var sn = Object.assign({}, tk4.sn || {}); if (t.value === '') delete sn[t.dataset.toksn]; else sn[t.dataset.toksn] = +t.value; tokSet(mp, tk4, {sn:Object.keys(sn).length ? sn : null}); } }
     else if (t.id === 'mapAmb') lightDo(mp, {amb:t.value});
     else if (t.dataset && t.dataset.toktravel && t.value) { var tk5 = mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (tk5) { Sala.send({t:'travel', id:mp.id, tid:tk5.id, to:{map:t.value}}); selTok = null; tokPanel(); } }
+    else if (t.dataset && t.dataset.encnpc) { var ee2 = encData(), sd2 = ee2 && encEd && ee2.npcs.filter(function(d){ return d.k === encEd.sel; })[0]; if (sd2) { if (t.dataset.encnpc === 'wave') sd2.wave = +t.value || 1; else sd2.hidden = t.checked; encSave(ee2); } }
+    else if (t.id === 'mapEncZName' || t.id === 'mapEncZFor') { var ee3 = encData(), z3 = ee3 && encEd && ee3.deploy.filter(function(z){ return z.id === encEd.zsel; })[0]; if (z3) { if (t.id === 'mapEncZName') z3.name = t.value.trim().slice(0, 50); else if (t.value) z3.for = t.value; else delete z3.for; encSave(ee3); } }
     else if (/^mapZ/.test(t.id)) {
       var z0 = selZone && zoneById(mp, selZone); if (!z0) return; var nz = JSON.parse(JSON.stringify(z0));
       if (t.id === 'mapZName') nz.name = t.value.trim().slice(0, 50);
@@ -1669,6 +1878,6 @@ var Mapas = (function(){
   setTimeout(initEd, 0);
   window.addEventListener('resize', function(){ if (cur && canvas && visible()) { fit(); paint(); } });
 
-  return {refreshPop:function(){ if (cur) toolbar(); }, render:render, png:png, open:openMap, _maps:function(){ return maps; }, _open:openMap, _tool:tool, _mode:function(v){ if (v) { mode = v; toolbar(); } return mode; }, _sel:function(){ return selTok; },
+  return {refreshPop:function(){ if (cur) toolbar(); }, render:render, editEnc:editEnc, encDone:encDone, closePop:function(){ if (pop) { pop = null; if (cur) toolbar(); } }, _enc:function(){ return encEd; }, cur:function(){ return cur; }, png:png, open:openMap, _maps:function(){ return maps; }, _open:openMap, _tool:tool, _mode:function(v){ if (v) { mode = v; toolbar(); } return mode; }, _sel:function(){ return selTok; },
     _view:function(){ return V(); }, _cur:function(){ return cur; }, _wall:function(){ return selWall; }, _shown:function(tid){ var mp = maps[cur], t = mp && mp.tokens.filter(function(x){ return x.id === tid; })[0]; if (!t) return null; var dv = master(mp) && !viewAs; return tokShown(mp, t, visOf(mp), dv); }, _vis:function(id){ var mp = maps[id || cur]; return mp ? visOf(mp) : null; }, _viewAs:function(v){ if (v != null) { viewAs = !!v; if (cur) { toolbar(); paint(); } } return viewAs; }};
 })();

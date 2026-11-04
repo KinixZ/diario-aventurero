@@ -184,10 +184,9 @@ var Sala = (function(){
     var fm = R0.split && (R0.maps || []).filter(function(x){ return x.id === R0.fight; })[0];
     var h = '<div class="card sala on"><div class="sala-h"><div><span class="label">' + esc(R0.name) + '</span><b class="sala-code">' + esc(R0.code) + '</b></div><div class="sala-round">' + (R0.round ? 'Ronda <b>' + R0.round + '</b>' : 'Sin combate') + (fm ? '<small class="sala-fight">combate en ' + esc(fm.name) + '</small>' : '') + '</div></div>';
     if (myTurn) h += '<div class="sala-myturn">Es tu turno<button class="btn main sm" type="button" data-act="salaturn" data-v="next">Terminar mi turno</button></div>';
-    if (!dm && me.init == null) { var s = summary(); h += '<form class="sala-initf" data-form="salainit"><span>Iniciativa: tira 1d20 ' + (s ? sgn(s.initMod).replace('+', '+ ').replace('−', '− ') : '') + '</span><input class="field" name="v" inputmode="numeric" autocomplete="off" placeholder="Total" aria-label="Tu iniciativa"><button class="btn main sm" type="submit">Listo</button></form>'; }
-    if (dm) h += '<div class="sala-dm">' + (R0.round ? '<button class="btn sm" type="button" data-act="salaturn" data-v="prev">Anterior</button><button class="btn main sm" type="button" data-act="salaturn" data-v="next">Siguiente turno</button><button class="btn sm" type="button" data-act="salaend">Terminar combate</button>' : '<button class="btn main sm" type="button" data-act="salaturn" data-v="start"' + (R0.order.length ? '' : ' disabled title="Primero pongan iniciativa"') + '>Empezar combate</button>') + '<button class="btn sm" type="button" data-act="bestopen">Del bestiario</button><button class="btn sm" type="button" data-act="salanpc">' + (npcOpen ? 'Cerrar' : 'Enemigo a mano') + '</button><button class="btn sm" type="button" data-act="salaenc" aria-pressed="' + encOpen + '">Encuentros</button></div>'
+    if (!dm && me.init == null) { var s = summary(), md = s ? sgn(s.initMod).replace('+', '+ ').replace('−', '− ') : ''; h += '<form class="sala-initf" data-form="salainit"><span>Iniciativa: 1d20 ' + md + '</span><button class="btn main sm" type="button" data-act="salaroll" data-v="n"><svg class="ic"><use href="#i-d20"/></svg>Tirar</button><button class="btn sm" type="button" data-act="salaroll" data-v="adv" title="Dos d20, el mayor">Con ventaja</button><input class="field" name="v" inputmode="numeric" autocomplete="off" placeholder="o el total" aria-label="Tu iniciativa"><button class="btn sm" type="submit">Listo</button></form>'; }
+    if (dm) h += '<div class="sala-dm">' + (R0.round ? '<button class="btn sm" type="button" data-act="salaturn" data-v="prev">Anterior</button><button class="btn main sm" type="button" data-act="salaturn" data-v="next">Siguiente turno</button><button class="btn sm" type="button" data-act="salaend">Terminar combate</button>' : '<button class="btn main sm" type="button" data-act="salaturn" data-v="start"' + (R0.order.length ? '' : ' disabled title="Primero pongan iniciativa"') + '>Empezar combate</button>') + (R0.npcs.some(function(n){ return n.init == null; }) ? '<button class="btn sm" type="button" data-act="salanpcinit" title="1d20 + su modificador a cada enemigo sin iniciativa; los iguales comparten tirada"><svg class="ic"><use href="#i-d20"/></svg>Iniciativa de enemigos</button>' : '') + '<button class="btn sm" type="button" data-act="bestopen">Del bestiario</button><button class="btn sm" type="button" data-act="salanpc">' + (npcOpen ? 'Cerrar' : 'Enemigo a mano') + '</button><button class="btn sm" type="button" data-act="salaenc">Encuentros</button></div>'
       + '<div class="sala-dmopts"><label>Los jugadores ven la vida de los enemigos<select class="field" id="salaNpcHp">' + NPC_HP.map(function(x){ return '<option value="' + x[0] + '"' + ((R0.npcHp || 'state') === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></label><label class="toggle"><input type="checkbox" data-act="salahide"' + (R0.hidePc ? ' checked' : '') + '> Ocultar PG del grupo</label></div>'
-      + (encOpen ? encHtml() : '')
       + (R0.round ? '' : '<p class="note" style="margin-top:6px">' + (R0.order.length ? 'Cuando todos tengan iniciativa, empieza el combate.' : 'Los jugadores ponen su iniciativa; a los enemigos se la pones tú en su fila.') + '</p>');
     if (dm && npcOpen) h += '<form class="sala-npc" data-form="salanpc"><input class="field" name="name" placeholder="Nombre (Goblin)" aria-label="Nombre del enemigo" autocomplete="off"><input class="field" name="ac" inputmode="numeric" placeholder="CA" aria-label="CA"><input class="field" name="hp" inputmode="numeric" placeholder="PG" aria-label="PG"><input class="field" name="init" inputmode="numeric" placeholder="Inic." aria-label="Iniciativa"><input class="field" name="count" inputmode="numeric" placeholder="×1" aria-label="Cantidad"><label class="toggle"><input type="checkbox" name="hidden"> Oculto</label><button class="btn main sm" type="submit">Agregar</button></form>';
     h += '<div class="sala-list" role="list">' + ordered.map(function(x){ return rowHtml(x, dm, true); }).join('') + (rest.length ? '<div class="sala-sep">Sin iniciativa</div>' + rest.map(function(x){ return rowHtml(x, dm, false); }).join('') : '') + (!ordered.length && !rest.length ? '<p class="note">Todavía no hay nadie más. Comparte el código desde Inicio.</p>' : '') + '</div>';
@@ -199,23 +198,11 @@ var Sala = (function(){
     h += '<details class="feat-d sala-log"><summary><b>Registro</b><small>' + R0.log.length + ' eventos</small></summary><div style="padding:0 12px 10px">' + R0.log.slice().reverse().map(function(l){ return '<p class="note" style="margin:4px 0">' + esc(l.text) + '</p>'; }).join('') + '</div></details>';
     return h + '</div>';
   }
-  /* ---------- Encuentros guardados (en este dispositivo del DM) ---------- */
-  var ENC_KEY = 'diario-encuentros', encOpen = false;
+  /* ---------- Encuentros guardados en este aparato (de antes): Encuentros los pasa a la campaña ---------- */
+  var ENC_KEY = 'diario-encuentros';
   var NPC_HP = [['none','Nada'],['state','Cómo se ve (herido…)'],['bar','Solo la barra'],['pct','Barra y porcentaje'],['num','Los números']];
   function encList(){ try { return JSON.parse(localStorage.getItem(ENC_KEY) || '[]'); } catch(e){ return []; } }
-  function encSave(a){ try { localStorage.setItem(ENC_KEY, JSON.stringify(a)); return true; } catch(e){ return false; } }
-  function encounter(name){
-    if (!room) return null;
-    var pcInit = {}; room.members.forEach(function(m){ if (m.char && m.init != null) pcInit[m.char.name] = m.init; });
-    return {name: name || '', round: room.round, turnName: room.turnId ? nameOf(room.turnId) : '', pcInit: pcInit, npcHp: room.npcHp,
-      npcs: room.npcs.map(function(n){ return {name:n.name, ac:n.ac, hp:n.hp, hpMax:n.hpMax, temp:n.temp, init:n.init, conds:n.conds, hidden:n.hidden, ref:n.ref, initMod:n.initMod, formula:n.formula}; })};
-  }
-  function encHtml(){
-    var L = encList();
-    return '<div class="sala-enc card"><form class="sala-encf" data-form="salaencsave"><input class="field" name="name" placeholder="Nombre (Emboscada en el puente)" aria-label="Nombre del encuentro" autocomplete="off"><button class="btn main sm" type="submit"' + (room.npcs.length ? '' : ' disabled') + '>Guardar este</button></form>'
-      + '<p class="note">Guarda enemigos con su vida y estados, la iniciativa de todos, la ronda y de quién es el turno. Sirve para prepararlo antes de la sesión.</p>'
-      + (L.length ? L.map(function(e){ return '<div class="line"><span style="flex:1;min-width:0"><b>' + esc(e.name) + '</b><br><small class="muted">' + e.enc.npcs.length + ' enemigo' + (e.enc.npcs.length === 1 ? '' : 's') + (e.enc.round ? ' · ronda ' + e.enc.round : ' · sin empezar') + ' · ' + new Date(e.at).toLocaleDateString('es-MX', {day:'numeric', month:'short'}) + '</small></span><button class="btn sm" type="button" data-act="salaencload" data-id="' + attr(e.id) + '">Cargar</button><button class="icon-btn" type="button" data-act="salaencdel" data-id="' + attr(e.id) + '" aria-label="Borrar ' + attr(e.name) + '"><svg class="ic"><use href="#i-x"/></svg></button></div>'; }).join('') : '<p class="note">Todavía no hay encuentros guardados.</p>') + '</div>';
-  }
+  function encDrop(id){ try { localStorage.setItem(ENC_KEY, JSON.stringify(encList().filter(function(x){ return x.id !== id; }))); } catch(e){} }
   function npcHpHtml(n){
     var show = n.show || (n.state ? 'state' : 'none');
     if (n.state === 'caído') return '<span class="sala-state down">caído</span>';
@@ -260,9 +247,9 @@ var Sala = (function(){
     else if (a === 'salaturn') send({t:'turn', dir: b.dataset.v});
     else if (a === 'salaend') send({t:'end'});
     else if (a === 'salanpc') { npcOpen = !npcOpen; draw(); }
-    else if (a === 'salaenc') { encOpen = !encOpen; draw(); }
-    else if (a === 'salaencload') { var e = encList().filter(function(x){ return x.id === b.dataset.id; })[0]; if (e) { if (b.dataset.sure || !room.npcs.length) { send({t:'enc.load', enc:e.enc}); if (e.enc.npcHp) send({t:'npchp', value:e.enc.npcHp}); encOpen = false; toast('Encuentro cargado: ' + e.name); } else { b.dataset.sure = 1; b.textContent = '¿Reemplazar los enemigos de ahora?'; } } }
-    else if (a === 'salaencdel') { if (b.dataset.sure) { encSave(encList().filter(function(x){ return x.id !== b.dataset.id; })); draw(); } else { b.dataset.sure = 1; b.style.borderColor = 'var(--bad)'; b.setAttribute('aria-label', 'Toca otra vez para borrar'); } }
+    else if (a === 'salaenc') { if (window.Mesa) Mesa.show('encuentros'); }
+    else if (a === 'salaroll') send({t:'init', roll:b.dataset.v || 'n'});
+    else if (a === 'salanpcinit') send({t:'init.npcs', group:true});
     else if (a === 'salanpcdel') send({t:'npc.del', id: b.dataset.id});
     else if (a === 'salareveal') send({t:'npc.reveal', id: b.dataset.id});
     else if (a === 'salahide') send({t:'hidepc', value: b.checked});
@@ -274,7 +261,6 @@ var Sala = (function(){
     ev.preventDefault(); lastErr = '';
     var v = function(n){ var el = f.elements[n]; return el ? (el.type === 'checkbox' ? el.checked : el.value.trim()) : ''; };
     if (kind === 'salainit') { var n = parseInt(v('v'), 10); if (!(n > -20 && n < 60)) { lastErr = 'Escribe el total de tu tirada.'; draw(); return; } send({t:'init', value:n}); }
-    else if (kind === 'salaencsave') { var nm = v('name') || 'Encuentro del ' + new Date().toLocaleDateString('es-MX'), L = encList(); L.unshift({id:'e' + Date.now().toString(36), name:nm, at:Date.now(), enc:encounter(nm)}); if (encSave(L.slice(0, 40))) toast('Guardado: ' + nm); else lastErr = 'No hay espacio para guardar el encuentro.'; draw(); }
     else if (kind === 'salanpc') { if (!v('hp')) { lastErr = 'Ponle PG al enemigo.'; draw(); return; } send({t:'npc.add', name:v('name'), ac:v('ac'), hp:v('hp'), init:v('init'), count:v('count') || 1, hidden:v('hidden')}); npcOpen = false; }
     else if (kind === 'salaapply') {
       var k = ev.submitter && ev.submitter.dataset.kind || 'damage', amt = parseInt(v('amount'), 10), cond = v('cond');
@@ -302,7 +288,7 @@ var Sala = (function(){
   /* Al abrir el diario, si estabas en una campaña, vuelve a entrar sola */
   function resume(){ if (st.active && active() && available() && status === 'off') rejoin(); }
 
-  return {encounter:encounter, mount:mount, sync:sync, settings:settings, resume:resume, status:function(){ return status; }, room:function(){ return room; }, on:on, send:send, toast:toast, httpBase:httpBase,
+  return {legacyEncs:encList, dropLegacy:encDrop, mount:mount, sync:sync, settings:settings, resume:resume, status:function(){ return status; }, room:function(){ return room; }, on:on, send:send, toast:toast, httpBase:httpBase,
     code:function(){ return st.active; }, token:function(){ var e = active(); return e ? e.token : null; }, role:function(){ var e = active(); return e ? e.role : null; }, redraw:function(){ draw(); },
     list:function(){ return st.list.slice(); }, active:active, select:select, create:createCampaign, join:joinCampaign, leave:leaveActive, forget:forgetCampaign, peek:peek, available:available,
     error:function(){ return lastErr; }, clearError:function(){ lastErr = ''; }, durable:function(){ return durable; }, summary:summary, COND:COND};

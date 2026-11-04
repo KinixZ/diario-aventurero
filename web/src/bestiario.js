@@ -202,7 +202,9 @@ var Bestiario = (function(){
   function infoOf(ref){ var m = find(ref); if (!m) return null; var sp = m.speed || {}; return {type:(TYPE_ES[m._t] || m._t || ''), cr:crText(m.cr), ac:String(acOf(m)), hp:String(hpOf(m)) + (m.hp && m.hp.formula ? ' (' + m.hp.formula + ')' : ''), size:SIZE_ES[(m.size || [])[0]] || '', speed:[['walk',''],['fly','vuelo '],['swim','nado '],['climb','trepar ']].filter(function(x){ return sp[x[0]]; }).map(function(x){ return x[1] + ft(sp[x[0]]); }).join(', ')}; }
   function statOf(ref){ var m = find(ref); if (!m) return null; var o = {}; Object.keys(m).forEach(function(k){ if (k.charAt(0) !== '_') o[k] = m[k]; }); return o; }
   function nameOf(ref){ var m = find(ref); return m ? Render5e.Tname(m.name) : String(ref || '').split('|')[0]; }
+  /* Lo que necesita un enemigo de un encuentro: CA, PG, iniciativa, tipo y cuántas casillas ocupa */
+  function npcOf(ref){ var m = find(ref); if (!m) return null; var sz = (m.size || [])[0]; return {name:Render5e.Tname(m.name), ac:acOf(m), hp:hpOf(m), initMod:initOf(m), formula:m.hp && m.hp.formula || null, ref:m.name + '|' + m.source, binfo:{type:TYPE_ES[m._t] || m._t || '', size:SIZE_ES[sz] || ''}, s:{L:2, H:3, G:4}[sz] || 1, cr:crText(m.cr)}; }
 
   function count(){ return list ? list.filter(function(m){ return !m.rep; }).length : 0; }
-  return {open:open, count:count, settings:settings, ready:ready, has:has, find:find, initOf:initOf, _set:setData, statHtml:statHtml, search:search, infoOf:infoOf, statOf:statOf, nameOf:nameOf};
+  return {open:open, count:count, settings:settings, ready:ready, has:has, find:find, initOf:initOf, _set:setData, statHtml:statHtml, search:search, infoOf:infoOf, statOf:statOf, nameOf:nameOf, npcOf:npcOf};
 })();

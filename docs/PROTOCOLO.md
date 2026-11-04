@@ -38,16 +38,22 @@ Fuera de sesión todo sigue disponible: combate, chat, pizarra, tablero, mapas y
 
 | `t` | Campos | Quién | Qué hace |
 |---|---|---|---|
-| `init` | `value`, `id?` | jugador (el suyo) / DM (cualquiera) | Pone la iniciativa; reordena. |
+| `init` | `value` o `roll`: `n` \| `adv` \| `dis`, `id?` | jugador (el suyo) / DM (cualquiera) | Pone la iniciativa (escrita) o la tira el servidor: 1d20 (con ventaja o desventaja) + `initMod` de la hoja o del enemigo; queda en el registro con los dados. Reordena. |
+| `init.npcs` | `map?`, `group?` | DM | Tira la iniciativa de los enemigos que no la tienen (con el combate separado, los del mapa). `group`: los del mismo tipo comparten tirada. |
 | `npc.add` | `name`, `ac`, `hp`, `init?`, `count?`, `hidden?`, `ref?`, `initMod?`, `formula?`, `binfo?`, `img?` | DM | Agrega uno o varios PNJ ("Goblin 1", "Goblin 2"…). `ref` = `Nombre|LIBRO` del Manual; `binfo: {type, size}` es lo que se anota en el encuentro. |
 | `npc.del` | `id` | DM | Quita un PNJ. |
 | `npc.set` | `id`, `hp?`, `hpMax?`, `delta?`, `ac?`, `name?`, `conds?` | DM | Ajusta a mano un enemigo. |
 | `npc.reveal` | `id` | DM | Muestra u oculta un PNJ a los jugadores. |
 | `hidepc` | `value` | DM | Oculta los PG exactos del grupo entre jugadores. |
 | `npchp` | `value`: `none` \| `state` \| `bar` \| `pct` \| `num` | DM | Qué ven los jugadores de la vida de los enemigos. |
-| `enc.load` | `enc: {name, npcs[], round, turnName, pcInit{nombre: init}}` | DM | Carga un encuentro guardado. |
+| `enc.load` | `enc: {name, npcs[], round, turnName, pcInit{nombre: init}}` | DM | (De antes) Carga un combate guardado en el aparato, reemplazando a los enemigos. |
+| `enc.save` | `enc: {id?, name, map?, notes?, npcs[{k, name, ac, hp, hpMax, ref?, initMod?, formula?, img?, binfo?, s?, color?, x?, y?, wave?, hidden?}], deploy[{id, x, y, w, h, name?, for?}], waves[{n, name?, round?}]}` | DM | Crea o reemplaza un encuentro (el id lo puede poner el cliente: `E…`). Hasta 40 encuentros, 40 enemigos, 12 zonas de despliegue y oleadas 2 a 9. Responde `enc` con el encuentro limpio. |
+| `enc.get` / `enc.del` | `id` | DM | Pide un encuentro completo (`enc`) o lo borra. |
+| `enc.use` | `id` | DM | Empieza el encuentro: los enemigos de la oleada 1 entran al combate con su ficha en su lugar, las zonas de despliegue van al mapa, el mapa pasa a combate (y se destapa) y a cada jugador le llega `combat`. Si ya había uno en ese mapa (o sin mapa), sus enemigos se quitan. |
+| `enc.wave` | `map?`, `n` | DM | Suelta ya la oleada `n` del encuentro en curso de ese mapa (sin `map`, el que no tiene mapa). Las que tienen `round` llegan solas al empezar esa ronda. A los del mapa les llega `wave`. |
+| `enc.join` | `map` | jugador | Se une al combate de ese mapa: su ficha (y sus compañeros, si venía de otro mapa) llega a su zona de despliegue o cerca del centro; si no tenía ficha, se le pone una. Le llega `goto`. |
 | `turn` | `dir`: `start` \| `next` \| `prev` | DM / quien tiene el turno | Avanza el turno; al dar la vuelta sube la ronda. |
-| `end` | — | DM | Termina el combate y borra la iniciativa. |
+| `end` | `all?`, `map?` | DM | Termina el combate y borra la iniciativa (con el combate separado, solo el del mapa, salvo `all`). Los mapas en combate vuelven a exploración, sin zonas de despliegue ni oleadas pendientes. |
 | `apply` | `targets[]`, `kind`, `amount?`, `cond?`, `note?` | jugadores; el DM solo sobre enemigos | `kind`: `damage`, `heal`, `temp`, `cond+`, `cond-`. |
 
 Cuando un monstruo **de los manuales** (con `ref`) entra visible al combate (o el DM lo revela) y el registro automático está activo, se anota solo en el bestiario del grupo como encuentro (`manual: true`), sin el número del nombre ("Goblin 2" → "Goblin"). Los jugadores reciben su `ref` para abrir la entrada en su propio Manual. Los enemigos hechos a mano no se anotan solos.
@@ -58,7 +64,7 @@ Cuando un monstruo **de los manuales** (con `ref`) entra visible al combate (o e
 |---|---|---|---|
 | `map.save` | `map: {id, name, cols, rows, grid, layers, strokes, hidden?}` | cualquiera (el DM los suyos ocultos) | Crea o reemplaza un mapa. `grid`: `square`, `hex` o `none`. |
 | `map.meta` | `id`, `name?`, `grid?`, `layers?` | dueño / DM | Cambia nombre, cuadrícula o capas. Una capa con `dm: true` solo la ve el DM. |
-| `map.hide` | `id`, `value` | DM | Oculta el mapa mientras lo prepara. |
+| `map.hide` | `id`, `value` | DM | Oculta el mapa mientras lo prepara (lo pasa a preparación; mostrarlo, a exploración). |
 | `map.del` | `id` | dueño / DM | Borra el mapa. |
 | `map.get` | `id` | cualquiera que lo vea | Pide el mapa completo (`map`). |
 | `map.add` | `id`, `stroke` | quien lo ve | Agrega un trazo (`pen`, `line`, `rect`, `text`). |
@@ -74,11 +80,13 @@ Cuando un monstruo **de los manuales** (con `ref`) entra visible al combate (o e
 | `trig.add` / `trig.upd` | `id`, `trig: {id, k, x, y, w, h, name, to?: {map, zid?}, lock?, hidden?, text?, once?, fired?, say?, all?}` | DM | Pone o cambia una zona (rectángulo de casillas). `k`: `paso` (lleva a otro mapa y a una zona de llegada; `lock` no deja pasar a los jugadores; `hidden` no la ven), `trampa` (avisa al DM; con `say` también al jugador), `texto` (descripción para quien entra; con `all`, para todos los del mapa) y `encuentro` (destapa a los enemigos ocultos del mapa). `once`: se dispara una sola vez (`fired` queda puesto; quitarlo la rearma). Hasta 200 por mapa. |
 | `trig.rm` | `id`, `zid` | DM | Quita una zona. |
 | `travel` | `id`, `zid` (jugador o DM) · o `id`, `tid` o `all`, `to: {map, zid?}` (DM) | jugador de cerca / DM | Pasa por una zona de paso: el jugador lleva su ficha y sus compañeros (tiene que estar a 1,5 casillas o menos; bloqueada no). El DM lleva una ficha (`tid`) o a todas las de personaje (`all`) a otro mapa. Llegan a la zona `zid` del destino (o al centro), en casillas libres; si el destino estaba oculto, se destapa. A cada jugador que llega le llega `goto`. |
+| `map.state` | `id`, `state`: `prep` \| `explore` \| `combat` | DM | Estado del mapa. Preparación lo oculta a los jugadores (es lo mismo que `map.hide`); exploración lo muestra; combate prepara el despliegue (a los jugadores del mapa les llega `combat`). Salir de combate termina el combate de ese mapa. Empezar el combate pasa a combate los mapas donde están los personajes del orden. |
+| `map.play` | `id`, `frozen?`, `turnOnly?` | DM | `frozen`: los jugadores no mueven fichas ni viajan (las puertas sí). `turnOnly` (de fábrica): en combate empezado, cada jugador mueve sus fichas solo en su turno. Antes de empezar, cada quien se acomoda en su zona de despliegue (si hay) sin rodear paredes; fuera de ella la ficha vuelve con un `error` `deploy`. Congelado: `frozen`; fuera de turno: `not_your_turn`. |
 | `fight.split` | `value` | DM | Separa el combate: un orden, turno y ronda por mapa (cada quien en el mapa donde está su ficha). `false` los une en uno solo (sigue el turno del mapa que el DM tiene abierto). |
 | `fight.focus` | `map` | DM | El combate que ve y maneja el DM con el combate separado (lo manda el diario al abrir un mapa). |
 | `door` | `id`, `wid`, `open?` | cualquiera (de cerca) / DM | Abre o cierra una puerta (sin `open`, la alterna). Un jugador necesita una ficha suya a 2 casillas o menos y que no tenga llave (`locked`, `far`). Abrir una secreta la marca encontrada. |
 | `tok.add` | `id`, `tok: {x, y, s, name, color, img?, kind, ref?, hidden?, comp?, lt?, sn?}` | cualquiera | Pone una ficha. `kind`: `pc`, `npc`, `obj`. La ficha propia de un jugador es única por mapa: ponerla otra vez la mueve. Hasta 5 fichas por jugador y 120 por mapa. |
-| `tok.move` | `id`, `tid`, `x`, `y` | dueño / DM | Mueve una ficha. Si una ficha de personaje entra a una zona (o la cruza), se dispara: ver `trig`. Con paredes, la de un jugador va en recto o rodeando; si no hay camino, el servidor le regresa la ficha (`tok`) y un `error` `blocked`. El DM pasa por donde sea. Con la visión puesta, descubre lo que la ficha ve en el camino. |
+| `tok.move` | `id`, `tid`, `x`, `y` | dueño / DM | Mueve una ficha. Si una ficha de personaje entra a una zona (o la cruza), se dispara: ver `trig`. Con paredes, la de un jugador va en recto o rodeando; si no hay camino, el servidor le regresa la ficha (`tok`) y un `error` `blocked`. El DM pasa por donde sea. Con la visión puesta, descubre lo que la ficha ve en el camino. Las reglas del estado del mapa van antes: congelado, despliegue y turno (ver `map.play`). |
 | `tok.set` | `id`, `tid`, `name?`, `s?`, `color?`, `img?`, `hidden?`, `ref?`, `lt?`, `sn?` | dueño / DM (`hidden`, `ref` solo DM) | Ajusta una ficha. `lt: {k?, b, d, c, f?}` es la luz que lleva (radios en casillas: `b` brillante y `d` penumbra más allá; `null` la quita). `sn: {dv?, bs?}` cambia sus sentidos en pies (lo que no se ponga sale de la hoja). |
 | `tok.del` | `id`, `tid` | dueño / DM | Quita una ficha. |
 | `scene.set` | `id?` | DM | Muestra ese mapa a todos (lo destapa si estaba oculto). Sin `id` lo quita. |
@@ -151,16 +159,20 @@ Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `t
 | `chat`, `draw`, `draw.undo`, `draw.clear` | | Eventos sueltos de la mesa. |
 | `map`, `map.meta`, `map.add`, `map.rm`, `map.bg`, `map.fog`, `map.vis`, `map.light`, `tok`, `tok.del`, `scene`, `ping` | | Cambios de mapas, solo a quien puede verlos. |
 | `walls` | `id`, `put`, `del`, `wrev` | | Paredes nuevas o cambiadas (`put`) y quitadas (`del`); a los jugadores, con las secretas disfrazadas. |
-| `trigs` | `id`, `put`, `del` | | Zonas nuevas, cambiadas o quitadas. Los jugadores solo reciben los pasos que no están ocultos (con `to.name`, el nombre del mapa al que llevan). |
+| `trigs` | `id`, `put`, `del` | | Zonas nuevas, cambiadas o quitadas. Los jugadores solo reciben los pasos que no están ocultos (con `to.name`, el nombre del mapa al que llevan) y las zonas de despliegue (`k: 'despliegue'`, con `for` si es de alguien). |
 | `trig` | `id`, `k`, `zid`, `name`, `text?`, `who?`, `to?`, `lock?`, `dm?` | | Alguien entró a una zona. Al jugador que pisa un paso le pregunta si pasa; el texto, a quien entra (o a todos los del mapa); la trampa, al DM (y al jugador si `say`); la emboscada, a los del mapa. Al DM le llega todo con `dm: true` y `who`. |
 | `goto` | `map`, `name` | | Tu ficha pasó a ese mapa: el diario lo abre. |
+| `map.play` | `id`, `state`, `frozen`, `turnOnly` | | Cambió el estado del mapa o sus reglas de movimiento. |
+| `combat` | `map`, `name`, `enc?` | | Hay combate en ese mapa (o sin mapa): quien está ahí se acomoda y tira iniciativa; quien no, se puede unir (`enc.join`). |
+| `wave` | `map`, `n`, `name` | | Llegó una oleada de refuerzos (solo si alguno se ve). |
+| `enc` | `enc` | | Un encuentro completo (al DM). |
 | `beast`, `beast.saved` | | Ficha de una criatura; confirmación al DM. |
 | `applied` | `kind`, `amount`, `cond`, `note`, `from` | Alguien te aplicó algo: tu hoja lo aplica y responde con `char`. |
 | `yourturn` | `round` | Empieza tu turno. |
 | `kicked` | — | El DM te quitó de la campaña. |
 | `error` | `code`, `msg` | `msg` ya viene en español. |
 
-`room` incluye `name`, `live`, `session {n, title, started, ended}`, `members` (con `online`, `seen` y `at`, el mapa donde está su ficha), `npcs` (con `at`), `order`, `turnId`, `round` (con el combate separado, los del combate de tu mapa; además `split`, `fight` y, para el DM, `fights: [{map, name, round, turnId, n}]`), `maps` (resumen), `scene`, `beasts` (resumen, sin `stat`), `autoBeasts`, `board` y `log`. Para el DM cada PNJ trae además `ac`, `hp`, `hpMax`, `temp` y `hidden`.
+`room` incluye `name`, `live`, `session {n, title, started, ended}`, `members` (con `online`, `seen` y `at`, el mapa donde está su ficha), `npcs` (con `at`), `order`, `turnId`, `round` (con el combate separado, los del combate de tu mapa; además `split`, `fight` y, para el DM, `fights: [{map, name, round, turnId, n}]`), `maps` (resumen, con `state` y `frozen`), `scene`, para el DM `encs` (resumen: `{id, name, map, n, placed, waves, deploy, updated}`) y `runs` (encuentros en curso: `{key, map, enc, name, waves: [{n, name, round, count}]}` con las oleadas que faltan), `beasts` (resumen, sin `stat`), `autoBeasts`, `board` y `log`. Para el DM cada PNJ trae además `ac`, `hp`, `hpMax`, `temp` y `hidden`.
 
 `char` (resumen del personaje):
 
@@ -176,4 +188,4 @@ Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `t
 
 ## Límites
 
-16 miembros, 40 PNJ, 40 mapas, 400 criaturas y 1200 mensajes de chat por campaña; 300 campañas cargadas a la vez; mensajes de hasta 2 MB; 80 mensajes cada 5 segundos por conexión.
+16 miembros, 60 PNJ, 40 mapas, 40 encuentros, 400 criaturas y 1200 mensajes de chat por campaña; 300 campañas cargadas a la vez; mensajes de hasta 2 MB; 80 mensajes cada 5 segundos por conexión.
