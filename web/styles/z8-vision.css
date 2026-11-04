@@ -1,0 +1,48 @@
+/* ==================== PAREDES, PUERTAS Y VISIÓN ==================== */
+/* Botón de paredes en la paleta: el icono del tipo elegido con su color de edición */
+.map-pal .wall-btn{position:relative}
+.map-pal .wall-btn::after{content:'';position:absolute;left:9px;right:9px;bottom:5px;height:3px;border-radius:2px;background:var(--wc,#e8c26a);opacity:.85}
+.map-pal .wall-btn[aria-pressed="true"]::after{opacity:1;box-shadow:0 0 6px var(--wc,#e8c26a)}
+
+/* Panel: tipos de pared */
+.map-pop.p-walls{width:min(400px,calc(100% - 74px))}
+.wallpop{display:flex;flex-direction:column;gap:8px}
+.wallpop .row{margin:0}
+.wall-types{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.wall-t{display:flex;align-items:center;gap:8px;min-height:52px;padding:6px 8px;text-align:left;border-radius:4px;cursor:pointer;color:var(--on-dark);
+  border:1px solid color-mix(in srgb, var(--gold) 32%, transparent);background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.01));transition:border-color .15s,box-shadow .15s,transform .1s}
+.wall-t .ic{width:26px;height:26px;color:var(--wc);filter:drop-shadow(0 0 4px color-mix(in srgb, var(--wc) 45%, transparent))}
+.wall-t span{display:flex;flex-direction:column;min-width:0}
+.wall-t b{font-family:var(--display);font-size:12.5px;letter-spacing:.03em;color:#fff}
+.wall-t small{font-size:11.5px;line-height:1.2;color:var(--on-dark-2)}
+.wall-t[aria-pressed="true"]{border-color:var(--wc);box-shadow:inset 3px 0 0 var(--wc),0 0 12px color-mix(in srgb, var(--wc) 30%, transparent);background:linear-gradient(90deg, color-mix(in srgb, var(--wc) 18%, transparent), transparent)}
+.wall-t:active{transform:scale(.98)}
+.wall-opts{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.wall-opts .seg button{display:inline-flex;align-items:center;gap:5px}
+.wall-opts .seg .ic{width:15px;height:15px}
+.wallpop .note{color:var(--on-dark-2);margin:0}
+
+/* Barra de la pared elegida */
+.wall-bar{border-color:var(--wc,var(--gild))}
+.wall-bar .ic.wc{width:24px;height:24px;color:var(--wc);margin:0 2px}
+.wall-bar select{height:34px;width:auto;min-width:120px;font-size:13px;background-color:rgba(255,255,255,.06);color:var(--on-dark)}
+.wall-bar .btn.sm{height:34px}
+.wall-bar .btn[aria-pressed="true"]{border-color:var(--wc);color:#fff}
+.wall-bar .icon-btn[aria-pressed="true"]{color:#1c1512;background:radial-gradient(circle at 50% 30%, #ffe9a8, var(--gold));border-color:var(--gold-hi)}
+.wall-len{color:var(--on-dark-2);font-variant-numeric:tabular-nums;padding:0 2px;white-space:nowrap}
+
+/* Visión en el panel de niebla */
+.vtt-hud .vis-on{display:inline-flex;align-items:center;gap:6px}
+.vtt-hud .vis-on .ic{width:20px;height:20px;color:var(--gold-hi)}
+.vtt-hud .vis-row .fl{display:flex;flex-direction:column;gap:2px;font-size:11.5px;color:var(--on-dark-2);min-width:150px;flex:1}
+.vtt-hud .vis-row .field{height:36px;font-size:13px;background-color:rgba(255,255,255,.06);color:var(--on-dark)}
+.map-where .vis-as{cursor:pointer;border:1px solid var(--gold-hi);background:color-mix(in srgb, var(--gold) 25%, transparent);color:#fff;font:inherit;font-size:11px}
+
+@media (max-width:600px){
+  .wall-bar .wall-len,.wall-bar .ic.wc{display:none}
+  .wall-bar select{min-width:0;width:112px;flex:none}
+  .wall-types{grid-template-columns:1fr}
+  .wall-t{min-height:44px}
+  .wall-t small{display:none}
+  .wall-t[aria-pressed="true"] small{display:block}
+}

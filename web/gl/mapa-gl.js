@@ -2,8 +2,11 @@
    Lo carga Gfx.loadGL() solo cuando se abre un mapa. Expone window.MapaGL.create(canvas, opts).
    mapas.js decide qué se ve (fichas, niebla, quién es dueño de qué) y le pasa una "escena" ya resuelta;
    este módulo solo dibuja, y conserva entre cuadros lo que no cambió (cuadrícula, trazos, fichas, niebla).
-   Todo lo del mundo se dibuja en casillas: el contenedor `world` se escala con el zoom (v.s px por casilla). */
-import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+   Todo lo del mundo se dibuja en casillas: el contenedor `world` se escala con el zoom (v.s px por casilla).
+   Niebla con visión: una textura aparte (RenderTexture) donde se pinta lo no descubierto y la penumbra de lo descubierto,
+   se borran (blend «erase») los polígonos que ve el grupo y, si el aparato aguanta, se suaviza el borde. Solo se rehace
+   cuando cambia la vista o lo descubierto, no en cada cuadro. */
+import { Application, BlurFilter, Container, Graphics, RenderTexture, Sprite, Text, Texture } from 'pixi.js';
 
 const PAPER = 0xf3e9d2, OUT = 0x1c1512;
 const TEXTS = { 0.06: 0.7, 0.14: 1.1, 0.32: 1.8 };
@@ -22,11 +25,11 @@ async function create(canvas, opts = {}) {
 
   /* Capas del escenario, de abajo hacia arriba */
   const world = new Container(), screen = new Container();
-  const paper = new Graphics(), bg = new Sprite(), grid = new Graphics(), strokesBox = new Container();
+  const paper = new Graphics(), bg = new Sprite(), grid = new Graphics(), strokesBox = new Container(), wallInk = new Graphics();
   const tokLow = new Container(), fog = new Sprite(), tokHigh = new Container(), border = new Graphics(), top = new Container();
-  const preview = new Graphics(), marks = new Graphics(), ghostBox = new Container();
-  top.addChild(marks, preview, ghostBox);
-  world.addChild(paper, bg, grid, strokesBox, tokLow, fog, tokHigh, border, top);
+  const preview = new Graphics(), marks = new Graphics(), wallTech = new Graphics(), ghostBox = new Container();
+  top.addChild(wallTech, marks, preview, ghostBox);
+  world.addChild(paper, bg, grid, strokesBox, wallInk, tokLow, fog, tokHigh, border, top);
   app.stage.addChild(world, screen);
   bg.visible = false; fog.visible = false;
 
@@ -36,7 +39,11 @@ async function create(canvas, opts = {}) {
   const layerBoxes = new Map(); // layer id → Container
   const tokObjs = new Map();    // id → {box, sig}
   const labelPool = [];
-  let paperKey = '', gridKey = '', strokeKey = '', fogKey = '', bgKey = '', fogCanvas = null, fogTex = null, dead = false;
+  let paperKey = '', gridKey = '', strokeKey = '', fogKey = '', bgKey = '', wallKey = '', visKey = '', fogCanvas = null, fogTex = null, dead = false;
+  // composición de la niebla con visión
+  const fogComp = new Container(), fogPad = new Graphics(), fogBase = new Sprite(), fogCut = new Graphics(), blurSp = new Sprite();
+  fogCut.blendMode = 'erase'; fogComp.addChild(fogPad, fogBase, fogCut);
+  let fogRT = null, fogRT2 = null, blurF = null;
 
   /* ---------- Imágenes ---------- */
   function image(url) {
@@ -171,22 +178,87 @@ async function create(canvas, opts = {}) {
   /* ---------- Niebla: una textura de cols × rows píxeles, uno por casilla ---------- */
   function syncFog(f, m) {
     if (!f || !f.on) { fog.visible = false; return; }
-    const k = m.id + '|' + m.cols + 'x' + m.rows + '|' + f.key + '|' + (f.dm ? 1 : 0);
+    const un = f.un == null ? (f.dm ? 0.5 : 1) : f.un, mem = f.mem || 0;
+    const k = m.id + '|' + m.cols + 'x' + m.rows + '|' + f.key + '|' + (f.dm ? 1 : 0) + '|' + un + '|' + mem;
     if (k !== fogKey) {
-      fogKey = k;
+      fogKey = k; visKey = '';
       if (!fogCanvas || fogCanvas.width !== m.cols || fogCanvas.height !== m.rows) {
         fogCanvas = document.createElement('canvas'); fogCanvas.width = m.cols; fogCanvas.height = m.rows;
         if (fogTex) fogTex.destroy(true);
-        fogTex = Texture.from(fogCanvas); fogTex.source.scaleMode = 'nearest'; fog.texture = fogTex;
+        fogTex = Texture.from(fogCanvas); fogTex.source.scaleMode = 'nearest';
       }
-      const c = fogCanvas.getContext('2d'), id = c.createImageData(m.cols, m.rows), d = id.data, a = f.dm ? 128 : 255, bits = f.bits;
+      const c = fogCanvas.getContext('2d'), id = c.createImageData(m.cols, m.rows), d = id.data, a = Math.round(un * 255), am = Math.round(mem * 255), bits = f.bits;
       for (let i = 0, n = m.cols * m.rows; i < n; i++) {
         const dark = !((bits[i >> 3] >> (i & 7)) & 1), o = i * 4;
-        d[o] = f.dm ? 12 : 11; d[o + 1] = f.dm ? 8 : 8; d[o + 2] = 6; d[o + 3] = dark ? a : 0;
+        d[o] = f.dm ? 12 : 11; d[o + 1] = 8; d[o + 2] = 6; d[o + 3] = dark ? a : am;
       }
       c.putImageData(id, 0, 0); fogTex.source.update();
     }
-    fog.visible = true; fog.width = m.cols; fog.height = m.rows;
+    if (!f.vis) { fog.texture = fogTex; fog.position.set(0, 0); fog.width = m.cols; fog.height = m.rows; fog.visible = true; return; }
+    // con visión: se compone aparte, con un margen para que el suavizado no aclare los bordes del mapa
+    const M = 2, big = Math.max(m.cols, m.rows) + M * 2, K = Math.max(3, Math.min(f.k || 12, Math.floor(2048 / big))), soft = !!f.soft;
+    const vk = k + '|' + f.vis.key + '|' + K + '|' + (soft ? 1 : 0);
+    if (vk !== visKey) {
+      visKey = vk;
+      const w = (m.cols + M * 2) * K, h = (m.rows + M * 2) * K;
+      if (!fogRT || fogRT.width !== w || fogRT.height !== h) {
+        if (fogRT) fogRT.destroy(true); if (fogRT2) { fogRT2.destroy(true); fogRT2 = null; }
+        fogRT = RenderTexture.create({ width: w, height: h });
+      }
+      if (soft && !fogRT2) fogRT2 = RenderTexture.create({ width: w, height: h });
+      fogPad.clear();
+      if (!f.dm) { const e = M * K; fogPad.rect(0, 0, w, e).rect(0, h - e, w, e).rect(0, e, e, h - 2 * e).rect(w - e, e, e, h - 2 * e).fill({ color: OUT, alpha: 1 }); }
+      fogBase.texture = fogTex; fogBase.position.set(M * K, M * K); fogBase.width = m.cols * K; fogBase.height = m.rows * K;
+      fogCut.clear();
+      for (const P of f.vis.polys) { if (P.length < 6) continue; const q = new Array(P.length); for (let i = 0; i < P.length; i++) q[i] = (P[i] + M) * K; fogCut.poly(q, true).fill({ color: 0xffffff, alpha: 1 }); }
+      app.renderer.render({ container: fogComp, target: fogRT, clear: true });
+      if (soft) {
+        if (!blurF) blurF = new BlurFilter({ strength: 1, quality: 3 });
+        blurF.strength = Math.max(1.5, K * 0.32); blurSp.texture = fogRT; blurSp.filters = [blurF];
+        app.renderer.render({ container: blurSp, target: fogRT2, clear: true });
+      }
+      fog.texture = soft ? fogRT2 : fogRT;
+    }
+    fog.position.set(-M, -M); fog.width = m.cols + M * 2; fog.height = m.rows + M * 2; fog.visible = true;
+  }
+
+  /* ---------- Paredes: figuras sencillas que manda mapas.js (seg, door, dot, lock, arrow) ---------- */
+  function doorPoly(q) {
+    const L = Math.hypot(q.b[0] - q.a[0], q.b[1] - q.a[1]) * 0.97, an = Math.atan2(q.b[1] - q.a[1], q.b[0] - q.a[0]) + (q.r || 0) * Math.PI / 180;
+    const ux = Math.cos(an), uy = Math.sin(an), nx = -uy, ny = ux, h = q.w / 2, ax = q.a[0], ay = q.a[1];
+    return [ax - nx * h, ay - ny * h, ax + ux * L - nx * h, ay + uy * L - ny * h, ax + ux * L + nx * h, ay + uy * L + ny * h, ax + nx * h, ay + ny * h];
+  }
+  function drawPrims(g, list, px) {
+    for (const q of list) {
+      const o = q.o == null ? 1 : q.o;
+      if (q.p === 'seg') {
+        const w = q.px ? q.w * px : q.w;
+        if (q.d) { const d = q.px ? q.d * px : q.d; dashed(g, q.a[0], q.a[1], q.b[0], q.b[1], d, d * 0.8); g.stroke({ width: w, color: q.c, alpha: o }); }
+        else g.moveTo(q.a[0], q.a[1]).lineTo(q.b[0], q.b[1]).stroke({ width: w, color: q.c, alpha: o, cap: 'round' });
+      } else if (q.p === 'door') {
+        const pl = doorPoly(q), sw = Math.max(q.w * 0.16, px);
+        g.poly(pl, true).fill({ color: q.c, alpha: o * (q.dash ? 0.6 : 1) });
+        if (q.dash) { for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; dashed(g, pl[i * 2], pl[i * 2 + 1], pl[j * 2], pl[j * 2 + 1], q.w * 0.7, q.w * 0.45); } g.stroke({ width: sw, color: q.s, alpha: o }); }
+        else g.poly(pl, true).stroke({ width: sw, color: q.s, alpha: o, join: 'miter' });
+        g.circle(q.a[0], q.a[1], q.w * 0.32).fill({ color: q.s, alpha: o });
+      } else if (q.p === 'dot') {
+        g.circle(q.x, q.y, q.r * px).fill({ color: q.c }).stroke({ width: 1.5 * px, color: 0x2b1d12 });
+      } else if (q.p === 'lock') {
+        const z = Math.max(0.16, 5 * px);
+        g.rect(q.x - z, q.y - z * 0.2, z * 2, z * 1.5).fill(0xffd66e).stroke({ width: 1.5 * px, color: 0x2b1d12 });
+        g.moveTo(q.x - z * 0.65, q.y - z * 0.2).arc(q.x, q.y - z * 0.2, z * 0.65, Math.PI, 0).stroke({ width: 1.5 * px, color: 0x2b1d12 });
+      } else if (q.p === 'arrow') {
+        const an = Math.atan2(q.b[1] - q.a[1], q.b[0] - q.a[0]), k = 7 * px;
+        g.moveTo(q.a[0], q.a[1]).lineTo(q.b[0], q.b[1]).moveTo(q.b[0] - k * Math.cos(an - 0.5), q.b[1] - k * Math.sin(an - 0.5)).lineTo(q.b[0], q.b[1]).lineTo(q.b[0] - k * Math.cos(an + 0.5), q.b[1] - k * Math.sin(an + 0.5))
+          .stroke({ width: 2.5 * px, color: q.c, alpha: o, cap: 'round', join: 'round' });
+      }
+    }
+    return g;
+  }
+  function syncWalls(w, v) {
+    if (!w) { if (wallKey) { wallInk.clear(); wallKey = ''; } wallTech.clear(); return; }
+    if (w.key !== wallKey) { wallKey = w.key; wallInk.clear(); drawPrims(wallInk, w.ink || [], 1 / v.s); }
+    wallTech.clear(); if (w.tech && w.tech.length) drawPrims(wallTech, w.tech, 1 / v.s);
   }
 
   /* ---------- Fichas ---------- */
@@ -195,7 +267,7 @@ async function create(canvas, opts = {}) {
     for (let i = 0; i < n; i++) { const a0 = (i / n) * Math.PI * 2, a1 = a0 + (Math.PI * 2 / n) * 0.55; g.moveTo(cx + r * Math.cos(a0), cy + r * Math.sin(a0)).arc(cx, cy, r, a0, a1); }
     g.stroke({ width: w, color });
   }
-  function tokSig(t) { return [t.color, t.img || '', t.ini, t.s, t.hidden ? 1 : 0, t.sel ? 1 : 0, t.turn ? 1 : 0, t.pct == null ? '' : Math.round(t.pct * 40), t.down ? 1 : 0, t.ghost ? 1 : 0, t.img && image(t.img) ? 1 : 0].join('|'); }
+  function tokSig(t) { return [t.color, t.img || '', t.ini, t.s, t.hidden ? 1 : 0, t.sel ? 1 : 0, t.turn ? 1 : 0, t.pct == null ? '' : Math.round(t.pct * 40), t.down ? 1 : 0, t.ghost ? 1 : 0, t.bad ? 1 : 0, t.img && image(t.img) ? 1 : 0].join('|'); }
   function buildTok(t) {
     const box = new Container(), s = t.s || 1, rad = s * 0.44, g = new Graphics();
     if (t.turn) g.circle(0, 0, rad + Math.max(0.12, s * 0.08)).fill({ color: 0xffd66e, alpha: 0.55 });
@@ -209,6 +281,7 @@ async function create(canvas, opts = {}) {
     }
     const ring = new Graphics(), lw = 0.06;
     if (t.hidden) dashedCircle(ring, 0, 0, rad, lw, t.sel ? 0xffd66e : 0x140c08);
+    else if (t.bad) ring.circle(0, 0, rad).stroke({ width: lw * 1.8, color: 0xff4b3a });
     else ring.circle(0, 0, rad).stroke({ width: lw, color: t.sel ? 0xffd66e : 0x140c08, alpha: t.sel ? 1 : 0.85 });
     if (t.pct != null) {
       const p = Math.max(0, Math.min(1, t.pct));
@@ -267,14 +340,20 @@ async function create(canvas, opts = {}) {
       if (sig !== ghostSig) { if (ghostObj) ghostObj.destroy({ children: true }); ghostObj = buildTok(sc.ghost); ghostSig = sig; ghostBox.addChild(ghostObj); }
       const s = sc.ghost.s || 1; ghostObj.position.set(sc.ghost.x + s / 2, sc.ghost.y + s / 2); ghostObj.visible = true;
     } else if (ghostObj) ghostObj.visible = false;
-    if (sc.ruler) {
-      const r = sc.ruler, ax = v.x + r.ax * v.s, ay = v.y + r.ay * v.s, bx = v.x + r.bx * v.s, by = v.y + r.by * v.s;
-      dashed(rulerBox, ax, ay, bx, by, 8, 6).stroke({ width: 3, color: 0xffd66e, alpha: 0.95 });
-      rulerTxt.text = r.text; rulerTxt.visible = true;
-      const w = rulerTxt.width + 16, lx = Math.min(W - w - 4, Math.max(4, bx - w / 2)), ly = Math.max(4, by - r.half * v.s - 34);
-      rulerBox.rect(lx, ly, w, 26).fill({ color: 0x120d0b, alpha: 0.88 }).stroke({ width: 1, color: 0xffd66e });
+    if (sc.preview) for (const P of sc.preview.polys) if (P.length >= 6) marks.poly(P, true).fill({ color: 0xffd66e, alpha: 0.08 }).stroke({ width: 1.5 * px, color: 0xffd66e, alpha: 0.6 });
+    const tag = (text, cx, cy, col) => {
+      rulerTxt.text = text; rulerTxt.style.fill = col; rulerTxt.visible = true;
+      const w = rulerTxt.width + 16, lx = Math.min(W - w - 4, Math.max(4, cx - w / 2)), ly = Math.max(4, cy - 13);
+      rulerBox.rect(lx, ly, w, 26).fill({ color: 0x120d0b, alpha: 0.88 }).stroke({ width: 1, color: col });
       rulerTxt.position.set(lx + 8, ly + 13 - rulerTxt.height / 2);
-    }
+    };
+    if (sc.ruler) {
+      const r = sc.ruler, col = r.bad ? 0xff6b5a : 0xffd66e, ax = v.x + r.ax * v.s, ay = v.y + r.ay * v.s, bx = v.x + r.bx * v.s, by = v.y + r.by * v.s;
+      if (r.path && r.path.length > 1) { for (let i = 1; i < r.path.length; i++) dashed(rulerBox, v.x + r.path[i - 1][0] * v.s, v.y + r.path[i - 1][1] * v.s, v.x + r.path[i][0] * v.s, v.y + r.path[i][1] * v.s, 8, 6); }
+      else dashed(rulerBox, ax, ay, bx, by, 8, 6);
+      rulerBox.stroke({ width: 3, color: col, alpha: 0.95 });
+      tag(r.text, bx, by - r.half * v.s - 21, col);
+    } else if (sc.label) tag(sc.label.text, v.x + sc.label.x * v.s, v.y + sc.label.y * v.s - 26, 0xffd66e);
     if (sc.edit) {
       const ed = sc.edit;
       if (ed.lasso) { const l = ed.lasso; marks.rect(Math.min(l.x0, l.x1), Math.min(l.y0, l.y1), Math.abs(l.x1 - l.x0), Math.abs(l.y1 - l.y0)).fill({ color: 0xd9b866, alpha: 0.12 }).stroke({ width: 1.5 * px, color: 0xd9b866 }); }
@@ -311,7 +390,7 @@ async function create(canvas, opts = {}) {
     if (dead) return;
     const v = sc.v, m = sc.map;
     world.position.set(v.x, v.y); world.scale.set(v.s);
-    syncPaper(m); syncGrid(m, v); syncStrokes(m); syncTokens(sc.tokens || [], v); syncFog(sc.fog, m); syncTop(sc, v);
+    syncPaper(m); syncGrid(m, v); syncStrokes(m); syncWalls(sc.walls, v); syncTokens(sc.tokens || [], v); syncFog(sc.fog, m); syncTop(sc, v);
     app.render();
   }
   function resize(w, h, resolution) { if (dead) return; app.renderer.resize(w, h, resolution || app.renderer.resolution); }
@@ -319,6 +398,7 @@ async function create(canvas, opts = {}) {
     if (dead) return; dead = true;
     for (const e of imgCache.values()) { if (e.tex) e.tex.destroy(true); if (e.circle) e.circle.destroy(true); }
     imgCache.clear();
+    try { if (fogRT) fogRT.destroy(true); if (fogRT2) fogRT2.destroy(true); fogComp.destroy({ children: true }); blurSp.destroy(); } catch (e) { /* nada */ }
     try { app.destroy({ removeView: false }, { children: true, texture: true, textureSource: true }); } catch (e) { /* ya estaba muerto */ }
   }
   return { render, resize, destroy, kind: 'webgl', get dead() { return dead; } };
