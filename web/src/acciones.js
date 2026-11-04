@@ -80,8 +80,8 @@ var Acciones = (function(){
   }
   function open(o){
     var r = room(); if (!r) return; o = o || {};
-    // desde el mapa (o desde Mi turno): primero a la escena de combate
-    if (!box() || !box().offsetParent) { if ((o.tries = (o.tries || 0) + 1) > 3) return; goCombat(); setTimeout(function(){ open(o); }, 60); return; }
+    // desde el mapa (o desde Mi turno): primero a la escena de combate (salvo desde el abanico, que apunta en el mapa)
+    if (!o.stay && (!box() || !box().offsetParent)) { if ((o.tries = (o.tries || 0) + 1) > 3) return; goCombat(); setTimeout(function(){ open(o); }, 60); return; }
     var dm = isDm(), actor = o.actor || (dm ? (r.turnId && (r.npcs || []).some(function(n){ return n.id === r.turnId; }) ? r.turnId : (r.npcs[0] || {}).id || 'dm') : 'me');
     comp = {actor:actor, comp:'', key:'free', title:'', atkOn:false, bonus:0, k:'n', kSet:false, saveOn:false, ab:'dex', dc:13, half:true, dmg:'', type:'', heal:false, text:'', lv:'', targets:{}, conds:[], repeat:false, conc:false, def:null, area:null, map:null, man:{}};
     if (o.key) pick(o.key);
@@ -187,6 +187,21 @@ var Acciones = (function(){
         if (go) post(); else { goCombat(); render.force = true; setTimeout(render, 60); }
       }});
   }
+  /* ---------- Desde el abanico del mapa ----------
+     quick: prepara la acción (tuya o del enemigo) y, si necesita objetivos o área, apunta en el mapa; si no, la abre.
+     use: usa algo del acceso rápido (rasgo, poción) en tu hoja y lo cuenta al grupo. note: una acción sin dados. */
+  function quick(o){
+    var r = room(); if (!r) return;
+    open({key:o.key, actor:o.actor, target:o.target, stay:true});
+    if (!comp) return;
+    var d = comp.def || {}, needs = d.area || comp.atkOn || comp.saveOn || comp.dmg || comp.heal;
+    if (needs && window.Mapas && Mapas.aim) aimNow(); else goCombat();
+  }
+  function use(key, label){
+    var r = room(), msg = window.Diario && Diario.quickUse ? Diario.quickUse(key) : '';
+    if (r && msg) Sala.send({t:'act.post', act:{title:label || 'Usa algo', text:String(msg).slice(0, 480), targets:[]}});
+  }
+  function note(title, text){ if (room()) Sala.send({t:'act.post', act:{title:title, text:text || '', targets:[]}}); }
   function srcLine(a){ var p = []; if (a.atk) p.push('1d20 ' + sgn(a.atk.bonus)); if (a.save) p.push(ABS[a.save.ab] + ' CD ' + a.save.dc); if (a.dmg && a.dmg.length) p.push(a.dmg.map(function(d){ return d.dice + (d.type ? ' ' + d.type : ''); }).join(' + ')); if (a.heal) p.push('cura'); if (a.lv) p.push('nivel ' + a.lv); else if (a.lv === 0) p.push('truco'); return p.join(' · ') || 'sin tirada'; }
   function post(){
     var r = room(); if (!comp || !r) return;
@@ -346,5 +361,5 @@ var Acciones = (function(){
   document.addEventListener('input', function(ev){ var t = ev.target; if (comp && t.dataset && t.dataset.actman) comp.man[t.dataset.actman] = t.value.replace(/[^0-9]/g, ''); if (comp && t.dataset && t.dataset.actf && t.type !== 'checkbox' && t.tagName !== 'SELECT') comp[t.dataset.actf] = t.value; });
   document.addEventListener('submit', function(ev){ var f = ev.target; if (!f.dataset || f.dataset.form !== 'actpost') return; ev.preventDefault(); post(); });
 
-  return {render:render, open:open, _cards:function(){ return cards; }, _comp:function(){ return comp; }};
+  return {render:render, open:open, quick:quick, use:use, note:note, sources:function(actor){ var c0 = comp; comp = {actor:actor}; var s0 = sources(room()); comp = c0; return s0; }, _cards:function(){ return cards; }, _comp:function(){ return comp; }};
 })();

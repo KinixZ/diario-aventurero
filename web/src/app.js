@@ -518,6 +518,19 @@
     if (cost && r.econ[cost] !== undefined) r.econ[cost] = true;
     save(); render(false);
     if (window.Sala) Sala.toast(msg);
+    return msg;
+  }
+  /* El acceso rápido para el abanico del mapa: rasgos con usos, habilidades, pociones y consumibles (con lo que queda) */
+  function quickList(){
+    var C = cur(); if (!C || !D || !D.ok) return []; var r = rt(C), out = [], seen = {};
+    var add = function(k){ if (seen[k]) return; seen[k] = 1; var t = k.slice(0, k.indexOf(':')), v = k.slice(k.indexOf(':') + 1);
+      if (t === 'f' || t === 'hb') { var f = D.features.filter(function(x){ return t === 'hb' ? x.hb && x.hb.id === v : !x.hb && x.name === v; })[0]; if (!f) return; var x = featRes(f), left = x && x.max ? x.max - (r.res[x.key] || 0) : null; out.push({key:k, kind:'f', label:f.name, sub:(left != null ? left + ' de ' + x.max : '') + (featCost(f) ? (left != null ? ' · ' : '') + ({a:'acción', b:'adicional', r:'reacción'}[featCost(f)] || '') : ''), cost:featCost(f), left:left}); }
+      else if (t === 'it') { var it = itemById(v); if (!it) return; out.push({key:k, kind:'it', label:it.n + (it.q > 1 ? ' ×' + it.q : ''), sub:isPotion(it) ? 'adicional' : 'acción', cost:itemCost(it), icon:it.ic || 'i-flask'}); }
+      else if (t === 'sp') { var e = R.findSpell(v); if (e && !e.level) out.push({key:k, kind:'sp', label:e.name, sub:'truco', cost:R.spellCost(e)}); } };
+    quickKeys(r).forEach(add);
+    D.features.forEach(function(f){ if (!f.hb && featCost(f) && featRes(f)) add('f:' + f.name); });
+    items().forEach(function(it){ if (!it.eq && (it.use || isPotion(it))) add('it:' + it.id); });
+    return out;
   }
   document.addEventListener('toggle', function(ev){
     var d = ev.target; if (!d.matches || !d.open) return;
@@ -1249,7 +1262,10 @@
     /* Lanzar desde la escena de combate: gasta el espacio (o el del pacto), marca la acción y la concentración */
     cast:function(ref, lv){ quickUse('sp:' + ref, lv); },
     /* Combate táctico: el cansancio resta 2 a las tiradas d20; tus estados; tirar la salvación contra la muerte */
-    exhPen:function(){ var C = cur(); return C ? -2 * (rt(C).exh || 0) : 0; }, conds:function(){ var C = cur(); return C ? (rt(C).conds || []).slice() : []; }, rollDeath:rollDeath};
+    exhPen:function(){ var C = cur(); return C ? -2 * (rt(C).exh || 0) : 0; }, conds:function(){ var C = cur(); return C ? (rt(C).conds || []).slice() : []; }, rollDeath:rollDeath,
+    /* El jugador en el mapa: acceso rápido, usar algo, espacios que quedan y repintar todo (la hoja abierta en el mapa) */
+    quickList:quickList, quickUse:function(k, lv){ return quickUse(k, lv); }, renderAll:function(){ render(false); renderGrim(); },
+    slotsLeft:function(){ var C = cur(); if (!C || !D || !D.ok) return []; var r = rt(C); return D.slots.map(function(n, i){ return {lv:i + 1, max:n, left:n - (r.slotsUsed[i] || 0)}; }).filter(function(x){ return x.max > 0; }).concat(D.pact ? [{lv:D.pact.level, max:D.pact.count, left:D.pact.count - (r.pactUsed || 0), pact:true}] : []); }};
 
   /* ==================== ACCIONES PARA EL COMBATE COMPARTIDO ====================
      Lo que la escena de combate (acciones.js) ofrece al jugador: sus armas con su ataque y daño, y sus conjuros con

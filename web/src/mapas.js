@@ -573,6 +573,7 @@ var Mapas = (function(){
   function dmId(){ var r = room(); var d = r && r.members.filter(function(m){ return m.role === 'dm'; })[0]; return d ? d.id : null; }
   function who(id){ var r = room(); var m = r && r.members.filter(function(x){ return x.id === id; })[0]; return m ? (m.role === 'dm' ? 'el DM' : m.char ? m.char.name : m.name) : ''; }
   function render(){
+    if (window.VTT) { VTT.close(); VTT.restore(); }
     var box = document.getElementById('mesaMaps'); if (!box) return;
     if (cur) { if (!$('#mapCv', box)) editor(box); else { toolbar(); fit(); paint(); } return; }
     var r = room(), ix = index(), inRoom = r ? (r.maps || []) : [], ids = {}, dm = isDm(), did = dmId();
@@ -629,6 +630,7 @@ var Mapas = (function(){
       + '<div class="map-zoom"><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="1" aria-label="Acercar"><svg class="ic"><use href="#i-plus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="-1" aria-label="Alejar"><svg class="ic"><use href="#i-minus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapfit" aria-label="Encuadrar el mapa" title="Encuadrar"><svg class="ic"><use href="#i-fit"/></svg></button></div>'
       + '<div class="map-pop" id="mapPop" hidden></div><div class="vtt-hud" id="vttHud"></div><div class="map-txt" id="mapTxt" hidden></div><div class="map-tok" id="mapTok" hidden></div><div class="map-selbar" id="mapSel" hidden></div><div class="map-ask" id="mapAsk" hidden></div></div></div>';
     dropGL(); canvas = $('#mapCv', box); bind(); if (window.Gfx && Gfx.wantGL()) startGL(canvas); toolbar(); fit();
+    if (window.VTT) VTT.attach($('#mapWrap', box));
     if (window.Efectos) Efectos.attach($('#mapFx', box), {map:function(){ return cur && maps[cur]; }, view:V, visible:function(){ return !!cur && visible(); }, seen:fxSeen, aim:aimView}); frame(maps[cur]); var mt = !master(maps[cur]) && myTok(maps[cur]); if (mt) focus(maps[cur], mt); paint(); tokPanel(); badge(); askPaint();
     var r0 = room(); if (r0 && r0.split && isDm() && shared(cur) && r0.fight !== cur) Sala.send({t:'fight.focus', map:cur}); // con el combate separado, el DM ve el de este mapa
   }
@@ -1673,7 +1675,12 @@ var Mapas = (function(){
           if (limited(mp, d.tok)) { var wk = Tactica.walk(mp, d.tok, nx, ny, {fly:(d.tok.z || 0) > 0}), L = mvLeft(mp, d.tok); if (L && wk.ok && wk.cost > L.left + 1e-6) { Sala.toast(L.left > 0 ? 'Te quedan ' + mtr(L.left) + ' m de movimiento (ahí son ' + mtr(wk.cost) + ' m).' : 'Ya usaste todo tu movimiento en esta ronda.'); if (window.Sfx) Sfx.play('locked'); selTok = d.tok.id; tokPanel(); paint(); return; } if (wk.ok && wk.cells) rt = {ok:true, cells:wk.cells}; }
           tokMove(mp, d.tok, nx, ny, rt.cells); selTok = d.tok.id;
         }
-        else selTok = selTok === d.tok.id ? null : d.tok.id;
+        else {
+          // tu ficha (o, para el DM, un enemigo en combate): el abanico de acciones; su panel queda en «Ficha»
+          var tv = V(), ts = d.tok.s || 1, tk = d.tok, lp = local(ev), far = Math.hypot(lp[0] - d.px, lp[1] - d.py) > 8;
+          if (!far && window.VTT && shared(mp.id) && VTT.tap(mp, tk, tv.x + (tk.x + ts / 2) * tv.s, tv.y + (tk.y + ts / 2) * tv.s - (tk.z ? liftOf(tk, tv.s) : 0), {panel:function(){ selTok = tk.id; tokPanel(); paint(); }})) { selTok = null; tokPanel(); paint(); return; }
+          selTok = selTok === d.tok.id ? null : d.tok.id;
+        }
         tokPanel(); paint(); return;
       }
       if (fogDrag) { var f = fogDrag; fogDrag = null; if (!mp.fog || !mp.fog.on) { fogDo(mp, {t:'fog.on', value:true}); } fogDo(mp, {t:'fog.rect', rect:[f.a[0], f.a[1], f.b[0], f.b[1]], value:tool.fogV ? 1 : 0}); paint(); return; }
