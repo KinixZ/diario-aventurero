@@ -228,7 +228,25 @@ var Tactica = (function(){
   function incapacitated(conds){ return INCAP.some(function(k){ return has(conds, k); }); }
   function speed0(conds){ return SPEED0.some(function(k){ return has(conds, k); }); }
 
-  return {M:M, dist:dist, distPt:distPt, meters:meters, center:center, area:area, inShape:inShape, cellSet:cellSet, touches:touches, inArea:inArea, cover:cover, coverName:coverName,
+  /* Zonas que oscurecen del todo (Nube de niebla, Oscuridad, Nube apestosa…): su borde tapa la vista como una pared,
+     así no se ve hacia adentro ni hacia afuera; las paredes de verdad no cambian */
+  var OBS = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+  function obscurers(mp){
+    var zs = (mp.fx || []).filter(function(z){ return z.obscure; }); if (!zs.length) return null;
+    var key = zs.map(function(z){ var t = z.tok ? (mp.tokens || []).filter(function(x){ return x.id === z.tok; })[0] : null; return z.id + ':' + JSON.stringify(z.sh || null) + (t ? t.x + ',' + t.y + ',' + (t.s || 1) + ',' + z.r : ''); }).join('|');
+    var c = OBS && OBS.get(mp); if (c && c.key === key) return c;
+    // casillas sin cortar por paredes (la nube llena su forma) y los lados que dan afuera, juntando los tramos seguidos
+    var set = {}, cols = mp.cols, walls = [];
+    zs.forEach(function(z){ var sh = zoneShape(mp, z); if (!sh) return; var b = bounds(sh); for (var y = Math.max(0, Math.floor(b[1])); y <= Math.min(mp.rows - 1, Math.ceil(b[3])); y++) for (var x = Math.max(0, Math.floor(b[0])); x <= Math.min(cols - 1, Math.ceil(b[2])); x++) if (inShape(sh, x + 0.5, y + 0.5)) set[y * cols + x] = 1; });
+    var on = function(x, y){ return x >= 0 && y >= 0 && x < cols && y < mp.rows && !!set[y * cols + x]; };
+    for (var y = 0; y <= mp.rows; y++) { var run = -1; for (var x = 0; x <= cols; x++) { var edge = x < cols && on(x, y) !== on(x, y - 1); if (edge && run < 0) run = x; if (!edge && run >= 0) { walls.push({a:[run, y], b:[x, y], t:'wall'}); run = -1; } } }
+    for (var x2 = 0; x2 <= cols; x2++) { var run2 = -1; for (var y2 = 0; y2 <= mp.rows; y2++) { var edge2 = y2 < mp.rows && on(x2, y2) !== on(x2 - 1, y2); if (edge2 && run2 < 0) run2 = y2; if (!edge2 && run2 >= 0) { walls.push({a:[x2, run2], b:[x2, y2], t:'wall'}); run2 = -1; } } }
+    c = {key:key, walls:walls, set:set}; if (OBS) OBS.set(mp, c);
+    return c;
+  }
+  if (V && V.setExtra) V.setExtra(obscurers);
+
+  return {M:M, obscurers:obscurers, dist:dist, distPt:distPt, meters:meters, center:center, area:area, inShape:inShape, cellSet:cellSet, touches:touches, inArea:inArea, cover:cover, coverName:coverName,
     flanks:flanks, flanked:flanked, rough:rough, walk:walk, provokes:provokes, line:line, zoneShape:zoneShape, zoneCells:zoneCells, attackMods:attackMods, saveMods:saveMods,
     incapacitated:incapacitated, speed0:speed0, INCAP:INCAP, SPEED0:SPEED0, CONE:CONE};
 })();

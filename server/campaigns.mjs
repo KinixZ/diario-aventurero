@@ -87,6 +87,9 @@ export function cleanChar(c = {}) {
     exh: int(c.exh, 0, 6, 0),
     ds: c.ds && typeof c.ds === 'object' ? { s: int(c.ds.s, 0, 3, 0), f: int(c.ds.f, 0, 3, 0), stable: !!c.ds.stable, dead: !!c.ds.dead } : null,
     reach: int(c.reach, 1, 6, 1),
+    // identidad de clase (color) y estados de clase activos (Furia, Forma salvaje…) para marcar la ficha en el mapa
+    idc: COLOR_RE.test(c.idc || '') ? c.idc : null,
+    on: Array.isArray(c.on) ? c.on.filter((x) => /^[a-z]{2,12}$/.test(x)).slice(0, 6) : [],
   };
 }
 const IMG_ID_RE = /^[\w-]{1,30}$/;

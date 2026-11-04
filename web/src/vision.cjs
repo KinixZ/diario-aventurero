@@ -229,10 +229,15 @@ var Vision = (function(){
 
   /* ---------- Cachés por mapa (no se guardan con el mapa) ---------- */
   var CACHE = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+  /* Lo que tapa la vista sin ser pared (zonas de conjuro que oscurecen: Nube de niebla, Oscuridad): lo pone tactica.cjs */
+  var extra = null;
+  function setExtra(fn){ extra = fn; }
+  function extraOf(mp){ return extra ? extra(mp) : null; }
+  function extraKey(mp){ var x = extraOf(mp); return x ? x.key : ''; }
   function entry(mp, mode){
     var c = CACHE && CACHE.get(mp); if (!c) { c = {}; if (CACHE) CACHE.set(mp, c); }
-    var e = c[mode], rev = mp.wrev || 0, walls = mp.walls || [];
-    if (!e || e.rev !== rev || e.walls !== walls || e.n !== walls.length || e.cols !== mp.cols || e.rows !== mp.rows) e = c[mode] = {rev:rev, walls:walls, n:walls.length, cols:mp.cols, rows:mp.rows, ix:index(walls, mode, mp.cols, mp.rows), g:null};
+    var e = c[mode], rev = mp.wrev || 0, walls = mp.walls || [], add = mode === 'sight' ? extraOf(mp) : null, k2 = add ? add.key : '';
+    if (!e || e.rev !== rev || e.walls !== walls || e.n !== walls.length || e.cols !== mp.cols || e.rows !== mp.rows || e.k2 !== k2) e = c[mode] = {rev:rev, walls:walls, n:walls.length, cols:mp.cols, rows:mp.rows, k2:k2, ix:index(add ? walls.concat(add.walls) : walls, mode, mp.cols, mp.rows), g:null};
     return e;
   }
   function sightOf(mp){ return entry(mp, 'sight').ix; }
@@ -329,6 +334,6 @@ var Vision = (function(){
 
   return {TYPES:TYPES, KINDS:KINDS, blocks:blocks, forPlayer:forPlayer, index:index, cast:cast, crosses:crosses, poly:poly, inPoly:inPoly, inAny:inAny, bbox:bbox, cells:cells, explore:explore,
     moveGrid:moveGrid, stepOk:stepOk, path:path, smooth:smooth, sightOf:sightOf, moveOf:moveOf, gridOf:gridOf, route:route, isViewer:isViewer, center:center, trail:trail, segDist:segDist,
-    LIGHTS:LIGHTS, PRESETS:PRESETS, preset:preset, ambient:ambient, effRange:effRange, lightList:lightList, illum:illum, litMap:litMap, levelAt:levelAt, sensesOf:sensesOf, reachOf:reachOf, exploreParty:exploreParty};
+    setExtra:setExtra, extraKey:extraKey, LIGHTS:LIGHTS, PRESETS:PRESETS, preset:preset, ambient:ambient, effRange:effRange, lightList:lightList, illum:illum, litMap:litMap, levelAt:levelAt, sensesOf:sensesOf, reachOf:reachOf, exploreParty:exploreParty};
 })();
 if (typeof module === 'object' && module && module.exports) module.exports = Vision;

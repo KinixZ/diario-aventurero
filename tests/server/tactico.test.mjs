@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 import assert from 'node:assert/strict';
 import { mesa, pc } from './helpers.mjs';
 import { Tactica } from '../../server/tactico.mjs';
@@ -201,4 +203,14 @@ test('salvación contra la muerte en el servidor y dados físicos', async () => 
   R.act(c, a.id, { t: 'act.post', act: { title: 'Espada', atk: { bonus: 30, autoCrit: true }, dmg: [{ dice: '1d8', type: 'cortante' }], targets: [g1.id] } });
   const k2 = c.acts.at(-1);
   if (!k2.atk.fumble) { assert.ok(k2.atk.crit); assert.equal(k2.dmg[0].dice, '2d8'); }
+});
+
+test('zonas que oscurecen (Nube de niebla): tapan la vista como paredes, hacia adentro y hacia afuera', () => {
+  const Vision = require('../../web/src/vision.cjs');
+  const mp = { cols: 20, rows: 12, wrev: 0, walls: [], tokens: [], fx: [{ id: 'f1', name: 'Nube de niebla', sh: { t: 'sphere', x: 10, y: 6, r: 2 }, obscure: true, on: [] }] };
+  const ix = Vision.sightOf(mp);
+  assert.ok(Vision.crosses(ix, 2.5, 6.5, 17.5, 6.5), 'no se ve a través de la niebla');
+  assert.ok(!Vision.crosses(ix, 2.5, 1.5, 17.5, 1.5), 'por arriba de la nube sí');
+  mp.fx = [];
+  assert.ok(!Vision.crosses(Vision.sightOf(mp), 2.5, 6.5, 17.5, 6.5), 'al quitar la nube se vuelve a ver');
 });
