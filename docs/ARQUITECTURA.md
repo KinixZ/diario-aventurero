@@ -6,7 +6,7 @@ El diario es una sola página sin framework. `tools/build-web.mjs` concatena est
 
 El motor del mapa va aparte: `web/gl/mapa-gl.js` (PixiJS / WebGL) se empaqueta en `web/dist/mapa-gl.js` y se baja solo al abrir un mapa (o en segundo plano al entrar a una campaña). Sin WebGL, en el artefacto o si falla, el mapa usa Canvas 2D con el mismo dibujo. El servidor manda los archivos de texto comprimidos con brotli o gzip.
 
-El estilo va en `web/styles/*.css` por orden de nombre. Los de la `z` son el sistema visual: materiales por estilo de color (`z0`), componentes (`z1`), hoja (`z2`), combate (`z3`), animaciones (`z4`), ajustes (`z5`), retratos (`z6`), editor del mapa (`z7`), paredes y visión (`z8`), luz, hora y clima (`z9`), pisos y zonas (`za`) y estados del mapa y encuentros (`zb`). Los ornamentos SVG (`a0-ornamentos.css`) se generan con `python3 tools/ornamentos.py` y se usan como máscaras, así toman el oro de cada estilo. Las fuentes viajan con la app (`@fontsource`).
+El estilo va en `web/styles/*.css` por orden de nombre. Los de la `z` son el sistema visual: materiales por estilo de color (`z0`), componentes (`z1`), hoja (`z2`), combate (`z3`), animaciones (`z4`), ajustes (`z5`), retratos (`z6`), editor del mapa (`z7`), paredes y visión (`z8`), luz, hora y clima (`z9`), pisos y zonas (`za`), estados del mapa y encuentros (`zb`) y la escena de combate (`zc`). Los ornamentos SVG (`a0-ornamentos.css`) se generan con `python3 tools/ornamentos.py` y se usan como máscaras, así toman el oro de cada estilo. Las fuentes viajan con la app (`@fontsource`).
 
 Los scripts se cargan en este orden y cada uno expone un objeto global:
 
@@ -33,6 +33,7 @@ Los scripts se cargan en este orden y cada uno expone un objeto global:
 | `clima.js` | `Clima` | `Fx` | Lluvia, tormenta, nieve, niebla y viento en un lienzo encima del mapa (`#mapWx`), a ~30 cuadros por segundo y solo mientras se ve; quieto con las animaciones apagadas. |
 | `mapas.js` | `Mapas` | `Sala`, `Gfx`, `Vision`, `Clima` | Mesa virtual: datos, permisos, herramientas y gestos; zoom, cuadrícula, capas, trazos, fondo, fichas, paredes y puertas, niebla con visión y luz, hora y clima, zonas (escaleras a otro mapa, trampas, textos, emboscadas) y viajes entre mapas, regla (en recto o rodeando) y señales; estados del mapa (Preparación, Exploración, Combate con despliegue, congelar, cada quien en su turno) con su HUD; herramientas Dibujar y Escena (niebla, luz y clima) encima del juego; el encuentro abierto para acomodar enemigos y zonas de despliegue (`editEnc`). `paint()` solo agenda un cuadro: con WebGL arma una escena (`scene()`) para `MapaGL`, si no dibuja en Canvas 2D. Copia en IndexedDB `map:<id>` e índice `localStorage['diario-mapas']`. |
 | `encuentros.js` | `Encuentros` | `Sala`, `Mapas`, `Bestiario`, `Retratos` | Pestaña Encuentros del DM: lista (preparados, en curso y los de antes guardados en el aparato, que pasa a la campaña), ficha (nombre, mapa, notas, enemigos del Manual o a mano con su oleada, oleadas con su ronda), usar, duplicar, guardar el combate de ahora. Guarda cada cambio al rato (`enc.save`); el completo se pide con `enc.get`. |
+| `acciones.js` | `Acciones` | `Sala`, `Diario`, `Bestiario`, `Retratos` | Escena de combate (arriba de la sala, `#actBox`): cinta de iniciativa con retratos y el turno en grande; compositor de acciones (armas y conjuros de la hoja con `Diario.actions()`, acciones del Manual con `Bestiario.actionsOf()`, o libre; objetivos; ventaja; espacio del conjuro) y las tarjetas de acción con impacto, salvación y aplicar el daño. |
 | `gl/mapa-gl.js` | `MapaGL` | PixiJS | Solo dibuja: recibe la escena ya resuelta y conserva entre cuadros lo que no cambió (papel, cuadrícula, un objeto por trazo, una ficha por id, las paredes, la niebla como textura de una casilla por píxel). Con visión, sube como textura el velo que compuso `mapas.js` (solo cuando cambia), suma el brillo de las luces (blend `add`, parpadea) y tiñe según la hora (blend `multiply`). |
 
 ## El personaje
@@ -80,6 +81,12 @@ Las elecciones de una clase de multiclase llevan sufijo `@clase` (`sub@warlock`,
 - Las imágenes (fondos de mapa, retratos, chat) se suben por HTTP y se guardan en `campaign_images`; los mensajes solo llevan su id.
 
 El detalle de los mensajes está en [PROTOCOLO.md](PROTOCOLO.md).
+
+## La escena de combate
+
+El combate se puede llevar sin mapa (teatro de la mente). Cada acción es una tarjeta (`c.acts`, las últimas 60) con quién la hace (un enemigo, el DM o un jugador y sus compañeros), qué hace, el ataque (1d20 + bonificador, con ventaja o desventaja; crítico desde 20 o lo que diga) o la salvación (característica, CD, mitad si la supera) y los dados de daño o curación, que tira el servidor (con crítico, el doble de dados). Contra cada objetivo dice si impacta (CA del enemigo o de la hoja del personaje). El daño a un enemigo lo aplica el DM o quien lo hizo; a un personaje, su jugador (le llega `applied` y su hoja lo descuenta). Cada objetivo tira su salvación (el jugador con el modificador de su hoja; el DM con el de la ficha del monstruo). Cada combate lleva un número (`fightN`) y la escena muestra las tarjetas del combate en curso. Lo que ve cada jugador lo recorta el servidor (`cardFor`): ni la CA de los enemigos, ni enemigos ocultos (como autores o como objetivos), y con la vida de los enemigos oculta (nada o cómo se ven) tampoco el daño que reciben, salvo quien lo hizo; el registro guarda una versión para los jugadores (`log[].p`).
+
+De la hoja salen las armas (`D.attacks`, con su daño extra) y los conjuros con tirada (`spellAttack`, `savingThrow`, `{@damage}` o curación; los trucos crecen con `scalingLevelDice` y con un espacio mayor suma lo de `{@scaledamage}`/`{@scaledice}`; lanzarlo gasta el espacio con `quickUse`). Del Manual (el bestiario del DM) salen las acciones de cada monstruo con `{@hit}`, `{@dc}` y `{@actSave}`, sus dados y tipos.
 
 ## La mesa
 

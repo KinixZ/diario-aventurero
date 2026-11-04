@@ -202,9 +202,31 @@ var Bestiario = (function(){
   function infoOf(ref){ var m = find(ref); if (!m) return null; var sp = m.speed || {}; return {type:(TYPE_ES[m._t] || m._t || ''), cr:crText(m.cr), ac:String(acOf(m)), hp:String(hpOf(m)) + (m.hp && m.hp.formula ? ' (' + m.hp.formula + ')' : ''), size:SIZE_ES[(m.size || [])[0]] || '', speed:[['walk',''],['fly','vuelo '],['swim','nado '],['climb','trepar ']].filter(function(x){ return sp[x[0]]; }).map(function(x){ return x[1] + ft(sp[x[0]]); }).join(', ')}; }
   function statOf(ref){ var m = find(ref); if (!m) return null; var o = {}; Object.keys(m).forEach(function(k){ if (k.charAt(0) !== '_') o[k] = m[k]; }); return o; }
   function nameOf(ref){ var m = find(ref); return m ? Render5e.Tname(m.name) : String(ref || '').split('|')[0]; }
+  /* Las acciones de su ficha, listas para la escena de combate: ataque (+N), salvación (CD y característica, mitad o no)
+     y los dados de daño con su tipo. Las que no tiran nada (Ataque múltiple) van con su texto. */
+  var SAVE_EN = {strength:'str', dexterity:'dex', constitution:'con', intelligence:'int', wisdom:'wis', charisma:'cha'};
+  function plain(entries){ return (entries || []).map(function(e){ return typeof e === 'string' ? e : e && e.entries ? plain(e.entries) : e && e.items ? plain(e.items) : ''; }).join(' ').replace(/\{@h\}/g, 'Impacto: ').replace(/\{@(?:atk|atkr) [^}]*\}/g, '').replace(/\{@hit (-?\d+)\}/g, function(_, n){ return sgn(+n); }).replace(/\{@actSave (\w+)\}/g, function(_, k){ return ABN[k] || k; }).replace(/\{@\w+ ([^|}]*)[^}]*\}/g, '$1').replace(/\{@\w+\}/g, '').replace(/\s+/g, ' ').trim(); }
+  function actionsOf(ref){
+    var m = find(ref); if (!m) return [];
+    var out = [];
+    [['action','Acciones'],['bonus','Adicionales'],['reaction','Reacciones'],['legendary','Legendarias']].forEach(function(g){
+      (m[g[0]] || []).forEach(function(a){
+        if (!a || !a.name) return;
+        var s = JSON.stringify(a.entries || []), hit = /\{@hit (-?\d+)\}/.exec(s), dc = /\{@dc (\d+)\}/.exec(s), sv = /\{@actSave (\w+)\}/.exec(s) || /(strength|dexterity|constitution|intelligence|wisdom|charisma) saving throw/i.exec(s);
+        var dmg = [], re = /\{@damage ([^}|]+)\}\)?\s*([A-Za-z]+)?/g, mm;
+        while ((mm = re.exec(s)) && dmg.length < 4) dmg.push({dice:mm[1].replace(/\s+/g, ''), type:mm[2] && DMG_ES[mm[2].toLowerCase()] || ''});
+        out.push({key:'m:' + g[0] + ':' + a.name, group:g[1], title:strip(a.name), atk:hit ? {bonus:+hit[1]} : null,
+          save:dc ? {ab:sv ? SAVE_EN[sv[1].toLowerCase()] || sv[1].toLowerCase() : 'dex', dc:+dc[1], half:/half as much damage|half damage|Success:[^.]*half/i.test(s)} : null,
+          dmg:dmg, text:plain(a.entries).slice(0, 400)});
+      });
+    });
+    return out;
+  }
+  /* Su modificador de salvación (para tirarla desde la escena de combate) */
+  function saveOf(ref, ab){ var m = find(ref); if (!m) return 0; var v = m.save && m.save[ab]; return v != null ? parseInt(String(v).replace('−', '-'), 10) || 0 : mod(m[ab]); }
   /* Lo que necesita un enemigo de un encuentro: CA, PG, iniciativa, tipo y cuántas casillas ocupa */
   function npcOf(ref){ var m = find(ref); if (!m) return null; var sz = (m.size || [])[0]; return {name:Render5e.Tname(m.name), ac:acOf(m), hp:hpOf(m), initMod:initOf(m), formula:m.hp && m.hp.formula || null, ref:m.name + '|' + m.source, binfo:{type:TYPE_ES[m._t] || m._t || '', size:SIZE_ES[sz] || ''}, s:{L:2, H:3, G:4}[sz] || 1, cr:crText(m.cr)}; }
 
   function count(){ return list ? list.filter(function(m){ return !m.rep; }).length : 0; }
-  return {open:open, count:count, settings:settings, ready:ready, has:has, find:find, initOf:initOf, _set:setData, statHtml:statHtml, search:search, infoOf:infoOf, statOf:statOf, nameOf:nameOf, npcOf:npcOf};
+  return {open:open, count:count, settings:settings, ready:ready, has:has, find:find, initOf:initOf, _set:setData, statHtml:statHtml, search:search, infoOf:infoOf, statOf:statOf, nameOf:nameOf, npcOf:npcOf, actionsOf:actionsOf, saveOf:saveOf};
 })();

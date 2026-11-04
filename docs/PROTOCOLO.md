@@ -55,6 +55,10 @@ Fuera de sesión todo sigue disponible: combate, chat, pizarra, tablero, mapas y
 | `turn` | `dir`: `start` \| `next` \| `prev` | DM / quien tiene el turno | Avanza el turno; al dar la vuelta sube la ronda. |
 | `end` | `all?`, `map?` | DM | Termina el combate y borra la iniciativa (con el combate separado, solo el del mapa, salvo `all`). Los mapas en combate vuelven a exploración, sin zonas de despliegue ni oleadas pendientes. |
 | `apply` | `targets[]`, `kind`, `amount?`, `cond?`, `note?` | jugadores; el DM solo sobre enemigos | `kind`: `damage`, `heal`, `temp`, `cond+`, `cond-`. |
+| `act.post` | `act: {actor? (DM: id de un enemigo; si no, narrador), comp? (jugador: nombre de su compañero), title, text?, atk?: {bonus, k?: adv\|dis, critOn?}, save?: {ab, dc, half?}, dmg?: [{dice, type?}], heal?, targets: [ids]}` | todos | Publica una acción: el servidor tira el ataque (1d20, con ventaja o desventaja) y los dados (`2d6 + 3`, `1d8 + 1d6`; con crítico, el doble de dados; hasta 80 dados) y dice si impacta a cada objetivo contra su CA (un 20 siempre, un 1 nunca). Llega `act` a cada quien. |
+| `act.apply` | `id`, `tid`, `how`: `full` \| `half` \| `none` | a un enemigo: el DM o quien publicó; a un personaje: su jugador | Aplica el daño o la curación de la tarjeta a ese objetivo (una vez). Al jugador le llega `applied` para su hoja. |
+| `act.save` | `id`, `tid`, `mod`, `k?` | el objetivo (el DM por los enemigos) | Tira la salvación de ese objetivo: 1d20 + `mod` contra la CD (un 20 la supera, un 1 la falla). |
+| `act.del` | `id` | quien la publicó / DM | Quita una tarjeta. |
 
 Cuando un monstruo **de los manuales** (con `ref`) entra visible al combate (o el DM lo revela) y el registro automático está activo, se anota solo en el bestiario del grupo como encuentro (`manual: true`), sin el número del nombre ("Goblin 2" → "Goblin"). Los jugadores reciben su `ref` para abrir la entrada en su propio Manual. Los enemigos hechos a mano no se anotan solos.
 
@@ -155,7 +159,7 @@ Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `t
 | `state` | `room` | Después de cada cambio, a todos. Cada quien recibe su propia vista. |
 | `live` | `live`, `n`, `title` | El DM empezó la sesión. |
 | `ended` | `snapshot` | Terminó la sesión: título, horas, chat visible, tablero, hojas de la pizarra y participantes. |
-| `mesa.init` | chat, trazos, mapas | Al entrar. |
+| `mesa.init` | chat, trazos, `acts` (las últimas tarjetas que puedes ver), `fightN` | Al entrar. |
 | `chat`, `draw`, `draw.undo`, `draw.clear` | | Eventos sueltos de la mesa. |
 | `map`, `map.meta`, `map.add`, `map.rm`, `map.bg`, `map.fog`, `map.vis`, `map.light`, `tok`, `tok.del`, `scene`, `ping` | | Cambios de mapas, solo a quien puede verlos. |
 | `walls` | `id`, `put`, `del`, `wrev` | | Paredes nuevas o cambiadas (`put`) y quitadas (`del`); a los jugadores, con las secretas disfrazadas. |
@@ -166,13 +170,14 @@ Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `t
 | `combat` | `map`, `name`, `enc?` | | Hay combate en ese mapa (o sin mapa): quien está ahí se acomoda y tira iniciativa; quien no, se puede unir (`enc.join`). |
 | `wave` | `map`, `n`, `name` | | Llegó una oleada de refuerzos (solo si alguno se ve). |
 | `enc` | `enc` | | Un encuentro completo (al DM). |
+| `act` / `act.del` | `card` / `id` | | Una tarjeta de acción nueva o cambiada (impacto, salvaciones, lo aplicado) o quitada. Cada quien la recibe recortada: sin la CA de los enemigos ni enemigos ocultos; con su vida oculta, sin el daño que reciben (salvo quien lo hizo). |
 | `beast`, `beast.saved` | | Ficha de una criatura; confirmación al DM. |
 | `applied` | `kind`, `amount`, `cond`, `note`, `from` | Alguien te aplicó algo: tu hoja lo aplica y responde con `char`. |
 | `yourturn` | `round` | Empieza tu turno. |
 | `kicked` | — | El DM te quitó de la campaña. |
 | `error` | `code`, `msg` | `msg` ya viene en español. |
 
-`room` incluye `name`, `live`, `session {n, title, started, ended}`, `members` (con `online`, `seen` y `at`, el mapa donde está su ficha), `npcs` (con `at`), `order`, `turnId`, `round` (con el combate separado, los del combate de tu mapa; además `split`, `fight` y, para el DM, `fights: [{map, name, round, turnId, n}]`), `maps` (resumen, con `state` y `frozen`), `scene`, para el DM `encs` (resumen: `{id, name, map, n, placed, waves, deploy, updated}`) y `runs` (encuentros en curso: `{key, map, enc, name, waves: [{n, name, round, count}]}` con las oleadas que faltan), `beasts` (resumen, sin `stat`), `autoBeasts`, `board` y `log`. Para el DM cada PNJ trae además `ac`, `hp`, `hpMax`, `temp` y `hidden`.
+`room` incluye `name`, `live`, `session {n, title, started, ended}`, `members` (con `online`, `seen` y `at`, el mapa donde está su ficha), `npcs` (con `at`), `order`, `turnId`, `round` (con el combate separado, los del combate de tu mapa; además `split`, `fight` y, para el DM, `fights: [{map, name, round, turnId, n}]`), `fightN` (el número del combate, para agrupar las tarjetas), `maps` (resumen, con `state` y `frozen`), `scene`, para el DM `encs` (resumen: `{id, name, map, n, placed, waves, deploy, updated}`) y `runs` (encuentros en curso: `{key, map, enc, name, waves: [{n, name, round, count}]}` con las oleadas que faltan), `beasts` (resumen, sin `stat`), `autoBeasts`, `board` y `log`. Para el DM cada PNJ trae además `ac`, `hp`, `hpMax`, `temp` y `hidden`.
 
 `char` (resumen del personaje):
 

@@ -35,6 +35,9 @@ const TRIG_KINDS = ['paso', 'trampa', 'texto', 'encuentro', 'despliegue'], TRIGS
 // estados del mapa: preparación (solo el DM lo ve), exploración (se mueven libres) y combate (despliegue y turnos)
 const MAP_STATES = ['prep', 'explore', 'combat'];
 const ENCS_MAX = 40, ENC_NPCS = 40, ENC_DEPLOY = 12, ENC_WAVES = 8;
+// tarjetas de acción del combate (lo que hace cada quien en su turno, con sus dados)
+const ACTS_MAX = 60, SAVE_ABS = ['str', 'dex', 'con', 'int', 'wis', 'cha'], DMG_TYPES = ['ácido', 'contundente', 'cortante', 'perforante', 'fuego', 'frío', 'fuerza', 'relámpago', 'necrótico', 'veneno', 'psíquico', 'radiante', 'trueno'];
+const AB_ES = { str: 'Fuerza', dex: 'Destreza', con: 'Constitución', int: 'Inteligencia', wis: 'Sabiduría', cha: 'Carisma' };
 const LIGHT_TIMES = ['dia', 'amanecer', 'atardecer', 'noche'], LIGHT_AMB = ['auto', 'bright', 'dim', 'dark'], WEATHER = ['despejado', 'lluvia', 'tormenta', 'niebla', 'nieve', 'viento'];
 const BEASTS_MAX = 400, NOTES_MAX = 60, STAT_MAX = 80000;
 export const BEAST_KINDS = ['enemigo', 'pnj', 'criatura'];
@@ -119,7 +122,8 @@ export class Campaigns {
       npcHp: 'state', pcInit: {}, maps: new Map(), scene: null, chat: [], board: [], strokes: [], pages: [], images: new Map(), imgBytes: 0,
       live: false, session: { n: 0, title: '', started: null, ended: null }, beasts: [], autoBeasts: true, amb: null,
       split: false, fights: {}, // combates separados por mapa: {mapa: {cur, round}}
-      encs: [], runs: {} }; // encuentros preparados y los que están en curso (por mapa; '_' el que no tiene mapa)
+      encs: [], runs: {}, // encuentros preparados y los que están en curso (por mapa; '_' el que no tiene mapa)
+      acts: [], fightN: 0 }; // tarjetas de acción (las últimas) y el número del combate en curso
   }
 
   /* El DM crea la campaña: queda guardada de inmediato */
@@ -181,7 +185,11 @@ export class Campaigns {
   online(c) { let n = 0; for (const m of c.members.values()) if (m.conns > 0) n++; return n; }
 
   touch(c) { c.touched = this.now(); c.dirty = true; }
-  log(c, text) { c.log.push({ at: this.now(), text: str(text, 200) }); if (c.log.length > LOG_LEN) c.log.splice(0, c.log.length - LOG_LEN); c.dirty = true; }
+  /* El registro: `ptext` es lo que leen los jugadores cuando es distinto (sin el daño a enemigos con su vida oculta) */
+  log(c, text, ptext) {
+    const e = { at: this.now(), text: str(text, 200) }; if (ptext != null && ptext !== text) e.p = str(ptext, 200);
+    c.log.push(e); if (c.log.length > LOG_LEN) c.log.splice(0, c.log.length - LOG_LEN); c.dirty = true;
+  }
 
   /* ---------- Guardado ---------- */
   async flush(c) { if (!c) return; c.dirty = false; await this.store.save(c.code, this.toDoc(c)); }
@@ -200,7 +208,7 @@ export class Campaigns {
       members: [...c.members.values()].map((m) => ({ id: m.id, token: m.token, role: m.role, name: m.name, init: m.init, char: m.char, seen: m.seen, at: m.at || null })),
       npcs: [...c.npcs.values()], order: c.order, turn: c.turn, round: c.round, log: c.log, chat: c.chat, board: c.board, strokes: c.strokes, pages: c.pages,
       maps: [...c.maps.values()].map((mp) => ({ ...mp, fog: { on: mp.fog.on, cells: mp.fog.cells.toString('base64') } })), scene: c.scene,
-      images: [...c.images.values()], beasts: c.beasts, autoBeasts: c.autoBeasts, amb: c.amb || null, split: c.split, fights: c.fights, encs: c.encs, runs: c.runs };
+      images: [...c.images.values()], beasts: c.beasts, autoBeasts: c.autoBeasts, amb: c.amb || null, split: c.split, fights: c.fights, encs: c.encs, runs: c.runs, acts: c.acts, fightN: c.fightN };
   }
   fromDoc(d) {
     const c = this.blank(str(d.code, 8), d.name, d.dmHash);
@@ -220,6 +228,7 @@ export class Campaigns {
     if (c.split && d.fights && typeof d.fights === 'object') for (const [k, f] of Object.entries(d.fights).slice(0, MAPS_MAX + 1)) c.fights[str(k, 24)] = { cur: f && f.cur ? str(f.cur, 20) : null, round: int(f && f.round, 0, 999, 0) };
     for (const mp of c.maps.values()) { mp.trig = Array.isArray(mp.trig) ? mp.trig : []; mp.state = stateOf(mp); mp.hidden = mp.state === 'prep'; mp.frozen = !!mp.frozen; mp.turnOnly = mp.turnOnly !== false; delete mp.enc; }
     c.encs = (Array.isArray(d.encs) ? d.encs : []).slice(0, ENCS_MAX).map((e) => { const o = cleanEnc(e, c); if (o) o.updated = Number(e.updated) || 0; return o; }).filter(Boolean);
+    c.acts = Array.isArray(d.acts) ? d.acts.slice(-ACTS_MAX) : []; c.fightN = int(d.fightN, 0, 1e6, 0);
     c.runs = {};
     if (d.runs && typeof d.runs === 'object') for (const [k, r] of Object.entries(d.runs).slice(0, MAPS_MAX + 1)) { const run = cleanRun(r, c); if (run && (k === '_' ? !run.map : run.map === k)) c.runs[k] = run; }
     c.dirty = false;
@@ -310,10 +319,10 @@ export class Campaigns {
           // tirada en el servidor: 1d20 (con ventaja o desventaja) + el modificador de la hoja o del enemigo
           const r = d20(msg.roll), mod = target.char ? int(target.char.initMod, -10, 20, 0) : int(target.initMod, -10, 20, 0);
           target.init = Math.max(-10, Math.min(50, r.d + mod));
-          this.log(c, `${who} tiró iniciativa: ${target.init} (${r.text}${mod ? (mod > 0 ? ' + ' : ' − ') + Math.abs(mod) : ''})`);
+          this.log(c, `${who} tiró iniciativa: ${target.init} (${r.text}${mod ? (mod > 0 ? ' + ' : ' − ') + Math.abs(mod) : ''})`, target.hidden ? '' : null);
         } else {
           target.init = msg.value == null || msg.value === '' ? null : int(msg.value, -10, 50, 0);
-          this.log(c, `${who} tiene iniciativa ${target.init ?? '–'}`);
+          this.log(c, `${who} tiene iniciativa ${target.init ?? '–'}`, target.hidden ? '' : null);
         }
         if (target.char) { if (target.init == null) delete c.pcInit[target.char.name]; else c.pcInit[target.char.name] = target.init; }
         this.sortOrder(c);
@@ -349,7 +358,7 @@ export class Campaigns {
           if (!n.hidden && i === 0) this.autoBeast(c, n);
         }
         this.sortOrder(c);
-        this.log(c, `El DM agregó ${count > 1 ? count + ' × ' : ''}${str(msg.name, 40) || 'enemigo'}`);
+        this.log(c, `El DM agregó ${count > 1 ? count + ' × ' : ''}${str(msg.name, 40) || 'enemigo'}`, msg.hidden ? '' : null);
         break;
       }
       case 'npc.del': {
@@ -424,9 +433,9 @@ export class Campaigns {
         if (msg.dir === 'start' || c.turn < 0) { c.turn = 0; c.round = 1; }
         else if (msg.dir === 'prev') { c.turn -= 1; if (c.turn < 0) { c.turn = c.order.length - 1; c.round = Math.max(1, c.round - 1); } }
         else { c.turn += 1; if (c.turn >= c.order.length) { c.turn = 0; c.round += 1; } }
-        if (!r0 && c.round) this.fightStarted(c, null, out);
+        if (!r0 && c.round) { c.fightN++; this.fightStarted(c, null, out); }
         if (c.round > r0) this.wavesDue(c, null, c.round, out);
-        this.log(c, `Ronda ${c.round}: turno de ${this.nameOf(c, c.order[c.turn])}`);
+        this.log(c, `Ronda ${c.round}: turno de ${this.nameOf(c, c.order[c.turn])}`, c.npcs.get(c.order[c.turn])?.hidden ? `Ronda ${c.round}` : null);
         out.push({ to: c.order[c.turn], msg: { t: 'yourturn', round: c.round } });
         break;
       }
@@ -515,7 +524,85 @@ export class Campaigns {
         }
         if (!names.length) throw err('no_target', isDm ? 'Como DM puedes aplicar a los enemigos; los jugadores llevan su propia hoja.' : 'Elige al menos un objetivo.');
         const verb = { damage: `hizo ${amount} de daño a`, heal: `curó ${amount} PG a`, temp: `dio ${amount} PG temporales a`, 'cond+': `aplicó ${COND_ES[cond]} a`, 'cond-': `quitó ${COND_ES[cond]} a` }[kind];
-        this.log(c, `${isDm ? 'El DM' : (me.char && me.char.name) || me.name} ${verb} ${names.join(', ')}${note ? ' (' + note + ')' : ''}`);
+        const pverb = { damage: 'hizo daño a', heal: 'curó a', temp: 'dio PG temporales a' }[kind];
+        const who = `${isDm ? 'El DM' : (me.char && me.char.name) || me.name}`, tail = `${names.join(', ')}${note ? ' (' + note + ')' : ''}`;
+        const toNpc = (Array.isArray(msg.targets) ? msg.targets : []).some((x) => c.npcs.has(x));
+        this.log(c, `${who} ${verb} ${tail}`, pverb && toNpc && npcHidden(c) ? `${who} ${pverb} ${tail}` : null);
+        break;
+      }
+      /* ---------- Tarjetas de acción: quién hace qué, con sus dados tirados aquí ----------
+         El DM publica las de sus enemigos (o libres) y cada jugador las suyas. El ataque se compara con la CA de cada
+         objetivo; el daño lo aplica quien puede: a un enemigo, el DM o quien lo publicó; a un personaje, su jugador
+         (su hoja manda: le llega `applied`). Con salvación, cada objetivo la tira (el DM por los enemigos). */
+      case 'act.post': {
+        const a = msg.act && typeof msg.act === 'object' ? msg.act : {};
+        let actor;
+        if (isDm) { const n = c.npcs.get(str(a.actor, 20)); actor = n ? { id: n.id, name: n.name, kind: 'npc', img: n.img || null, ty: n.binfo ? n.binfo.type : null } : { id: null, name: str(a.name, 40) || 'DM', kind: 'dm' }; }
+        else { const nm = (me.char && me.char.name) || me.name, comp = str(a.comp, 40); actor = { id: me.id, name: comp || nm, kind: 'pc', img: comp ? null : (me.char && (me.char.tok || me.char.img)) || null }; if (comp) actor.of = nm; }
+        const card = { id: 'a' + id(5), at: this.now(), f: c.fightN, round: c.round, by: me.id, actor, title: str(a.title, 60) || 'Acción', text: txt(a.text, 500) };
+        if (a.atk && typeof a.atk === 'object') {
+          const bonus = int(a.atk.bonus, -10, 30, 0), r = d20(a.atk.k), crit = r.d >= int(a.atk.critOn, 15, 20, 20);
+          card.atk = { k: a.atk.k === 'adv' || a.atk.k === 'dis' ? a.atk.k : null, dice: r.dice, nat: r.d, bonus, total: r.d + bonus, crit, fumble: r.d === 1 };
+        }
+        if (a.save && typeof a.save === 'object') card.save = { ab: SAVE_ABS.includes(a.save.ab) ? a.save.ab : 'dex', dc: int(a.save.dc, 1, 40, 10), half: a.save.half !== false };
+        const dm = (Array.isArray(a.dmg) ? a.dmg : []).slice(0, 4).map((d) => { const r = rollDice(d && d.dice, card.atk && card.atk.crit); return r ? { dice: r.expr, type: DMG_TYPES.includes(d.type) ? d.type : '', rolls: r.rolls, total: r.total } : null; }).filter(Boolean);
+        if (dm.length) { card.dmg = dm; card.amt = dm.reduce((s, d) => s + d.total, 0); }
+        if (a.heal) card.heal = true;
+        if (!card.atk && !card.dmg && !card.save && !card.text && !str(a.title, 60)) throw err('empty', 'Escribe qué haces o elige una acción.');
+        // objetivos: enemigos y personajes del combate; con ataque, ¿impacta? (un 20 siempre, un 1 nunca)
+        const seen = new Set();
+        card.targets = (Array.isArray(a.targets) ? a.targets : []).slice(0, 12).map((x) => {
+          const tid = str(x, 20); if (seen.has(tid)) return null; seen.add(tid);
+          const n = c.npcs.get(tid), m = c.members.get(tid);
+          const t = n ? { id: n.id, name: n.name, kind: 'npc', ac: n.ac } : m && m.role !== 'dm' ? { id: m.id, name: (m.char && m.char.name) || m.name, kind: 'pc', ac: m.char ? m.char.ac : null } : null;
+          if (!t) return null;
+          if (card.atk) t.hit = card.atk.crit || (!card.atk.fumble && (t.ac == null || card.atk.total >= t.ac));
+          return t;
+        }).filter(Boolean);
+        c.acts.push(card); if (c.acts.length > ACTS_MAX) c.acts.splice(0, c.acts.length - ACTS_MAX);
+        const tn = card.targets.map((t) => t.name + (card.atk ? (t.hit ? ' (impacta)' : ' (falla)') : '')).join(', ');
+        const line = `${actor.name}: ${card.title}${card.atk ? ` · ataque ${card.atk.total}${card.atk.crit ? ' ¡crítico!' : ''}` : ''}${card.save ? ` · salvación de ${AB_ES[card.save.ab]} CD ${card.save.dc}` : ''}${tn ? ' → ' + tn : ''}`;
+        if (!(actor.kind === 'npc' && c.npcs.get(actor.id).hidden)) this.log(c, line); else this.log(c, line, '');
+        this.sendCard(c, card, out);
+        break;
+      }
+      case 'act.apply': {
+        const card = c.acts.find((x) => x.id === str(msg.id, 20)); if (!card) throw err('no_target', 'Esa acción ya no está.');
+        const t = (card.targets || []).find((x) => x.id === str(msg.tid, 20)); if (!t) throw err('no_target', 'No era objetivo de esa acción.');
+        if (t.res) throw err('done', 'Eso ya se aplicó.');
+        const how = ['full', 'half', 'none'].includes(msg.how) ? msg.how : 'full', full = card.amt || 0;
+        const amount = how === 'none' ? 0 : how === 'half' ? Math.floor(full / 2) : full, kind = card.heal ? 'heal' : 'damage';
+        if (t.kind === 'npc') {
+          if (!isDm && card.by !== me.id) throw err('dm_only', 'El daño a un enemigo lo aplica el DM o quien lo hizo.');
+          const n = c.npcs.get(t.id); if (!n) throw err('no_target', 'Ese enemigo ya no está.');
+          if (amount) applyTo(n, kind, amount);
+        } else {
+          if (me.id !== t.id) throw err('not_yours', 'Cada quien aplica lo que le hacen en su hoja.');
+          if (amount) out.push({ to: me.id, msg: { t: 'applied', kind, amount, cond: null, note: card.title, from: card.actor.name } });
+        }
+        t.res = how; t.amt = amount;
+        const what = card.heal ? `recupera ${amount} PG` : amount ? `recibe ${amount} de daño` : 'no recibe daño';
+        this.log(c, `${t.name} ${what} (${card.title})`, t.kind === 'npc' && npcHidden(c) && amount ? `${t.name} ${card.heal ? 'se cura' : 'recibe daño'} (${card.title})` : null);
+        this.sendCard(c, card, out);
+        break;
+      }
+      case 'act.save': {
+        const card = c.acts.find((x) => x.id === str(msg.id, 20)); if (!card || !card.save) throw err('no_target', 'Esa acción no pide salvación.');
+        const t = (card.targets || []).find((x) => x.id === str(msg.tid, 20)); if (!t) throw err('no_target', 'No era objetivo de esa acción.');
+        if (t.kind === 'npc' ? !isDm : me.id !== t.id) throw err('not_yours', 'Cada quien tira su salvación (el DM, la de los enemigos).');
+        if (t.sv) throw err('done', 'Ya tiró su salvación.');
+        const mod = int(msg.mod, -10, 30, 0), r = d20(msg.k);
+        t.sv = { dice: r.dice, k: msg.k === 'adv' || msg.k === 'dis' ? msg.k : null, nat: r.d, mod, total: r.d + mod, ok: r.d !== 1 && (r.d === 20 || r.d + mod >= card.save.dc) };
+        this.log(c, `${t.name} tira salvación de ${AB_ES[card.save.ab]}: ${t.sv.total} (${t.sv.ok ? 'la supera' : 'falla'})`);
+        this.sendCard(c, card, out);
+        break;
+      }
+      case 'act.del': {
+        const card = c.acts.find((x) => x.id === str(msg.id, 20)); if (!card) { out.quiet = true; break; }
+        if (!isDm && card.by !== me.id) throw err('not_yours', 'Solo quien la publicó (o el DM) la quita.');
+        c.acts = c.acts.filter((x) => x !== card);
+        for (const mm of c.members.values()) out.push({ to: mm.id, msg: { t: 'act.del', id: card.id } });
+        out.quiet = true;
         break;
       }
       /* ---------- Mapas: lienzos con cuadrícula, capas, fichas y niebla ---------- */
@@ -929,6 +1016,20 @@ export class Campaigns {
     return out;
   }
 
+  /* ---------- Tarjetas de acción: lo que ve cada quien ---------- */
+  /* Un jugador no ve las acciones de enemigos ocultos, ni la CA de los enemigos, ni a los enemigos ocultos como objetivo.
+     Con la vida de los enemigos oculta (nada o cómo se ve), el daño que reciben los enemigos no se ve (salvo quien lo hizo). */
+  cardFor(c, card, mm) {
+    if (mm.role === 'dm') return card;
+    if (card.actor.kind === 'npc') { const n = c.npcs.get(card.actor.id); if (n && n.hidden) return null; }
+    const hide = npcHidden(c) && card.by !== mm.id;
+    const o = { ...card, targets: (card.targets || []).filter((t) => t.kind !== 'npc' || !(c.npcs.get(t.id) || {}).hidden).map((t) => { const x = { ...t }; if (t.kind === 'npc') { delete x.ac; if (hide) delete x.amt; } return x; }) };
+    if (hide && o.dmg && o.targets.length && o.targets.every((t) => t.kind === 'npc')) { o.dmg = o.dmg.map((d) => ({ dice: d.dice, type: d.type, hidden: true })); delete o.amt; }
+    return o;
+  }
+  sendCard(c, card, out) { for (const mm of c.members.values()) { const v = this.cardFor(c, card, mm); if (v) out.push({ to: mm.id, msg: { t: 'act', card: v } }); } }
+  actsFor(c, forId) { const mm = c.members.get(forId); return mm ? c.acts.slice(-40).map((x) => this.cardFor(c, x, mm)).filter(Boolean) : []; }
+
   /* ---------- Mapas: quién ve qué ---------- */
   canSeeMap(c, mp, mm) { return mm.role === 'dm' || !mp.hidden; }
   mapFor(c, me, mid) { const mp = c.maps.get(str(mid, 24)); if (!mp || !this.canSeeMap(c, mp, me)) throw err('no_map', 'Ese mapa ya no está.'); return mp; }
@@ -1217,10 +1318,10 @@ export class Campaigns {
     else if (msg.dir === 'prev') { i -= 1; if (i < 0) { i = ord.length - 1; F.round = Math.max(1, F.round - 1); } }
     else { i += 1; if (i >= ord.length) { i = 0; F.round += 1; } }
     F.cur = ord[i];
-    if (!r0 && F.round) this.fightStarted(c, key, out);
+    if (!r0 && F.round) { c.fightN++; this.fightStarted(c, key, out); }
     if (F.round > r0) this.wavesDue(c, key, F.round, out);
     const mp = c.maps.get(key);
-    this.log(c, `${mp ? mp.name + ' · ' : ''}Ronda ${F.round}: turno de ${this.nameOf(c, F.cur)}`);
+    this.log(c, `${mp ? mp.name + ' · ' : ''}Ronda ${F.round}: turno de ${this.nameOf(c, F.cur)}`, c.npcs.get(F.cur)?.hidden ? `${mp ? mp.name + ' · ' : ''}Ronda ${F.round}` : null);
     out.push({ to: F.cur, msg: { t: 'yourturn', round: F.round } });
   }
   /* Dónde está cada quien (para separar el combate por mapa): el mapa donde está su ficha; si no, la escena */
@@ -1250,7 +1351,7 @@ export class Campaigns {
   sendBeast(c, b, out) { for (const mm of c.members.values()) if (mm.role === 'dm' || !b.hidden) out.push({ to: mm.id, msg: { t: 'beast', beast: beastFor(b, mm.role === 'dm') } }); }
 
   /* Lo que recibe cada quien al entrar: el chat que puede ver y la pizarra */
-  mesaInit(c, forId) { return { t: 'mesa.init', chat: c.chat.filter((m) => visible(m, forId)).slice(-500), strokes: c.strokes, pages: c.pages.length }; }
+  mesaInit(c, forId) { return { t: 'mesa.init', chat: c.chat.filter((m) => visible(m, forId)).slice(-500), strokes: c.strokes, pages: c.pages.length, acts: this.actsFor(c, forId), fightN: c.fightN }; }
   /* Lo de la sesión que terminó, para guardarlo en el diario de cada quien */
   snapshot(c, forId) {
     const from = c.session.started || 0;
@@ -1295,7 +1396,7 @@ export class Campaigns {
     const runs = dm ? Object.entries(c.runs).map(([k, r]) => ({ key: k, map: r.map, enc: r.enc, name: r.name, waves: r.waves.filter((w) => !w.done).map((w) => ({ n: w.n, name: w.name, round: w.round, count: r.pend.filter((x) => x.wave === w.n).length })) })) : undefined;
     const beasts = c.beasts.filter((b) => dm || !b.hidden).map((b) => ({ id: b.id, name: b.name, kind: b.kind, img: b.img, info: b.info, hasStat: !!b.stat, ref: dm || b.manual ? b.ref : undefined, manual: !!(b.manual && b.ref), hidden: !!b.hidden, auto: !!b.auto, seen: b.seen, ses: b.ses, notes: b.notes.length }));
     return { code: c.code, name: c.name, you: forId, role: me ? me.role : null, live: c.live, session: c.session, members, npcs, npcHp: c.npcHp, maps, scene: c.scene && (dm || !c.maps.get(c.scene)?.hidden) ? c.scene : null, board: c.board, pages: c.pages.length,
-      beasts, autoBeasts: c.autoBeasts, amb: c.amb || null, order: ord.filter(x => dm || !c.npcs.get(x)?.hidden), turnId: c.split ? F.cur : c.order[c.turn] || null, round: c.split ? F.round : c.round, hidePc: c.hidePc, log: c.log.slice(-25),
+      beasts, autoBeasts: c.autoBeasts, amb: c.amb || null, order: ord.filter(x => dm || !c.npcs.get(x)?.hidden), turnId: c.split ? F.cur : c.order[c.turn] || null, round: c.split ? F.round : c.round, hidePc: c.hidePc, log: dm ? c.log.slice(-25) : c.log.slice(-25).filter((l) => l.p !== '').map((l) => (l.p ? { at: l.at, text: l.p } : { at: l.at, text: l.text })), fightN: c.fightN,
       split: c.split, fight: key, fights, encs, runs };
   }
   /* Lo que se ve de una campaña en el selector, sin entrar */
@@ -1411,6 +1512,23 @@ function cleanTrig(z, mp, c) {
   }
   return o;
 }
+/* ¿Los jugadores no ven la vida de los enemigos? (nada o solo cómo se ven): entonces tampoco el daño que reciben */
+function npcHidden(c) { return c.npcHp === 'none' || c.npcHp === 'state'; }
+/* Dados: «2d6 + 3», «1d8+1d6+2», «8d6». Con crítico, el doble de dados. Hasta 40 dados de hasta 100 caras. */
+function rollDice(expr, crit) {
+  const s = String(expr ?? '').toLowerCase().replace(/\s+/g, '').replace(/−/g, '-').slice(0, 60); if (!s) return null;
+  const re = /([+-]?)(\d*)d(\d+)|([+-]?)(\d+)/g; let m, pos = 0, total = 0, n = 0; const rolls = [], parts = [];
+  while ((m = re.exec(s))) {
+    if (m.index !== pos) return null; pos = re.lastIndex;
+    if (m[3]) { const sign = m[1] === '-' ? -1 : 1, cnt = Math.max(1, Math.min(40, Number(m[2] || 1))) * (crit ? 2 : 1), sides = Math.max(2, Math.min(100, Number(m[3])));
+      n += cnt; if (n > 80) return null; const rs = []; for (let i = 0; i < cnt; i++) rs.push(randomInt(1, sides + 1));
+      rolls.push(...rs.map((v) => sign * v)); total += sign * rs.reduce((a, b) => a + b, 0); parts.push([sign, cnt + 'd' + sides]); }
+    else { const sign = m[4] === '-' ? -1 : 1, v = Math.min(999, Number(m[5])); total += sign * v; parts.push([sign, String(v)]); }
+  }
+  if (pos !== s.length || !parts.length) return null;
+  return { expr: parts.map((p, i) => (i ? (p[0] < 0 ? ' - ' : ' + ') : p[0] < 0 ? '-' : '') + p[1]).join(''), rolls, total: Math.max(0, total) };
+}
+
 /* ---------- Estados, despliegue y encuentros ---------- */
 function stateOf(mp) { return MAP_STATES.includes(mp.state) ? mp.state : mp.hidden ? 'prep' : 'explore'; }
 /* Las zonas que ven los jugadores: los pasos visibles y las de despliegue */
@@ -1418,9 +1536,9 @@ function forPlayers(z) { return !!z && ((z.k === 'paso' && !z.hidden) || z.k ===
 /* 1d20 (con ventaja o desventaja) */
 function d20(kind) {
   const a = randomInt(1, 21), b = randomInt(1, 21);
-  if (kind === 'adv') return { d: Math.max(a, b), text: `${a} y ${b}, con ventaja` };
-  if (kind === 'dis') return { d: Math.min(a, b), text: `${a} y ${b}, con desventaja` };
-  return { d: a, text: String(a) };
+  if (kind === 'adv') return { d: Math.max(a, b), dice: [a, b], text: `${a} y ${b}, con ventaja` };
+  if (kind === 'dis') return { d: Math.min(a, b), dice: [a, b], text: `${a} y ${b}, con desventaja` };
+  return { d: a, dice: [a], text: String(a) };
 }
 /* ¿Cabe una ficha de tamaño s en (x, y) dentro de alguna zona? (si es más grande que la zona, basta su centro) */
 function inZones(zs, x, y, s) {
