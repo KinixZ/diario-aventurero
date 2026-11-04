@@ -1,0 +1,726 @@
+# Hechizos: lo que resuelve la app
+
+Cada conjuro de 5etools (2014 y 2024) lleva su **definición de efecto**, que sale de sus datos (`web/src/hechizos.cjs`)
+más unas pocas correcciones a mano: el área (esfera, cilindro, cubo, cono, línea, emanación o muro y su tamaño), si sale de
+ti, el alcance, la tirada de ataque o la salvación (y si hace la mitad al superarla), los dados de daño o curación, los
+estados que impone, si la salvación se repite al final de cada turno, la concentración y si deja una **zona en el mapa**
+(que daña al entrar, al empezar o al terminar el turno, que es terreno difícil, que tapa la vista, que se mueve o que sigue
+a quien lo lanza).
+
+En el combate la app propone y el jugador o el DM confirman: apuntar el área en el mapa elige a los que toca, los dados los
+tira el servidor, cada objetivo tira su salvación (con su cobertura) y se aplica el daño y los estados.
+
+Este archivo lo escribe `npm run hechizos -- paquete.json` (o `node tools/hechizos.mjs paquete.json`).
+
+## Resumen
+
+| | Conjuros |
+|---|---|
+| En el paquete | 969 |
+| Automáticos (la app los resuelve enteros) | 498 |
+| Asistidos (algo se hace a mano) | 471 |
+| Con área | 300 |
+| Dejan una zona en el mapa | 97 |
+| De 2024 (XPHB) | 391 (197 automáticos) |
+
+Áreas por forma: emanación 50, esfera 109, línea 10, cubo 69, cono 22, cilindro 18, muro 22.
+
+## Asistidos
+
+Un conjuro puede estar en más de un grupo. «Efecto sin tirada» son los de utilidad o los que cambian números de otras
+tiradas: se publican como acción (con su texto) y lo demás se aplica a mano.
+
+### Invoca criaturas: ponlas en el mapa y en la iniciativa (66)
+
+- Animate Dead (PHB, nivel 3)
+- Animate Dead (XPHB, nivel 3)
+- Animate Objects (PHB, nivel 5)
+- Animate Objects (XPHB, nivel 5)
+- Battle Familiar (AU, nivel 2)
+- Conjure Animals (PHB, nivel 3)
+- Conjure Celestial (PHB, nivel 7)
+- Conjure Elemental (PHB, nivel 5)
+- Conjure Fey (PHB, nivel 6)
+- Conjure Minor Elementals (PHB, nivel 4)
+- Conjure Woodland Beings (PHB, nivel 4)
+- Create Undead (PHB, nivel 6)
+- Create Undead (XPHB, nivel 6)
+- Danse Macabre (XGE, nivel 5)
+- Deryan's Helpful Homunculi (FRHoF, nivel 2)
+- Druid Grove (XGE, nivel 6)
+- Find Familiar (PHB, nivel 1)
+- Find Familiar (XPHB, nivel 1)
+- Find Greater Steed (XGE, nivel 4)
+- Find Steed (PHB, nivel 2)
+- Find Steed (XPHB, nivel 2)
+- Finger of Death (PHB, nivel 7)
+- Finger of Death (XPHB, nivel 7)
+- Flock of Familiars (LLK, nivel 2)
+- Galder's Speedy Courier (LLK, nivel 4)
+- Giant Insect (PHB, nivel 4)
+- Giant Insect (XPHB, nivel 4)
+- Homunculus Servant (EFA, nivel 2)
+- Infernal Calling (XGE, nivel 5)
+- Negative Energy Flood (AU, nivel 5)
+- Negative Energy Flood (XGE, nivel 5)
+- Phantom Steed (PHB, nivel 3)
+- Phantom Steed (XPHB, nivel 3)
+- Planar Ally (PHB, nivel 6)
+- Planar Ally (XPHB, nivel 6)
+- Planar Binding (PHB, nivel 5)
+- Planar Binding (XPHB, nivel 5)
+- Spirit of Death (BMT, nivel 4)
+- Summon Aberration (TCE, nivel 4)
+- Summon Aberration (XPHB, nivel 4)
+- Summon Beast (TCE, nivel 2)
+- Summon Beast (XPHB, nivel 2)
+- Summon Celestial (TCE, nivel 5)
+- Summon Celestial (XPHB, nivel 5)
+- Summon Construct (TCE, nivel 4)
+- Summon Construct (XPHB, nivel 4)
+- Summon Dinosaur (AU, nivel 6)
+- Summon Draconic Spirit (FTD, nivel 5)
+- Summon Dragon (XPHB, nivel 5)
+- Summon Elemental (TCE, nivel 4)
+- Summon Elemental (XPHB, nivel 4)
+- Summon Fey (TCE, nivel 3)
+- Summon Fey (XPHB, nivel 3)
+- Summon Fiend (TCE, nivel 6)
+- Summon Fiend (XPHB, nivel 6)
+- Summon Greater Demon (XGE, nivel 4)
+- Summon Lesser Demons (XGE, nivel 3)
+- Summon Plant (AU, nivel 5)
+- Summon Shadowspawn (TCE, nivel 3)
+- Summon Undead (TCE, nivel 3)
+- Summon Undead (XPHB, nivel 3)
+- Tiny Servant (XGE, nivel 3)
+- True Polymorph (PHB, nivel 9)
+- True Polymorph (XPHB, nivel 9)
+- Unseen Servant (PHB, nivel 1)
+- Unseen Servant (XPHB, nivel 1)
+
+### Teletransporte: mueve tú la ficha (28)
+
+- Arcane Gate (PHB, nivel 6)
+- Arcane Gate (XPHB, nivel 6)
+- Dimension Door (PHB, nivel 4)
+- Dimension Door (XPHB, nivel 4)
+- Dream of the Blue Veil (TCE, nivel 7)
+- Dueling Ground (AU, nivel 2)
+- Far Step (XGE, nivel 5)
+- Gate (PHB, nivel 9)
+- Gate (XPHB, nivel 9)
+- Misty Step (PHB, nivel 2)
+- Misty Step (XPHB, nivel 2)
+- Plane Shift (PHB, nivel 7)
+- Plane Shift (XPHB, nivel 7)
+- Scatter (XGE, nivel 6)
+- Steel Wind Strike (XGE, nivel 5)
+- Steel Wind Strike (XPHB, nivel 5)
+- Teleport (PHB, nivel 7)
+- Teleport (XPHB, nivel 7)
+- Teleportation Circle (PHB, nivel 5)
+- Teleportation Circle (XPHB, nivel 5)
+- Thunder Step (XGE, nivel 3)
+- Transport via Plants (PHB, nivel 6)
+- Transport via Plants (XPHB, nivel 6)
+- Tree Stride (PHB, nivel 5)
+- Tree Stride (XPHB, nivel 5)
+- Vortex Warp (SCC, nivel 2)
+- Word of Recall (PHB, nivel 6)
+- Word of Recall (XPHB, nivel 6)
+
+### Muro: se coloca como una línea; la forma de anillo va a mano (22)
+
+- Blade Barrier (PHB, nivel 6)
+- Blade Barrier (XPHB, nivel 6)
+- Prismatic Wall (PHB, nivel 9)
+- Prismatic Wall (XPHB, nivel 9)
+- Tidal Wave (XGE, nivel 3)
+- Tsunami (PHB, nivel 8)
+- Tsunami (XPHB, nivel 8)
+- Wall of Fire (PHB, nivel 4)
+- Wall of Fire (XPHB, nivel 4)
+- Wall of Force (PHB, nivel 5)
+- Wall of Force (XPHB, nivel 5)
+- Wall of Ice (PHB, nivel 6)
+- Wall of Ice (XPHB, nivel 6)
+- Wall of Light (XGE, nivel 5)
+- Wall of Sand (XGE, nivel 3)
+- Wall of Stone (PHB, nivel 5)
+- Wall of Stone (XPHB, nivel 5)
+- Wall of Thorns (PHB, nivel 6)
+- Wall of Thorns (XPHB, nivel 6)
+- Wall of Water (XGE, nivel 3)
+- Wind Wall (PHB, nivel 3)
+- Wind Wall (XPHB, nivel 3)
+
+### Área especial: elige los objetivos a mano (25)
+
+- Aganazzar's Scorcher (XGE, nivel 2)
+- Conjure Animals (XPHB, nivel 3)
+- Conjure Constructs (FRHoF, nivel 3)
+- Control Water (PHB, nivel 4)
+- Control Water (XPHB, nivel 4)
+- Cordon of Arrows (PHB, nivel 2)
+- Cordon of Arrows (XPHB, nivel 2)
+- Dark Star (EGW, nivel 8)
+- Death Armor (FRHoF, nivel 2)
+- Earth Tremor (XGE, nivel 1)
+- Forcecage (PHB, nivel 7)
+- Forcecage (XPHB, nivel 7)
+- Hail of Thorns (PHB, nivel 1)
+- Hail of Thorns (XPHB, nivel 1)
+- Lightning Arrow (PHB, nivel 3)
+- Lightning Arrow (XPHB, nivel 3)
+- Melf's Minute Meteors (XGE, nivel 3)
+- Mordenkainen's Private Sanctum (PHB, nivel 4)
+- Mordenkainen's Private Sanctum (XPHB, nivel 4)
+- Shadow of Moil (XGE, nivel 4)
+- Sleep (PHB, nivel 1)
+- Storm of Vengeance (PHB, nivel 9)
+- Storm of Vengeance (XPHB, nivel 9)
+- Thunder Step (XGE, nivel 3)
+- Thunderclap (XGE, truco)
+
+### Daño por cada 1,5 m recorridos: se aplica a mano al moverse (2)
+
+- Spike Growth (PHB, nivel 2)
+- Spike Growth (XPHB, nivel 2)
+
+### El daño o el efecto depende de una elección (tipo de daño, forma…) (18)
+
+- Chromatic Orb (PHB, nivel 1)
+- Chromatic Orb (XPHB, nivel 1)
+- Destructive Wave (PHB, nivel 5)
+- Destructive Wave (XPHB, nivel 5)
+- Dragon's Breath (XGE, nivel 2)
+- Dragon's Breath (XPHB, nivel 2)
+- Elemental Weapon (PHB, nivel 3)
+- Elemental Weapon (XPHB, nivel 3)
+- Elminster's Effulgent Spheres (FRHoF, nivel 6)
+- Hallow (PHB, nivel 5)
+- Hallow (XPHB, nivel 5)
+- Illusory Dragon (XGE, nivel 8)
+- Protection from Energy (PHB, nivel 3)
+- Protection from Energy (XPHB, nivel 3)
+- Resistance (XPHB, truco)
+- Songal's Elemental Suffusion (FRHoF, nivel 5)
+- Sorcerous Burst (XPHB, truco)
+- Wish (PHB, nivel 9)
+
+### Cambia la forma o las estadísticas de una criatura (4)
+
+- Polymorph (PHB, nivel 4)
+- Polymorph (XPHB, nivel 4)
+- True Polymorph (PHB, nivel 9)
+- True Polymorph (XPHB, nivel 9)
+
+### Dados que suman o restan a otras tiradas (bendición, guía…) (8)
+
+- Bane (PHB, nivel 1)
+- Bane (XPHB, nivel 1)
+- Bless (PHB, nivel 1)
+- Bless (XPHB, nivel 1)
+- Guidance (PHB, truco)
+- Guidance (XPHB, truco)
+- Resistance (PHB, truco)
+- Resistance (XPHB, truco)
+
+### Reacción: se usa fuera de tu turno, a mano (9)
+
+- Absorb Elements (XGE, nivel 1)
+- Counterspell (PHB, nivel 3)
+- Counterspell (XPHB, nivel 3)
+- Feather Fall (PHB, nivel 1)
+- Feather Fall (XPHB, nivel 1)
+- Hellish Rebuke (PHB, nivel 1)
+- Hellish Rebuke (XPHB, nivel 1)
+- Shield (PHB, nivel 1)
+- Shield (XPHB, nivel 1)
+
+### Efecto sin tirada (se aplica a mano: bonificadores, sentidos, utilidad…) (383)
+
+- Air Bubble (AAG, nivel 2)
+- Alarm (PHB, nivel 1)
+- Alarm (XPHB, nivel 1)
+- Alter Self (PHB, nivel 2)
+- Animal Messenger (PHB, nivel 2)
+- Animal Shapes (PHB, nivel 8)
+- Animal Shapes (XPHB, nivel 8)
+- Animate Dead (PHB, nivel 3)
+- Animate Dead (XPHB, nivel 3)
+- Animate Objects (XPHB, nivel 5)
+- Antilife Shell (PHB, nivel 5)
+- Antilife Shell (XPHB, nivel 5)
+- Antimagic Field (PHB, nivel 8)
+- Antimagic Field (XPHB, nivel 8)
+- Arcane Eye (PHB, nivel 4)
+- Arcane Eye (XPHB, nivel 4)
+- Arcane Gate (PHB, nivel 6)
+- Arcane Gate (XPHB, nivel 6)
+- Arcane Lock (PHB, nivel 2)
+- Arcane Lock (XPHB, nivel 2)
+- Armor of Agathys (PHB, nivel 1)
+- Armor of Agathys (XPHB, nivel 1)
+- Augury (PHB, nivel 2)
+- Augury (XPHB, nivel 2)
+- Aura of Purity (PHB, nivel 4)
+- Aura of Purity (XPHB, nivel 4)
+- Barkskin (PHB, nivel 2)
+- Barkskin (XPHB, nivel 2)
+- Battle Familiar (AU, nivel 2)
+- Beast Sense (PHB, nivel 2)
+- Beast Sense (XPHB, nivel 2)
+- Blade Ward (PHB, truco)
+- Blade Ward (XPHB, truco)
+- Bless (PHB, nivel 1)
+- Bless (XPHB, nivel 1)
+- Blink (PHB, nivel 3)
+- Blink (XPHB, nivel 3)
+- Blur (PHB, nivel 2)
+- Blur (XPHB, nivel 2)
+- Borrowed Knowledge (SCC, nivel 2)
+- Ceremony (XGE, nivel 1)
+- Circle of Power (PHB, nivel 5)
+- Circle of Power (XPHB, nivel 5)
+- Clairvoyance (PHB, nivel 3)
+- Clairvoyance (XPHB, nivel 3)
+- Clone (PHB, nivel 8)
+- Clone (XPHB, nivel 8)
+- Commune (PHB, nivel 5)
+- Commune (XPHB, nivel 5)
+- Commune with Nature (PHB, nivel 5)
+- Commune with Nature (XPHB, nivel 5)
+- Comprehend Languages (PHB, nivel 1)
+- Comprehend Languages (XPHB, nivel 1)
+- Conjure Animals (PHB, nivel 3)
+- Conjure Celestial (PHB, nivel 7)
+- Conjure Elemental (PHB, nivel 5)
+- Conjure Fey (PHB, nivel 6)
+- Conjure Minor Elementals (PHB, nivel 4)
+- Conjure Woodland Beings (PHB, nivel 4)
+- Contingency (PHB, nivel 6)
+- Contingency (XPHB, nivel 6)
+- Continual Flame (PHB, nivel 2)
+- Continual Flame (XPHB, nivel 2)
+- Control Flames (XGE, truco)
+- Control Weather (PHB, nivel 8)
+- Control Weather (XPHB, nivel 8)
+- Counterspell (PHB, nivel 3)
+- Create Food and Water (PHB, nivel 3)
+- Create Food and Water (XPHB, nivel 3)
+- Create Magen (IDRotF, nivel 7)
+- Create or Destroy Water (PHB, nivel 1)
+- Create or Destroy Water (XPHB, nivel 1)
+- Create Spelljamming Helm (AAG, nivel 5)
+- Create Undead (PHB, nivel 6)
+- Create Undead (XPHB, nivel 6)
+- Creation (PHB, nivel 5)
+- Creation (XPHB, nivel 5)
+- Dancing Lights (PHB, truco)
+- Dancing Lights (XPHB, truco)
+- Danse Macabre (XGE, nivel 5)
+- Darkness (PHB, nivel 2)
+- Darkness (XPHB, nivel 2)
+- Darkvision (PHB, nivel 2)
+- Darkvision (XPHB, nivel 2)
+- Daylight (PHB, nivel 3)
+- Daylight (XPHB, nivel 3)
+- Death Ward (PHB, nivel 4)
+- Death Ward (XPHB, nivel 4)
+- Demiplane (PHB, nivel 8)
+- Demiplane (XPHB, nivel 8)
+- Deryan's Helpful Homunculi (FRHoF, nivel 2)
+- Detect Evil and Good (PHB, nivel 1)
+- Detect Evil and Good (XPHB, nivel 1)
+- Detect Magic (PHB, nivel 1)
+- Detect Magic (XPHB, nivel 1)
+- Detect Poison and Disease (PHB, nivel 1)
+- Detect Poison and Disease (XPHB, nivel 1)
+- Disguise Self (PHB, nivel 1)
+- Disguise Self (XPHB, nivel 1)
+- Dispel Magic (PHB, nivel 3)
+- Dispel Magic (XPHB, nivel 3)
+- Distort Value (AI, nivel 1)
+- Divination (PHB, nivel 4)
+- Divination (XPHB, nivel 4)
+- Drawmij's Instant Summons (PHB, nivel 6)
+- Drawmij's Instant Summons (XPHB, nivel 6)
+- Druid Grove (XGE, nivel 6)
+- Druidcraft (PHB, truco)
+- Druidcraft (XPHB, truco)
+- Elementalism (XPHB, truco)
+- Elminster's Elusion (FRHoF, nivel 2)
+- Encode Thoughts (GGR, truco)
+- Enhance Ability (PHB, nivel 2)
+- Enhance Ability (XPHB, nivel 2)
+- Etherealness (PHB, nivel 7)
+- Etherealness (XPHB, nivel 7)
+- Expeditious Retreat (PHB, nivel 1)
+- Expeditious Retreat (XPHB, nivel 1)
+- Fabricate (PHB, nivel 4)
+- Fabricate (XPHB, nivel 4)
+- False Life (PHB, nivel 1)
+- False Life (XPHB, nivel 1)
+- Far Step (XGE, nivel 5)
+- Feather Fall (PHB, nivel 1)
+- Feather Fall (XPHB, nivel 1)
+- Find Familiar (PHB, nivel 1)
+- Find Familiar (XPHB, nivel 1)
+- Find Greater Steed (XGE, nivel 4)
+- Find Steed (PHB, nivel 2)
+- Find Steed (XPHB, nivel 2)
+- Find the Path (PHB, nivel 6)
+- Find the Path (XPHB, nivel 6)
+- Find Traps (PHB, nivel 2)
+- Find Traps (XPHB, nivel 2)
+- Fizban's Platinum Shield (FTD, nivel 6)
+- Flock of Familiars (LLK, nivel 2)
+- Fly (PHB, nivel 3)
+- Fly (XPHB, nivel 3)
+- Fog Cloud (PHB, nivel 1)
+- Fog Cloud (XPHB, nivel 1)
+- Forbiddance (PHB, nivel 6)
+- Forbiddance (XPHB, nivel 6)
+- Foresight (PHB, nivel 9)
+- Foresight (XPHB, nivel 9)
+- Fortune's Favor (EGW, nivel 2)
+- Freedom of Movement (PHB, nivel 4)
+- Freedom of Movement (XPHB, nivel 4)
+- Friends (PHB, truco)
+- Galder's Speedy Courier (LLK, nivel 4)
+- Galder's Tower (LLK, nivel 3)
+- Gaseous Form (PHB, nivel 3)
+- Gaseous Form (XPHB, nivel 3)
+- Gate (PHB, nivel 9)
+- Gate (XPHB, nivel 9)
+- Gate Seal (SatO, nivel 4)
+- Gentle Repose (PHB, nivel 2)
+- Gentle Repose (XPHB, nivel 2)
+- Giant Insect (PHB, nivel 4)
+- Giant Insect (XPHB, nivel 4)
+- Gift of Alacrity (EGW, nivel 1)
+- Gift of Gab (AI, nivel 2)
+- Glibness (PHB, nivel 8)
+- Glibness (XPHB, nivel 8)
+- Globe of Invulnerability (PHB, nivel 6)
+- Globe of Invulnerability (XPHB, nivel 6)
+- Greater Restoration (PHB, nivel 5)
+- Greater Restoration (XPHB, nivel 5)
+- Guards and Wards (PHB, nivel 6)
+- Guards and Wards (XPHB, nivel 6)
+- Guidance (PHB, truco)
+- Guidance (XPHB, truco)
+- Hallow (XPHB, nivel 5)
+- Hallucinatory Terrain (PHB, nivel 4)
+- Hallucinatory Terrain (XPHB, nivel 4)
+- Haste (PHB, nivel 3)
+- Heroism (PHB, nivel 1)
+- Heroism (XPHB, nivel 1)
+- Hindsight (AU, nivel 9)
+- Homunculus Servant (EFA, nivel 2)
+- Identify (PHB, nivel 1)
+- Identify (XPHB, nivel 1)
+- Illusory Script (PHB, nivel 1)
+- Illusory Script (XPHB, nivel 1)
+- Immovable Object (EGW, nivel 2)
+- Infernal Calling (XGE, nivel 5)
+- Intellect Fortress (TCE, nivel 3)
+- Invulnerability (AU, nivel 9)
+- Invulnerability (XGE, nivel 9)
+- Iron Body (AU, nivel 8)
+- Jump (PHB, nivel 1)
+- Jump (XPHB, nivel 1)
+- Knock (PHB, nivel 2)
+- Knock (XPHB, nivel 2)
+- Legend Lore (PHB, nivel 5)
+- Legend Lore (XPHB, nivel 5)
+- Leomund's Secret Chest (PHB, nivel 4)
+- Leomund's Secret Chest (XPHB, nivel 4)
+- Leomund's Tiny Hut (PHB, nivel 3)
+- Leomund's Tiny Hut (XPHB, nivel 3)
+- Lesser Restoration (PHB, nivel 2)
+- Lesser Restoration (XPHB, nivel 2)
+- Light (XPHB, truco)
+- Locate Animals or Plants (PHB, nivel 2)
+- Locate Animals or Plants (XPHB, nivel 2)
+- Locate Creature (PHB, nivel 4)
+- Locate Creature (XPHB, nivel 4)
+- Locate Object (PHB, nivel 2)
+- Locate Object (XPHB, nivel 2)
+- Longstrider (PHB, nivel 1)
+- Longstrider (XPHB, nivel 1)
+- Mage Armor (PHB, nivel 1)
+- Mage Armor (XPHB, nivel 1)
+- Mage Hand (PHB, truco)
+- Mage Hand (XPHB, truco)
+- Magic Mouth (PHB, nivel 2)
+- Magic Mouth (XPHB, nivel 2)
+- Magic Weapon (PHB, nivel 2)
+- Magic Weapon (XPHB, nivel 2)
+- Major Image (PHB, nivel 3)
+- Major Image (XPHB, nivel 3)
+- Maze (PHB, nivel 8)
+- Maze (XPHB, nivel 8)
+- Mending (PHB, truco)
+- Mending (XPHB, truco)
+- Message (PHB, truco)
+- Message (XPHB, truco)
+- Mighty Fortress (XGE, nivel 8)
+- Mind Blank (PHB, nivel 8)
+- Mind Blank (XPHB, nivel 8)
+- Minor Illusion (PHB, truco)
+- Minor Illusion (XPHB, truco)
+- Mirage Arcane (PHB, nivel 7)
+- Mirage Arcane (XPHB, nivel 7)
+- Mirror Image (PHB, nivel 2)
+- Mirror Image (XPHB, nivel 2)
+- Misty Step (PHB, nivel 2)
+- Misty Step (XPHB, nivel 2)
+- Mold Earth (XGE, truco)
+- Moment of Prescience (AU, nivel 8)
+- Mordenkainen's Lucubration (AU, nivel 5)
+- Mordenkainen's Magnificent Mansion (PHB, nivel 7)
+- Mordenkainen's Magnificent Mansion (XPHB, nivel 7)
+- Mordenkainen's Private Sanctum (PHB, nivel 4)
+- Mordenkainen's Private Sanctum (XPHB, nivel 4)
+- Motivational Speech (AI, nivel 3)
+- Move Earth (PHB, nivel 6)
+- Move Earth (XPHB, nivel 6)
+- Nondetection (PHB, nivel 3)
+- Nondetection (XPHB, nivel 3)
+- Nystul's Magic Aura (PHB, nivel 2)
+- Nystul's Magic Aura (XPHB, nivel 2)
+- Pass without Trace (PHB, nivel 2)
+- Pass without Trace (XPHB, nivel 2)
+- Passwall (PHB, nivel 5)
+- Passwall (XPHB, nivel 5)
+- Phantom Steed (PHB, nivel 3)
+- Phantom Steed (XPHB, nivel 3)
+- Planar Ally (PHB, nivel 6)
+- Planar Ally (XPHB, nivel 6)
+- Plane Shift (XPHB, nivel 7)
+- Plant Growth (PHB, nivel 3)
+- Plant Growth (XPHB, nivel 3)
+- Power Word Fortify (XPHB, nivel 7)
+- Power Word Kill (PHB, nivel 9)
+- Prestidigitation (PHB, truco)
+- Prestidigitation (XPHB, truco)
+- Primordial Ward (XGE, nivel 6)
+- Programmed Illusion (PHB, nivel 6)
+- Programmed Illusion (XPHB, nivel 6)
+- Project Image (XPHB, nivel 7)
+- Protection from Energy (PHB, nivel 3)
+- Protection from Energy (XPHB, nivel 3)
+- Protection from Evil and Good (PHB, nivel 1)
+- Protection from Evil and Good (XPHB, nivel 1)
+- Protection from Poison (PHB, nivel 2)
+- Protection from Poison (XPHB, nivel 2)
+- Purify Food and Drink (PHB, nivel 1)
+- Purify Food and Drink (XPHB, nivel 1)
+- Rary's Telepathic Bond (PHB, nivel 5)
+- Rary's Telepathic Bond (XPHB, nivel 5)
+- Remove Curse (PHB, nivel 3)
+- Remove Curse (XPHB, nivel 3)
+- Resistance (PHB, truco)
+- Resistance (XPHB, truco)
+- Reweave Fate (AU, nivel 7)
+- Rope Trick (PHB, nivel 2)
+- Rope Trick (XPHB, nivel 2)
+- See Invisibility (PHB, nivel 2)
+- See Invisibility (XPHB, nivel 2)
+- Sending (PHB, nivel 3)
+- Sending (XPHB, nivel 3)
+- Shape Water (XGE, truco)
+- Shapechange (PHB, nivel 9)
+- Shapechange (XPHB, nivel 9)
+- Shield (PHB, nivel 1)
+- Shield (XPHB, nivel 1)
+- Shield of Faith (PHB, nivel 1)
+- Shield of Faith (XPHB, nivel 1)
+- Shillelagh (PHB, truco)
+- Shillelagh (XPHB, truco)
+- Silent Image (PHB, nivel 1)
+- Silent Image (XPHB, nivel 1)
+- Silvery Barbs (SCC, nivel 1)
+- Simulacrum (PHB, nivel 7)
+- Simulacrum (XPHB, nivel 7)
+- Skill Empowerment (XGE, nivel 5)
+- Skywrite (XGE, nivel 2)
+- Spare the Dying (PHB, truco)
+- Spare the Dying (XPHB, truco)
+- Speak with Animals (PHB, nivel 1)
+- Speak with Animals (XPHB, nivel 1)
+- Speak with Dead (PHB, nivel 3)
+- Speak with Dead (XPHB, nivel 3)
+- Speak with Plants (PHB, nivel 3)
+- Speak with Plants (XPHB, nivel 3)
+- Spider Climb (PHB, nivel 2)
+- Spider Climb (XPHB, nivel 2)
+- Spirit of Death (BMT, nivel 4)
+- Stone Shape (PHB, nivel 4)
+- Stone Shape (XPHB, nivel 4)
+- Stoneskin (PHB, nivel 4)
+- Stoneskin (XPHB, nivel 4)
+- Summon Aberration (TCE, nivel 4)
+- Summon Aberration (XPHB, nivel 4)
+- Summon Beast (TCE, nivel 2)
+- Summon Beast (XPHB, nivel 2)
+- Summon Celestial (TCE, nivel 5)
+- Summon Celestial (XPHB, nivel 5)
+- Summon Construct (TCE, nivel 4)
+- Summon Construct (XPHB, nivel 4)
+- Summon Dinosaur (AU, nivel 6)
+- Summon Dragon (XPHB, nivel 5)
+- Summon Elemental (TCE, nivel 4)
+- Summon Elemental (XPHB, nivel 4)
+- Summon Fey (TCE, nivel 3)
+- Summon Fey (XPHB, nivel 3)
+- Summon Fiend (TCE, nivel 6)
+- Summon Fiend (XPHB, nivel 6)
+- Summon Lesser Demons (XGE, nivel 3)
+- Summon Plant (AU, nivel 5)
+- Summon Shadowspawn (TCE, nivel 3)
+- Summon Undead (TCE, nivel 3)
+- Summon Undead (XPHB, nivel 3)
+- Swift Quiver (PHB, nivel 5)
+- Swift Quiver (XPHB, nivel 5)
+- Tasha's Otherworldly Guise (TCE, nivel 6)
+- Telepathy (PHB, nivel 8)
+- Telepathy (XPHB, nivel 8)
+- Teleportation Circle (PHB, nivel 5)
+- Teleportation Circle (XPHB, nivel 5)
+- Tenser's Floating Disk (PHB, nivel 1)
+- Tenser's Floating Disk (XPHB, nivel 1)
+- Thaumaturgy (PHB, truco)
+- Thaumaturgy (XPHB, truco)
+- Time Stop (PHB, nivel 9)
+- Time Stop (XPHB, nivel 9)
+- Tiny Servant (XGE, nivel 3)
+- Tongues (PHB, nivel 3)
+- Tongues (XPHB, nivel 3)
+- Transport via Plants (PHB, nivel 6)
+- Transport via Plants (XPHB, nivel 6)
+- Tree Stride (PHB, nivel 5)
+- Tree Stride (XPHB, nivel 5)
+- True Seeing (PHB, nivel 6)
+- True Seeing (XPHB, nivel 6)
+- True Strike (PHB, truco)
+- True Strike (XPHB, truco)
+- Unseen Servant (PHB, nivel 1)
+- Unseen Servant (XPHB, nivel 1)
+- Wall of Force (PHB, nivel 5)
+- Wall of Force (XPHB, nivel 5)
+- Wall of Water (XGE, nivel 3)
+- Warding Bond (PHB, nivel 2)
+- Warding Bond (XPHB, nivel 2)
+- Warp Sense (SatO, nivel 2)
+- Water Breathing (PHB, nivel 3)
+- Water Breathing (XPHB, nivel 3)
+- Water Walk (PHB, nivel 3)
+- Water Walk (XPHB, nivel 3)
+- Word of Recall (PHB, nivel 6)
+- Word of Recall (XPHB, nivel 6)
+- Wristpocket (EGW, nivel 2)
+- Zone of Amicability (AU, nivel 4)
+
+## Zonas que se quedan en el mapa
+
+- Antipathy/Sympathy (PHB, nivel 8): actúa al entrar
+- Aura of Life (PHB, nivel 4): actúa al empezar el turno · te sigue · concentración
+- Aura of Life (XPHB, nivel 4): actúa al empezar el turno · te sigue · concentración
+- Blade Barrier (PHB, nivel 6): actúa al entrar, empezar el turno · terreno difícil · concentración
+- Blade Barrier (XPHB, nivel 6): actúa al entrar, terminar el turno · terreno difícil · concentración
+- Cacophonic Shield (FRHoF, nivel 3): actúa al entrar, terminar el turno · te sigue · concentración
+- Cloud of Daggers (PHB, nivel 2): actúa al entrar, terminar el turno · se mueve · concentración
+- Cloud of Daggers (XPHB, nivel 2): actúa al entrar, terminar el turno · se mueve · concentración
+- Cloudkill (PHB, nivel 5): actúa al entrar, terminar el turno · tapa la vista · se mueve · concentración
+- Cloudkill (XPHB, nivel 5): actúa al entrar, terminar el turno · tapa la vista · se mueve · concentración
+- Conjure Celestial (XPHB, nivel 7): actúa al entrar, terminar el turno · se mueve · concentración
+- Conjure Minor Elementals (XPHB, nivel 4): terreno difícil · te sigue · concentración
+- Conjure Woodland Beings (XPHB, nivel 4): actúa al entrar, terminar el turno · te sigue · concentración
+- Control Winds (XGE, nivel 5): actúa al empezar el turno · concentración
+- Create Bonfire (XGE, truco): actúa al terminar el turno · concentración
+- Darkness (PHB, nivel 2): tapa la vista · concentración
+- Darkness (XPHB, nivel 2): tapa la vista · concentración
+- Dawn (XGE, nivel 5): actúa al terminar el turno · concentración
+- Dirge (FRHoF, nivel 6): actúa al entrar, terminar el turno · te sigue · concentración
+- Distorted Distance (AU, nivel 4): actúa al entrar, terminar el turno · terreno difícil · concentración
+- Doomtide (FRHoF, nivel 4): actúa al entrar, terminar el turno · concentración
+- Druid Grove (XGE, nivel 6): tapa la vista
+- Dueling Ground (AU, nivel 2): actúa al entrar
+- Dust Devil (XGE, nivel 2): actúa al terminar el turno · concentración
+- Earthquake (PHB, nivel 8): terreno difícil · concentración
+- Earthquake (XPHB, nivel 8): terreno difícil · concentración
+- Entangle (PHB, nivel 1): terreno difícil · concentración
+- Entangle (XPHB, nivel 1): terreno difícil · concentración
+- Evard's Black Tentacles (PHB, nivel 4): actúa al entrar, terminar el turno · terreno difícil · concentración
+- Evard's Black Tentacles (XPHB, nivel 4): actúa al entrar, terminar el turno · terreno difícil · concentración
+- Fear (PHB, nivel 3): actúa al terminar el turno · concentración
+- Fear (XPHB, nivel 3): actúa al terminar el turno · concentración
+- Flaming Sphere (PHB, nivel 2): actúa al terminar el turno · se mueve · concentración
+- Flaming Sphere (XPHB, nivel 2): actúa al terminar el turno · se mueve · concentración
+- Fog Cloud (PHB, nivel 1): tapa la vista · concentración
+- Fog Cloud (XPHB, nivel 1): tapa la vista · concentración
+- Grave Ground (AU, nivel 5): actúa al entrar, terminar el turno · terreno difícil · concentración
+- Grease (PHB, nivel 1): actúa al entrar, terminar el turno · terreno difícil
+- Grease (XPHB, nivel 1): actúa al entrar, terminar el turno · terreno difícil
+- Guards and Wards (PHB, nivel 6): tapa la vista
+- Guards and Wards (XPHB, nivel 6): tapa la vista
+- Gust of Wind (PHB, nivel 2): actúa al empezar el turno · concentración
+- Gust of Wind (XPHB, nivel 2): actúa al terminar el turno · concentración
+- Healing Spirit (XGE, nivel 2): actúa al empezar el turno · concentración
+- Hunger of Hadar (PHB, nivel 3): actúa al empezar el turno, terminar el turno · terreno difícil · tapa la vista · concentración
+- Hunger of Hadar (XPHB, nivel 3): actúa al empezar el turno, terminar el turno · terreno difícil · tapa la vista · concentración
+- Illusory Dragon (AU, nivel 8): actúa al terminar el turno · concentración
+- Illusory Dragon (XGE, nivel 8): actúa al terminar el turno · concentración
+- Incendiary Cloud (PHB, nivel 8): actúa al entrar, terminar el turno · tapa la vista · concentración
+- Incendiary Cloud (XPHB, nivel 8): actúa al entrar, terminar el turno · tapa la vista · concentración
+- Insect Plague (PHB, nivel 5): actúa al entrar, terminar el turno · terreno difícil · tapa la vista · concentración
+- Insect Plague (XPHB, nivel 5): actúa al entrar, terminar el turno · terreno difícil · tapa la vista · concentración
+- Investiture of Flame (XGE, nivel 6): actúa al terminar el turno · concentración
+- Investiture of Ice (XGE, nivel 6): terreno difícil · concentración
+- Jallarzi's Storm of Radiance (XPHB, nivel 5): actúa al entrar, terminar el turno · concentración
+- Lightning Ring (AU, nivel 8): actúa al entrar, terminar el turno · te sigue · concentración
+- Maddening Darkness (XGE, nivel 8): actúa al empezar el turno · tapa la vista · concentración
+- Maelstrom (XGE, nivel 5): actúa al empezar el turno · terreno difícil · concentración
+- Magic Circle (PHB, nivel 3): actúa al entrar
+- Magic Circle (XPHB, nivel 3): actúa al entrar
+- Mold Earth (XGE, truco): terreno difícil
+- Moonbeam (PHB, nivel 2): actúa al entrar, terminar el turno · se mueve · concentración
+- Moonbeam (XPHB, nivel 2): actúa al entrar, terminar el turno · se mueve · concentración
+- Prismatic Wall (PHB, nivel 9): actúa al empezar el turno
+- Prismatic Wall (XPHB, nivel 9): actúa al empezar el turno
+- Ravenous Void (EGW, nivel 9): actúa al entrar, empezar el turno · concentración
+- Sickening Radiance (XGE, nivel 4): actúa al empezar el turno · concentración
+- Silence (PHB, nivel 2): concentración
+- Silence (XPHB, nivel 2): concentración
+- Sleet Storm (PHB, nivel 3): actúa al empezar el turno · terreno difícil · tapa la vista · concentración
+- Sleet Storm (XPHB, nivel 3): actúa al empezar el turno · terreno difícil · tapa la vista · concentración
+- Speak with Plants (XPHB, nivel 3): terreno difícil · te sigue
+- Spellfire Storm (FRHoF, nivel 4): actúa al entrar, terminar el turno · concentración
+- Spike Growth (PHB, nivel 2): terreno difícil · concentración
+- Spike Growth (XPHB, nivel 2): terreno difícil · concentración
+- Spirit Guardians (PHB, nivel 3): actúa al entrar, terminar el turno · te sigue · concentración
+- Spirit Guardians (XPHB, nivel 3): actúa al entrar, terminar el turno · te sigue · concentración
+- Stinking Cloud (PHB, nivel 3): actúa al empezar el turno · tapa la vista · concentración
+- Stinking Cloud (XPHB, nivel 3): actúa al empezar el turno · tapa la vista · concentración
+- Storm Sphere (XGE, nivel 4): actúa al terminar el turno · terreno difícil · concentración
+- Symbol (PHB, nivel 7): actúa al entrar, terminar el turno
+- Symbol (XPHB, nivel 7): actúa al entrar, terminar el turno
+- Transmute Rock (XGE, nivel 5): actúa al terminar el turno
+- Wall of Fire (PHB, nivel 4): actúa al entrar, terminar el turno · concentración
+- Wall of Fire (XPHB, nivel 4): actúa al entrar, terminar el turno · concentración
+- Wall of Light (XGE, nivel 5): actúa al terminar el turno · concentración
+- Wall of Thorns (PHB, nivel 6): actúa al entrar, terminar el turno · concentración
+- Wall of Thorns (XPHB, nivel 6): actúa al entrar, terminar el turno · concentración
+- Wall of Water (XGE, nivel 3): actúa al entrar · terreno difícil · concentración
+- Warding Wind (XGE, nivel 2): terreno difícil · concentración
+- Web (PHB, nivel 2): actúa al entrar, empezar el turno · terreno difícil · concentración
+- Web (XPHB, nivel 2): actúa al entrar, empezar el turno · terreno difícil · tapa la vista · concentración
+- Whirlwind (XGE, nivel 7): actúa al entrar · concentración
+- Wrath of Nature (XGE, nivel 5): terreno difícil · concentración
+- Yolande's Regal Presence (XPHB, nivel 5): actúa al entrar, terminar el turno · te sigue · concentración
+- Zone of Truth (PHB, nivel 2): actúa al entrar, empezar el turno
+- Zone of Truth (XPHB, nivel 2): actúa al entrar, empezar el turno

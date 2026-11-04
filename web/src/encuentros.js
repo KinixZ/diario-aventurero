@@ -164,7 +164,7 @@ var Encuentros = (function(){
   function search(q){ view.q = q; view.hits = q && window.Bestiario ? Bestiario.search(q, 8) : []; var b = box(), hits = b && b.querySelector('.enc-hits'), add = b && b.querySelector('.enc-add'); if (add) { var tmp = document.createElement('div'); tmp.innerHTML = addHtml(full[view.open] || blank()); var nh = tmp.querySelector('.enc-hits'); if (hits) hits.remove(); if (nh) add.querySelector('.row').insertAdjacentElement('afterend', nh); } }
   function addRef(e, ref){
     var base = window.Bestiario && Bestiario.npcOf(ref); if (!base) return;
-    var cnt = parseInt((($('#encCount') || {}).value || '1'), 10) || 1, d = {name:base.name, ac:base.ac, hp:base.hp, hpMax:base.hp, ref:base.ref, initMod:base.initMod, formula:base.formula, binfo:base.binfo, s:base.s, wave:1, hidden:false, img:null};
+    var cnt = parseInt((($('#encCount') || {}).value || '1'), 10) || 1, d = {name:base.name, ac:base.ac, hp:base.hp, hpMax:base.hp, ref:base.ref, initMod:base.initMod, formula:base.formula, binfo:base.binfo, s:base.s, reach:base.reach || 1, wave:1, hidden:false, img:null};
     busy = true; render.force = true; render();
     var img = window.Retratos ? Promise.race([Retratos.monster(ref), new Promise(function(res){ setTimeout(function(){ res(null); }, 4000); })]) : Promise.resolve(null);
     img.then(function(id){ busy = false; if (id) d.img = id; var n = addMany(e, d, cnt); view.q = ''; view.hits = []; render.force = true; put(e); if (n) Sala.toast((n > 1 ? n + ' × ' : '') + base.name + ' en el encuentro.'); }).catch(function(){ busy = false; render(); });

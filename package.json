@@ -16,7 +16,8 @@
     "test": "npm run build && node --check web/dist/all.js && node --test tests/server/*.test.mjs && node tests/web/run.mjs",
     "paquete": "node tools/crear-paquete-diario.mjs",
     "bestiario": "node tools/crear-bestiario.mjs",
-    "test:gl": "node tests/web/gl.pw.mjs && node tests/web/editor.pw.mjs auto && node tests/web/editor.pw.mjs 2d && node tests/web/vision.pw.mjs auto && node tests/web/vision.pw.mjs 2d && node tests/web/luz.pw.mjs auto && node tests/web/luz.pw.mjs 2d && node tests/web/pisos.pw.mjs auto && node tests/web/pisos.pw.mjs 2d && node tests/web/encuentros.pw.mjs auto && node tests/web/encuentros.pw.mjs 2d && node tests/web/combate.pw.mjs auto && node tests/web/combate.pw.mjs 2d"
+    "test:gl": "node tests/web/gl.pw.mjs && node tests/web/editor.pw.mjs auto && node tests/web/editor.pw.mjs 2d && node tests/web/vision.pw.mjs auto && node tests/web/vision.pw.mjs 2d && node tests/web/luz.pw.mjs auto && node tests/web/luz.pw.mjs 2d && node tests/web/pisos.pw.mjs auto && node tests/web/pisos.pw.mjs 2d && node tests/web/encuentros.pw.mjs auto && node tests/web/encuentros.pw.mjs 2d && node tests/web/combate.pw.mjs auto && node tests/web/combate.pw.mjs 2d && node tests/web/tactico.pw.mjs auto && node tests/web/tactico.pw.mjs 2d",
+    "hechizos": "node tools/hechizos.mjs"
   },
   "dependencies": {
     "@fontsource/caveat": "^5.3.0",
@@ -27,6 +28,7 @@
     "esbuild": "^0.28.2",
     "pg": "^8.23.1",
     "pixi.js": "^8.22.0",
+    "three": "^0.170.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
