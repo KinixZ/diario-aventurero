@@ -9,6 +9,8 @@ import { randomBytes, randomInt, scryptSync, timingSafeEqual } from 'node:crypto
 import { createRequire } from 'node:module';
 // el mismo motor de visión que usa el navegador (web/src/vision.cjs): paredes, línea de vista y caminos
 const Vision = createRequire(import.meta.url)('../web/src/vision.cjs');
+// el combate táctico (movimiento, zonas de conjuro, cobertura, concentración) vive en tactico.mjs
+import { installTactico, Tactica } from './tactico.mjs';
 
 export const CONDITIONS = ['blinded', 'charmed', 'deafened', 'exhaustion', 'frightened', 'grappled', 'incapacitated',
   'invisible', 'paralyzed', 'petrified', 'poisoned', 'prone', 'restrained', 'stunned', 'unconscious', 'concentration'];
@@ -31,7 +33,7 @@ export const NPC_HP = ['none', 'state', 'bar', 'pct', 'num']; // lo que ven los 
 const MAPS_MAX = 40, MAP_STROKES_MAX = 6000, MAP_PTS_MAX = 600, MAP_LAYERS_MAX = 8, MAP_TOOLS = ['pen', 'line', 'rect', 'text', 'asset', 'img'];
 const TOKENS_MAX = 120, PLAYER_TOKENS_MAX = 5, TOKEN_KINDS = ['pc', 'npc', 'obj'];
 const WALLS_MAX = 3000, WALL_LINES = ['auto', 'yes', 'no'], DOOR_REACH = 2;
-const TRIG_KINDS = ['paso', 'trampa', 'texto', 'encuentro', 'despliegue'], TRIGS_MAX = 200;
+const TRIG_KINDS = ['paso', 'trampa', 'texto', 'encuentro', 'despliegue', 'dificil'], TRIGS_MAX = 200;
 // estados del mapa: preparación (solo el DM lo ve), exploración (se mueven libres) y combate (despliegue y turnos)
 const MAP_STATES = ['prep', 'explore', 'combat'];
 const ENCS_MAX = 40, ENC_NPCS = 40, ENC_DEPLOY = 12, ENC_WAVES = 8;
@@ -81,6 +83,10 @@ export function cleanChar(c = {}) {
     // sentidos (en pies) para la luz del mapa: visión en la oscuridad y vista ciega
     dv: int(c.dv, 0, 300, 0),
     bs: int(c.bs, 0, 120, 0),
+    // combate táctico: cansancio (nivel 0–6, reglas 2024), salvaciones contra la muerte y alcance cuerpo a cuerpo (casillas)
+    exh: int(c.exh, 0, 6, 0),
+    ds: c.ds && typeof c.ds === 'object' ? { s: int(c.ds.s, 0, 3, 0), f: int(c.ds.f, 0, 3, 0), stable: !!c.ds.stable, dead: !!c.ds.dead } : null,
+    reach: int(c.reach, 1, 6, 1),
   };
 }
 const IMG_ID_RE = /^[\w-]{1,30}$/;
@@ -123,7 +129,8 @@ export class Campaigns {
       live: false, session: { n: 0, title: '', started: null, ended: null }, beasts: [], autoBeasts: true, amb: null,
       split: false, fights: {}, // combates separados por mapa: {mapa: {cur, round}}
       encs: [], runs: {}, // encuentros preparados y los que están en curso (por mapa; '_' el que no tiene mapa)
-      acts: [], fightN: 0 }; // tarjetas de acción (las últimas) y el número del combate en curso
+      acts: [], fightN: 0, // tarjetas de acción (las últimas) y el número del combate en curso
+      mv: {}, effs: [], concs: {} }; // movimiento gastado por ficha en su ronda, estados con salvación repetida y quién se concentra
   }
 
   /* El DM crea la campaña: queda guardada de inmediato */
@@ -208,7 +215,7 @@ export class Campaigns {
       members: [...c.members.values()].map((m) => ({ id: m.id, token: m.token, role: m.role, name: m.name, init: m.init, char: m.char, seen: m.seen, at: m.at || null })),
       npcs: [...c.npcs.values()], order: c.order, turn: c.turn, round: c.round, log: c.log, chat: c.chat, board: c.board, strokes: c.strokes, pages: c.pages,
       maps: [...c.maps.values()].map((mp) => ({ ...mp, fog: { on: mp.fog.on, cells: mp.fog.cells.toString('base64') } })), scene: c.scene,
-      images: [...c.images.values()], beasts: c.beasts, autoBeasts: c.autoBeasts, amb: c.amb || null, split: c.split, fights: c.fights, encs: c.encs, runs: c.runs, acts: c.acts, fightN: c.fightN };
+      images: [...c.images.values()], beasts: c.beasts, autoBeasts: c.autoBeasts, amb: c.amb || null, split: c.split, fights: c.fights, encs: c.encs, runs: c.runs, acts: c.acts, fightN: c.fightN, effs: c.effs, concs: c.concs };
   }
   fromDoc(d) {
     const c = this.blank(str(d.code, 8), d.name, d.dmHash);
@@ -229,6 +236,8 @@ export class Campaigns {
     for (const mp of c.maps.values()) { mp.trig = Array.isArray(mp.trig) ? mp.trig : []; mp.state = stateOf(mp); mp.hidden = mp.state === 'prep'; mp.frozen = !!mp.frozen; mp.turnOnly = mp.turnOnly !== false; delete mp.enc; }
     c.encs = (Array.isArray(d.encs) ? d.encs : []).slice(0, ENCS_MAX).map((e) => { const o = cleanEnc(e, c); if (o) o.updated = Number(e.updated) || 0; return o; }).filter(Boolean);
     c.acts = Array.isArray(d.acts) ? d.acts.slice(-ACTS_MAX) : []; c.fightN = int(d.fightN, 0, 1e6, 0);
+    c.effs = Array.isArray(d.effs) ? d.effs.slice(-100) : []; c.concs = d.concs && typeof d.concs === 'object' ? d.concs : {};
+    for (const mp of c.maps.values()) { mp.fx = Array.isArray(mp.fx) ? mp.fx.slice(-30) : []; if (mp.tac && typeof mp.tac !== 'object') delete mp.tac; }
     c.runs = {};
     if (d.runs && typeof d.runs === 'object') for (const [k, r] of Object.entries(d.runs).slice(0, MAPS_MAX + 1)) { const run = cleanRun(r, c); if (run && (k === '_' ? !run.map : run.map === k)) c.runs[k] = run; }
     c.dirty = false;
@@ -278,7 +287,13 @@ export class Campaigns {
     const toAll = (m, filter) => { for (const mm of c.members.values()) if (!filter || filter(mm)) out.push({ to: mm.id, msg: m }); };
     if (msg.t === 'map.get' || msg.t === 'beast.get' || msg.t === 'map.ping') c.touched = this.now(); else this.touch(c);
     switch (msg.t) {
-      case 'char': if (!isDm) me.char = cleanChar(msg.char); break;
+      case 'char': {
+        if (isDm) break;
+        const was = me.char && me.char.conc; me.char = cleanChar(msg.char);
+        // dejó de concentrarse en su hoja: sus zonas y los estados de su conjuro se acaban
+        if (was && !me.char.conc) this.endConc(c, me.id, out, { fromSheet: true });
+        break;
+      }
       /* ---------- Campaña y sesión ---------- */
       case 'camp.name': dmOnly(); { const n = str(msg.name, 60); if (!n) throw err('empty', 'Ponle nombre a la campaña.'); c.name = n; } break;
       case 'camp.key': dmOnly(); c.dmHash = hashKey(cleanKey(msg.key)); this.log(c, 'El DM cambió su clave'); break;
@@ -352,7 +367,7 @@ export class Campaigns {
           const n = { id: 'n' + id(4), name: (str(msg.name, 40) || 'Enemigo') + (count > 1 ? ' ' + (i + 1) : ''), ac: int(msg.ac, 0, 40, 12), hp: hpMax, hpMax, temp: 0, init: msg.init == null || msg.init === '' ? null : int(msg.init, -10, 50, 0), conds: [], hidden: !!msg.hidden,
             ref: msg.ref ? str(msg.ref, 120) : null, initMod: int(msg.initMod, -10, 20, 0), formula: msg.formula ? str(msg.formula, 30) : null,
             binfo: msg.binfo && typeof msg.binfo === 'object' ? { type: str(msg.binfo.type, 40), size: str(msg.binfo.size, 40) } : null,
-            img: msg.img && c.images.has(str(msg.img, 30)) ? str(msg.img, 30) : null };
+            img: msg.img && c.images.has(str(msg.img, 30)) ? str(msg.img, 30) : null, reach: int(msg.reach, 1, 6, 1) };
           if (msg.map && c.maps.has(str(msg.map, 24))) n.at = str(msg.map, 24);
           c.npcs.set(n.id, n);
           if (!n.hidden && i === 0) this.autoBeast(c, n);
@@ -430,6 +445,8 @@ export class Campaigns {
         if (!isDm && cur !== me.id) throw err('not_your_turn', 'Solo el DM o quien tiene el turno puede pasarlo.');
         if (!isDm && c.turn < 0) throw err('dm_only', 'El DM empieza el combate.');
         const r0 = c.round;
+        // al terminar su turno: zonas que dañan al terminar ahí y salvaciones que se repiten
+        if (r0 > 0 && msg.dir !== 'prev' && msg.dir !== 'start') this.turnEnd(c, cur, out);
         if (msg.dir === 'start' || c.turn < 0) { c.turn = 0; c.round = 1; }
         else if (msg.dir === 'prev') { c.turn -= 1; if (c.turn < 0) { c.turn = c.order.length - 1; c.round = Math.max(1, c.round - 1); } }
         else { c.turn += 1; if (c.turn >= c.order.length) { c.turn = 0; c.round += 1; } }
@@ -437,6 +454,7 @@ export class Campaigns {
         if (c.round > r0) this.wavesDue(c, null, c.round, out);
         this.log(c, `Ronda ${c.round}: turno de ${this.nameOf(c, c.order[c.turn])}`, c.npcs.get(c.order[c.turn])?.hidden ? `Ronda ${c.round}` : null);
         out.push({ to: c.order[c.turn], msg: { t: 'yourturn', round: c.round } });
+        if (msg.dir !== 'prev') this.turnStart(c, c.order[c.turn], out);
         break;
       }
       case 'end': dmOnly('Solo el DM termina el combate.');
@@ -540,15 +558,26 @@ export class Campaigns {
         if (isDm) { const n = c.npcs.get(str(a.actor, 20)); actor = n ? { id: n.id, name: n.name, kind: 'npc', img: n.img || null, ty: n.binfo ? n.binfo.type : null } : { id: null, name: str(a.name, 40) || 'DM', kind: 'dm' }; }
         else { const nm = (me.char && me.char.name) || me.name, comp = str(a.comp, 40); actor = { id: me.id, name: comp || nm, kind: 'pc', img: comp ? null : (me.char && (me.char.tok || me.char.img)) || null }; if (comp) actor.of = nm; }
         const card = { id: 'a' + id(5), at: this.now(), f: c.fightN, round: c.round, by: me.id, actor, title: str(a.title, 60) || 'Acción', text: txt(a.text, 500) };
+        // dados físicos: el jugador escribe lo que sacó (el d20, y el total de cada parte del daño)
+        const man = a.man && typeof a.man === 'object' ? a.man : null;
+        if (man) card.man = true;
         if (a.atk && typeof a.atk === 'object') {
-          const bonus = int(a.atk.bonus, -10, 30, 0), r = d20(a.atk.k), crit = r.d >= int(a.atk.critOn, 15, 20, 20);
-          card.atk = { k: a.atk.k === 'adv' || a.atk.k === 'dis' ? a.atk.k : null, dice: r.dice, nat: r.d, bonus, total: r.d + bonus, crit, fumble: r.d === 1 };
+          const bonus = int(a.atk.bonus, -10, 30, 0), k = a.atk.k === 'adv' || a.atk.k === 'dis' ? a.atk.k : null;
+          let r = d20(k);
+          if (man && Array.isArray(man.d20) && man.d20.length) { const v = man.d20.slice(0, k ? 2 : 1).map((x) => int(x, 1, 20, 10)); r = { d: k === 'adv' ? Math.max(...v) : k === 'dis' ? Math.min(...v) : v[0], dice: v }; }
+          const crit = r.d >= int(a.atk.critOn, 15, 20, 20);
+          card.atk = { k, dice: r.dice, nat: r.d, bonus, total: r.d + bonus, crit, fumble: r.d === 1 };
+          if (a.atk.melee) card.atk.melee = true;
         }
         if (a.save && typeof a.save === 'object') card.save = { ab: SAVE_ABS.includes(a.save.ab) ? a.save.ab : 'dex', dc: int(a.save.dc, 1, 40, 10), half: a.save.half !== false };
-        const dm = (Array.isArray(a.dmg) ? a.dmg : []).slice(0, 4).map((d) => { const r = rollDice(d && d.dice, card.atk && card.atk.crit); return r ? { dice: r.expr, type: DMG_TYPES.includes(d.type) ? d.type : '', rolls: r.rolls, total: r.total } : null; }).filter(Boolean);
-        if (dm.length) { card.dmg = dm; card.amt = dm.reduce((s, d) => s + d.total, 0); }
         if (a.heal) card.heal = true;
-        if (!card.atk && !card.dmg && !card.save && !card.text && !str(a.title, 60)) throw err('empty', 'Escribe qué haces o elige una acción.');
+        // estados que impone (al fallar la salvación o al impactar), si se repite la salvación y si pide concentración
+        const conds = (Array.isArray(a.conds) ? a.conds : []).filter((k) => CONDITIONS.includes(k) && k !== 'concentration').slice(0, 4);
+        if (conds.length) card.conds = conds;
+        if (a.repeat && card.save && conds.length) card.repeat = true;
+        if (a.conc) card.conc = true;
+        const hasDmg = Array.isArray(a.dmg) && a.dmg.length;
+        if (!card.atk && !hasDmg && !card.save && !card.text && !str(a.title, 60) && !conds.length) throw err('empty', 'Escribe qué haces o elige una acción.');
         // objetivos: enemigos y personajes del combate; con ataque, ¿impacta? (un 20 siempre, un 1 nunca)
         const seen = new Set();
         card.targets = (Array.isArray(a.targets) ? a.targets : []).slice(0, 12).map((x) => {
@@ -559,10 +588,25 @@ export class Campaigns {
           if (card.atk) t.hit = card.atk.crit || (!card.atk.fumble && (t.ac == null || card.atk.total >= t.ac));
           return t;
         }).filter(Boolean);
+        // en el mapa: de dónde sale, el área y la cobertura de cada objetivo (con las paredes)
+        const mp = a.map ? c.maps.get(str(a.map, 24)) : null;
+        const at = mp && this.canSeeMap(c, mp, me) ? this.mapAct(c, mp, card, a) : null;
+        // contra un paralizado o inconsciente a 1,5 m, todo impacto es crítico
+        if (card.atk && a.atk.autoCrit && !card.atk.crit && card.targets.some((t) => t.hit)) { card.atk.crit = true; card.atk.auto = true; }
+        const dm = (hasDmg ? a.dmg : []).slice(0, 4).map((d, i) => {
+          const r = rollDice(d && d.dice, card.atk && card.atk.crit); if (!r) return null;
+          const o = { dice: r.expr, type: DMG_TYPES.includes(d.type) ? d.type : '', rolls: r.rolls, total: r.total };
+          if (man && Array.isArray(man.dmg) && man.dmg[i] != null && man.dmg[i] !== '') { o.total = int(man.dmg[i], 0, 999, r.total); o.rolls = []; }
+          return o;
+        }).filter(Boolean);
+        if (dm.length) { card.dmg = dm; card.amt = dm.reduce((s, d) => s + d.total, 0); card.dtype = dm[0].type; }
         c.acts.push(card); if (c.acts.length > ACTS_MAX) c.acts.splice(0, c.acts.length - ACTS_MAX);
-        const tn = card.targets.map((t) => t.name + (card.atk ? (t.hit ? ' (impacta)' : ' (falla)') : '')).join(', ');
+        const hid = actor.kind === 'npc' && c.npcs.get(actor.id).hidden;
+        if (card.conc) card.ck = this.startConc(c, card, out);
+        if (mp && a.zone && this.canSeeMap(c, mp, me)) { const z = this.addZone(c, mp, card, a, at, card.ck || this.casterKey(card), hid, out); if (z) card.fx = z.id; }
+        const tn = card.targets.map((t) => t.name + (card.atk ? (t.hit ? ' (impacta)' : ' (falla)') : '') + (t.cover === 'total' ? ' (cobertura total)' : '')).join(', ');
         const line = `${actor.name}: ${card.title}${card.atk ? ` · ataque ${card.atk.total}${card.atk.crit ? ' ¡crítico!' : ''}` : ''}${card.save ? ` · salvación de ${AB_ES[card.save.ab]} CD ${card.save.dc}` : ''}${tn ? ' → ' + tn : ''}`;
-        if (!(actor.kind === 'npc' && c.npcs.get(actor.id).hidden)) this.log(c, line); else this.log(c, line, '');
+        if (!hid) this.log(c, line); else this.log(c, line, '');
         this.sendCard(c, card, out);
         break;
       }
@@ -584,6 +628,8 @@ export class Campaigns {
         const what = card.heal ? `recupera ${amount} PG` : amount ? `recibe ${amount} de daño` : 'no recibe daño';
         this.log(c, `${t.name} ${what} (${card.title})`, t.kind === 'npc' && npcHidden(c) && amount ? `${t.name} ${card.heal ? 'se cura' : 'recibe daño'} (${card.title})` : null);
         this.sendCard(c, card, out);
+        // si se estaba concentrando, salvación de Constitución
+        if (kind === 'damage' && amount > 0) this.concCheck(c, t, amount, out);
         break;
       }
       case 'act.save': {
@@ -591,12 +637,21 @@ export class Campaigns {
         const t = (card.targets || []).find((x) => x.id === str(msg.tid, 20)); if (!t) throw err('no_target', 'No era objetivo de esa acción.');
         if (t.kind === 'npc' ? !isDm : me.id !== t.id) throw err('not_yours', 'Cada quien tira su salvación (el DM, la de los enemigos).');
         if (t.sv) throw err('done', 'Ya tiró su salvación.');
-        const mod = int(msg.mod, -10, 30, 0), r = d20(msg.k);
-        t.sv = { dice: r.dice, k: msg.k === 'adv' || msg.k === 'dis' ? msg.k : null, nat: r.d, mod, total: r.d + mod, ok: r.d !== 1 && (r.d === 20 || r.d + mod >= card.save.dc) };
-        this.log(c, `${t.name} tira salvación de ${AB_ES[card.save.ab]}: ${t.sv.total} (${t.sv.ok ? 'la supera' : 'falla'})`);
+        const k = msg.k === 'adv' || msg.k === 'dis' ? msg.k : null;
+        // la cobertura suma a las salvaciones de Destreza; con dados físicos llega lo que sacó
+        const cov = card.save.ab === 'dex' && typeof t.cover === 'number' ? t.cover : 0, mod = int(msg.mod, -20, 30, 0) + cov;
+        let r = d20(k);
+        if (msg.man != null) { const v = [].concat(msg.man).slice(0, k ? 2 : 1).map((x) => int(x, 1, 20, 10)); r = { d: k === 'adv' ? Math.max(...v) : k === 'dis' ? Math.min(...v) : v[0], dice: v }; }
+        t.sv = { dice: r.dice, k, nat: r.d, mod, total: r.d + mod, ok: !msg.fail && r.d !== 1 && (r.d === 20 || r.d + mod >= card.save.dc) };
+        if (cov) t.sv.cov = cov; if (msg.fail) t.sv.auto = true; if (msg.man != null) t.sv.man = true;
+        this.log(c, `${t.name} tira salvación de ${AB_ES[card.save.ab]}: ${t.sv.total} (${t.sv.ok ? 'la supera' : 'falla'})`, card.hid ? '' : null);
         this.sendCard(c, card, out);
+        // la salvación que se repite: la supera y se libra; la de concentración: la falla y la pierde
+        if (card.eff && t.sv.ok) this.dropEff(c, card.eff, out);
+        if (card.concChk && !t.sv.ok) this.endConc(c, t.id, out);
         break;
       }
+      case 'map.tac': case 'mv.set': case 'fx.rm': case 'fx.move': case 'act.cond': case 'death': this.tactic(c, me, msg, out); break;
       case 'act.del': {
         const card = c.acts.find((x) => x.id === str(msg.id, 20)); if (!card) { out.quiet = true; break; }
         if (!isDm && card.by !== me.id) throw err('not_yours', 'Solo quien la publicó (o el DM) la quita.');
@@ -616,6 +671,7 @@ export class Campaigns {
         // el estado del mapa sigue (salvo que el DM lo oculte o lo muestre al reemplazarlo)
         mp.state = mp.hidden ? 'prep' : old && stateOf(old) === 'combat' ? 'combat' : 'explore';
         mp.frozen = !!(old && old.frozen); mp.turnOnly = !old || old.turnOnly !== false;
+        mp.fx = old && old.fx ? old.fx : []; if (old && old.tac) mp.tac = old.tac;
         mp.updated = this.now(); c.maps.set(mp.id, mp);
         this.sendMap(c, mp, out);
         break;
@@ -843,7 +899,7 @@ export class Campaigns {
         const t = mp.tokens.find((x) => x.id === str(msg.tid, 20)); if (!t) throw err('no_target', 'Esa ficha ya no está.');
         if (!isDm && t.by !== me.id && t.ref !== me.id) throw err('not_yours', 'Solo puedes mover tus fichas; el DM mueve todas.');
         const wasHidden = t.hidden, ox = t.x, oy = t.y;
-        let from = null, cells = null;
+        let from = null, cells = null, path = null, mvt = false, follow = [];
         const bounce = (code, text) => {
           out.push({ to: me.id, msg: { t: 'tok', id: mp.id, tok: t, updated: mp.updated } });
           out.push({ to: me.id, msg: { t: 'error', code, msg: text, on: 'tok.move' } });
@@ -861,13 +917,15 @@ export class Campaigns {
             out.quiet = !this.place(c, mp, t);
             break;
           }
-          // las paredes no dejan pasar: el jugador rodea si hay por dónde; si no, la ficha vuelve a su lugar (el DM pasa por donde sea)
-          if (mp.walls.length) {
-            const r = Vision.route(mp, t, nx, ny);
-            if (!r.ok && !isDm) { bounce('blocked', 'Hay una pared en medio: por ahí no se llega.'); break; }
-            if (r.ok) cells = r.cells || null;
-            from = r.ok ? Vision.center(t) : null;
+          // las paredes no dejan pasar: el jugador rodea si hay por dónde; si no, la ficha vuelve a su lugar (el DM pasa por donde sea).
+          // En pleno combate cada personaje gasta su velocidad (el terreno difícil cuesta el doble).
+          const lim = this.moveLimited(c, mp, t, isDm);
+          if (lim || mp.walls.length || Tactica.rough(mp)) {
+            const w = this.walkFor(c, mp, t, nx, ny, lim);
+            if (w.err && !isDm) { bounce(w.err[0], w.err[1]); break; }
+            if (!w.err) { cells = w.cells && w.cells.length > 2 ? w.cells : null; path = w.cells; if (w.mv) { w.mv.u += w.cost; mvt = true; } from = Vision.center(t); }
           } else from = Vision.center(t);
+          follow = (mp.fx || []).filter((z) => z.tok === t.id).map((z) => [z, this.inZoneNow(mp, z)]);
           t.x = nx; t.y = ny;
         }
         else {
@@ -879,13 +937,22 @@ export class Campaigns {
           if (msg.ref !== undefined && isDm) t.ref = msg.ref ? str(msg.ref, 20) : null;
           if (msg.lt !== undefined) { const lt = cleanLight(msg.lt); if (lt && !lt.off) t.lt = lt; else delete t.lt; }
           if (msg.sn !== undefined) { const sn = cleanSenses(msg.sn); if (sn) t.sn = sn; else delete t.sn; }
+          if (msg.z !== undefined) { const z = int(msg.z, 0, 60, 0); if (z) t.z = z; else delete t.z; }
           if (msg.lt !== undefined || msg.sn !== undefined || msg.hidden != null) cells = 'all';
         }
         mp.updated = this.now();
         this.sendTok(c, mp, t, out, wasHidden);
         if (cells === 'all') this.explore(c, mp, out); else this.explore(c, mp, out, [t], from, cells);
         let moved = false;
-        if (msg.t === 'tok.move') { moved = this.place(c, mp, t); this.zonesFire(c, mp, t, ox, oy, Array.isArray(cells) ? cells : null, isDm, out); }
+        if (msg.t === 'tok.move') {
+          moved = this.place(c, mp, t); this.zonesFire(c, mp, t, ox, oy, Array.isArray(cells) ? cells : null, isDm, out);
+          // combate táctico: movimiento gastado, ataques de oportunidad y zonas de conjuro
+          const pth = path || Tactica.line(ox, oy, t.x, t.y);
+          if (mvt) this.sendMv(c, mp, t, out);
+          this.oaCheck(c, mp, t, pth, out);
+          this.fxEnter(c, mp, t, ox, oy, pth, out);
+          for (const [z, before] of follow) { this.sendFx(c, mp, out, [z], []); this.fxSwept(c, mp, z, before, out); }
+        }
         out.quiet = !moved && !out.state;
         break;
       }
@@ -1021,6 +1088,7 @@ export class Campaigns {
      Con la vida de los enemigos oculta (nada o cómo se ve), el daño que reciben los enemigos no se ve (salvo quien lo hizo). */
   cardFor(c, card, mm) {
     if (mm.role === 'dm') return card;
+    if (card.hid) return null;
     if (card.actor.kind === 'npc') { const n = c.npcs.get(card.actor.id); if (n && n.hidden) return null; }
     const hide = npcHidden(c) && card.by !== mm.id;
     const o = { ...card, targets: (card.targets || []).filter((t) => t.kind !== 'npc' || !(c.npcs.get(t.id) || {}).hidden).map((t) => { const x = { ...t }; if (t.kind === 'npc') { delete x.ac; if (hide) delete x.amt; } return x; }) };
@@ -1037,7 +1105,7 @@ export class Campaigns {
     const dm = mm.role === 'dm';
     const secret = new Set(mp.layers.filter((l) => l.dm).map((l) => l.id));
     return { id: mp.id, name: mp.name, cols: mp.cols, rows: mp.rows, grid: mp.grid, by: mp.by, created: mp.created, updated: mp.updated, hidden: !!mp.hidden, state: stateOf(mp), frozen: !!mp.frozen, turnOnly: mp.turnOnly !== false, bg: mp.bg || null, fog: fogOut(mp),
-      walls: dm ? mp.walls : mp.walls.map(Vision.forPlayer), vis: mp.vis, wrev: mp.wrev || 0, light: mp.light, trig: this.trigsFor(mp, mm),
+      walls: dm ? mp.walls : mp.walls.map(Vision.forPlayer), vis: mp.vis, wrev: mp.wrev || 0, light: mp.light, trig: this.trigsFor(mp, mm), tac: mp.tac || null, fx: this.fxFor(mp, mm),
       layers: dm ? mp.layers : mp.layers.filter((l) => !l.dm), strokes: dm ? mp.strokes : mp.strokes.filter((k) => !secret.has(k.l)), tokens: dm ? mp.tokens : mp.tokens.filter((t) => !t.hidden) };
   }
   sendMap(c, mp, out, filter) { for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm) && (!filter || filter(mm))) out.push({ to: mm.id, msg: { t: 'map', map: this.mapView(mp, mm) } }); }
@@ -1056,6 +1124,7 @@ export class Campaigns {
   trigForPlayer(mp, z) {
     const o = { id: z.id, k: z.k, x: z.x, y: z.y, w: z.w, h: z.h, name: z.name };
     if (z.k === 'despliegue') { if (z.for) o.for = z.for; return o; }
+    if (z.k === 'dificil') return o;
     if (z.lock) o.lock = true; if (z.to) o.to = { map: z.to.map, name: z.toName || '' }; return o;
   }
   sendTrigs(c, mp, out, put, del, wasVis) {
@@ -1083,7 +1152,7 @@ export class Campaigns {
     const dms = [...c.members.values()].filter((m) => m.role === 'dm'), fired = [];
     const onMap = () => this.onMap(c, mp);
     for (const z of hit.values()) {
-      if (z.k === 'despliegue') continue;
+      if (z.k === 'despliegue' || z.k === 'dificil') continue;
       if (z.k === 'paso') {
         if (!isDm && fin.has(z.id) && z.to && owner && owner.role !== 'dm') out.push({ to: owner.id, msg: { t: 'trig', id: mp.id, k: 'paso', zid: z.id, name: z.name, to: { map: z.to.map, name: (c.maps.get(z.to.map) || {}).name || '' }, lock: !!z.lock } });
         continue;
@@ -1177,7 +1246,7 @@ export class Campaigns {
     this.sendPlay(c, mp, out);
     out.state = true;
   }
-  sendPlay(c, mp, out) { for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm)) out.push({ to: mm.id, msg: { t: 'map.play', id: mp.id, state: stateOf(mp), frozen: !!mp.frozen, turnOnly: mp.turnOnly !== false, updated: mp.updated } }); }
+  sendPlay(c, mp, out) { for (const mm of c.members.values()) if (this.canSeeMap(c, mp, mm)) out.push({ to: mm.id, msg: { t: 'map.play', id: mp.id, state: stateOf(mp), frozen: !!mp.frozen, turnOnly: mp.turnOnly !== false, tac: mp.tac || null, updated: mp.updated } }); }
   /* Quita las zonas de despliegue (al empezar o terminar el combate) */
   dropDeploy(c, mp, out) {
     const del = (mp.trig || []).filter((z) => z.k === 'despliegue').map((z) => z.id); if (!del.length) return;
@@ -1236,7 +1305,7 @@ export class Campaigns {
     const dm = [...c.members.values()].find((m) => m.role === 'dm'), used = mp ? occupied(mp) : null, made = [];
     for (const d of defs) {
       if (c.npcs.size >= MAX_NPCS) break;
-      const n = { id: 'n' + id(4), name: d.name, ac: d.ac, hp: d.hp, hpMax: d.hpMax, temp: 0, init: null, conds: [], hidden: !!d.hidden, ref: d.ref || null, initMod: d.initMod || 0, formula: d.formula || null, binfo: d.binfo || null, img: d.img && c.images.has(d.img) ? d.img : null, enc: encId };
+      const n = { id: 'n' + id(4), name: d.name, ac: d.ac, hp: d.hp, hpMax: d.hpMax, temp: 0, init: null, conds: [], hidden: !!d.hidden, ref: d.ref || null, initMod: d.initMod || 0, formula: d.formula || null, binfo: d.binfo || null, img: d.img && c.images.has(d.img) ? d.img : null, enc: encId, reach: d.reach || 1 };
       if (mp) n.at = mp.id;
       if (rollNow) n.init = Math.max(-10, Math.min(50, d20().d + n.initMod)); // refuerzos con el combate ya empezado: entran al orden
       c.npcs.set(n.id, n); if (!n.hidden) this.autoBeast(c, n);
@@ -1313,6 +1382,7 @@ export class Campaigns {
     if (!isDm && F.cur !== me.id) throw err('not_your_turn', 'Solo el DM o quien tiene el turno puede pasarlo.');
     if (!isDm && !F.round) throw err('dm_only', 'El DM empieza el combate.');
     let i = ord.indexOf(F.cur); const r0 = F.round;
+    if (r0 > 0 && msg.dir !== 'prev' && msg.dir !== 'start' && F.cur) this.turnEnd(c, F.cur, out);
     if (msg.dir === 'start' || !F.round) { i = 0; F.round = Math.max(1, F.round); }
     else if (i < 0) i = 0;
     else if (msg.dir === 'prev') { i -= 1; if (i < 0) { i = ord.length - 1; F.round = Math.max(1, F.round - 1); } }
@@ -1323,6 +1393,7 @@ export class Campaigns {
     const mp = c.maps.get(key);
     this.log(c, `${mp ? mp.name + ' · ' : ''}Ronda ${F.round}: turno de ${this.nameOf(c, F.cur)}`, c.npcs.get(F.cur)?.hidden ? `${mp ? mp.name + ' · ' : ''}Ronda ${F.round}` : null);
     out.push({ to: F.cur, msg: { t: 'yourturn', round: F.round } });
+    if (msg.dir !== 'prev') this.turnStart(c, F.cur, out);
   }
   /* Dónde está cada quien (para separar el combate por mapa): el mapa donde está su ficha; si no, la escena */
   locOf(c, cid) { const m = c.members.get(cid); if (m) return m.at && c.maps.has(m.at) ? m.at : c.scene || null; const n = c.npcs.get(cid); return n ? (n.at && c.maps.has(n.at) ? n.at : c.scene || null) : null; }
@@ -1397,7 +1468,7 @@ export class Campaigns {
     const beasts = c.beasts.filter((b) => dm || !b.hidden).map((b) => ({ id: b.id, name: b.name, kind: b.kind, img: b.img, info: b.info, hasStat: !!b.stat, ref: dm || b.manual ? b.ref : undefined, manual: !!(b.manual && b.ref), hidden: !!b.hidden, auto: !!b.auto, seen: b.seen, ses: b.ses, notes: b.notes.length }));
     return { code: c.code, name: c.name, you: forId, role: me ? me.role : null, live: c.live, session: c.session, members, npcs, npcHp: c.npcHp, maps, scene: c.scene && (dm || !c.maps.get(c.scene)?.hidden) ? c.scene : null, board: c.board, pages: c.pages.length,
       beasts, autoBeasts: c.autoBeasts, amb: c.amb || null, order: ord.filter(x => dm || !c.npcs.get(x)?.hidden), turnId: c.split ? F.cur : c.order[c.turn] || null, round: c.split ? F.round : c.round, hidePc: c.hidePc, log: dm ? c.log.slice(-25) : c.log.slice(-25).filter((l) => l.p !== '').map((l) => (l.p ? { at: l.at, text: l.p } : { at: l.at, text: l.text })), fightN: c.fightN,
-      split: c.split, fight: key, fights, encs, runs };
+      split: c.split, fight: key, fights, encs, runs, mv: this.mvView(c, forId) };
   }
   /* Lo que se ve de una campaña en el selector, sin entrar */
   peek(c) { return { code: c.code, name: c.name, live: c.live, session: c.session.n, title: c.session.title, online: this.online(c), players: [...c.members.values()].filter((m) => m.role === 'player').length }; }
@@ -1405,7 +1476,7 @@ export class Campaigns {
 
 /* Lo que ven los jugadores de un enemigo según lo que eligió el DM */
 function npcForPlayers(n, mode) {
-  const o = { id: n.id, name: n.name, init: n.init, conds: n.conds, show: mode, img: n.img || null, ty: n.binfo ? n.binfo.type : null };
+  const o = { id: n.id, name: n.name, init: n.init, conds: n.conds, show: mode, img: n.img || null, ty: n.binfo ? n.binfo.type : null, conc: n.conc || null };
   if (mode === 'state') o.state = hpState(n);
   else if (mode === 'bar' || mode === 'pct') { o.pct = n.hp <= 0 ? 0 : Math.max(1, Math.round(n.hp / n.hpMax * 100)); o.state = n.hp <= 0 ? 'caído' : null; }
   else if (mode === 'num') { o.hp = n.hp; o.hpMax = n.hpMax; o.temp = n.temp; o.state = n.hp <= 0 ? 'caído' : null; }
@@ -1450,6 +1521,7 @@ function cleanToken(t, mp, c, me) {
   if (kind === 'npc' && t.ref && c.npcs.has(str(t.ref, 20))) o.ref = str(t.ref, 20);
   const lt = cleanLight(t.lt); if (lt && !lt.off) o.lt = lt;
   const sn = cleanSenses(t.sn); if (sn) o.sn = sn;
+  const z = int(t.z, 0, 60, 0); if (z) o.z = z; // volando: altura en casillas (1,5 m cada una)
   return o;
 }
 function cleanMap(m, by, isDm, c) {
@@ -1532,7 +1604,7 @@ function rollDice(expr, crit) {
 /* ---------- Estados, despliegue y encuentros ---------- */
 function stateOf(mp) { return MAP_STATES.includes(mp.state) ? mp.state : mp.hidden ? 'prep' : 'explore'; }
 /* Las zonas que ven los jugadores: los pasos visibles y las de despliegue */
-function forPlayers(z) { return !!z && ((z.k === 'paso' && !z.hidden) || z.k === 'despliegue'); }
+function forPlayers(z) { return !!z && ((z.k === 'paso' && !z.hidden) || z.k === 'despliegue' || z.k === 'dificil'); }
 /* 1d20 (con ventaja o desventaja) */
 function d20(kind) {
   const a = randomInt(1, 21), b = randomInt(1, 21);
@@ -1585,7 +1657,7 @@ function cleanEncNpc(x, mp, c, W) {
   const o = { k: /^[\w-]{1,12}$/.test(x.k || '') ? x.k : id(3), name: str(x.name, 40) || 'Enemigo', ac: int(x.ac, 0, 40, 12), hp: int(x.hp, 0, hpMax, hpMax), hpMax,
     ref: x.ref ? str(x.ref, 120) : null, initMod: int(x.initMod, -10, 20, 0), formula: x.formula ? str(x.formula, 30) : null, wave: W && W.has(wave) ? wave : 1, hidden: !!x.hidden,
     s: int(x.s, 1, 6, 1), color: COLOR_RE.test(x.color) ? x.color : '#8c2626', img: x.img && c.images.has(str(x.img, 30)) ? str(x.img, 30) : null,
-    binfo: x.binfo && typeof x.binfo === 'object' ? { type: str(x.binfo.type, 40), size: str(x.binfo.size, 40) } : null };
+    binfo: x.binfo && typeof x.binfo === 'object' ? { type: str(x.binfo.type, 40), size: str(x.binfo.size, 40) } : null, reach: int(x.reach, 1, 6, 1) };
   if (mp && x.x != null && x.y != null && Number.isFinite(Number(x.x)) && Number.isFinite(Number(x.y))) { o.x = num(x.x, 0, Math.max(0, mp.cols - o.s), 0); o.y = num(x.y, 0, Math.max(0, mp.rows - o.s), 0); }
   return o;
 }
@@ -1666,3 +1738,6 @@ export function hpState(n) {
 }
 
 export function err(code, message) { const e = new Error(message); e.code = code; return e; }
+
+/* El combate táctico (server/tactico.mjs) se monta sobre la clase con estas herramientas */
+installTactico(Campaigns.prototype, { str, int, num, err, d20, rollDice, id, applyTo, CONDITIONS, COND_ES, AB_ES, DMG_TYPES, SAVE_ABS, stateOf });

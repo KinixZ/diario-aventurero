@@ -43,6 +43,7 @@ El servidor gratis se duerme tras 15 minutos sin uso: la primera vez que lo abra
 - **Vida de los enemigos a elección del DM**: los jugadores ven nada, cómo se ve («herido»), solo la barra, la barra con porcentaje o los números.
 - **Combate sin mapa (escena del turno)**: en Combate → Orden, la cinta de iniciativa con retratos, el turno en grande (retrato, vida, estados, quién sigue) y lo que va pasando en tarjetas. Cada quien publica su acción: el jugador elige su arma o su conjuro (con su ataque o su CD y los dados ya puestos; los trucos crecen con el nivel y con un espacio mayor sube el daño, que se gasta en su hoja) y el DM las acciones de su monstruo sacadas del Manual (o algo libre). Los dados se tiran en el servidor; la tarjeta dice si impacta contra la CA de cada objetivo, cada quien tira su salvación y aplica el daño con un toque (completo, mitad o nada; a un personaje lo aplica su jugador en su hoja). Si la vida de los enemigos está oculta, el daño que reciben tampoco se ve en el registro. También se abre desde el mapa y desde cada arma en Mi turno.
 - **Estados del mapa**: el DM pone cada mapa en *Preparación* (solo él lo ve), *Exploración* (cada quien mueve su ficha, con paredes, visión y zonas) o *Combate* (el grupo se acomoda, tira iniciativa y cada quien se mueve en su turno). Puede congelar el movimiento en cualquier momento. Dibujar y Escena son herramientas que se abren encima, sin dejar de jugar.
+- **Combate táctico en el mapa**: cada personaje gasta su velocidad en la ronda (el terreno difícil cuesta el doble; Correr, Retirarse y levantarse), la regla avisa el costo y quién te haría un ataque de oportunidad (y al DM le llega el aviso con la tirada lista), las fichas vuelan con su altura y su sombra (cuenta para el alcance). Los conjuros y las acciones se apuntan en el mapa: el área sigue al dedo y propone a quién toca; la cobertura sale sola de las paredes y de las criaturas en medio; la app propone ventaja o desventaja por los estados (reglas 2024), el flanqueo opcional y los críticos contra paralizados; cada tarjeta aplica los estados que impone, con su salvación repetida, y la concentración (al recibir daño, su salvación). Las zonas que se quedan (Espíritus guardianes, Nube de dagas, una telaraña) las ve todo el grupo y sacan solas su tarjeta a quien entra o termina su turno ahí. Todos los conjuros de 5etools traen su definición de efecto (área, salvación, daño, estados, concentración, zona); los que no se pueden completar solos quedan marcados como asistidos, con su lista en [docs/HECHIZOS.md](docs/HECHIZOS.md). Efectos con partículas por tipo de daño. Cada quien elige dados en 3D, sin animación o físicos (escribes lo que sacaste). Salvaciones contra la muerte en el servidor y cansancio por niveles.
 - **Encuentros**: pestaña del DM para preparar combates antes de la sesión: mapa (o ninguno), enemigos del Manual de Monstruos o a mano con su lugar en el mapa, zonas de despliegue para el grupo y oleadas que llegan solas en una ronda o cuando el DM las suelta. Al usarlo, el mapa pasa a combate; los jugadores se unen con un toque, se acomodan en su zona y tiran iniciativa en la app (con ventaja si toca) o escriben la suya; el DM tira la de los enemigos (los iguales comparten tirada) y empieza. También guarda el combate de ahora como encuentro. Si el servidor se reinicia, la mesa vuelve con el combate y las oleadas pendientes.
 - **Paredes, puertas y visión**: ocho tipos de pared (pared, puerta, puerta secreta, ventana, un sentido, muro bajo, cortina y barrera invisible) que se trazan arrastrando, por tramos o habitaciones enteras. Con la visión de los personajes, la niebla se descubre sola con lo que ve el grupo (visión compartida), las paredes tapan la vista y el paso, lo ya explorado queda en penumbra y los enemigos solo se ven si alguien los ve. Los jugadores abren las puertas de cerca (las que tienen llave, no); las secretas son pared hasta que el DM las descubre. El DM puede ver el mapa como jugador.
 - **Luz, hora y clima**: cada mapa tiene hora (día, amanecer, atardecer, noche), luz del lugar y clima (lluvia, tormenta, niebla espesa, nieve, viento) que se anima sobre el mapa. Antorchas, fogatas, velas, faroles y luces invisibles alumbran sin atravesar paredes; cada ficha puede llevar su luz (antorcha, lámpara, conjuro Luz…) y la visión en la oscuridad se toma de la hoja. De noche o en una mazmorra, el grupo solo ve lo iluminado o lo que alcanzan sus sentidos, y cada ficha dice si está a plena luz, en penumbra o a oscuras con lo que eso significa en las reglas.
@@ -87,6 +88,10 @@ web/                 La aplicación (sin framework)
   src/mesa.js        Chat, pizarra, tablero y sesiones
   src/gfx.js         Calidad gráfica y carga del motor del mapa
   src/vision.cjs     Paredes, línea de vista, luz y caminos (también lo usa el servidor)
+  src/tactica.cjs    Combate táctico: distancia con altura, áreas, cobertura, flanqueo, terreno difícil (también el servidor)
+  src/hechizos.cjs   La definición de efecto de cada conjuro (área, salvación, daño, estados, zona, concentración)
+  src/efectos.js     Partículas de conjuros y golpes, y las zonas que se quedan en el mapa
+  src/dados.js       Dados en 3D, sin animación o físicos; gl/dados3d.js los dibuja con three.js (archivo aparte)
   src/clima.js       Lluvia, tormenta, nieve, niebla y viento sobre el mapa
   src/mapas.js       Mapas, fichas, paredes, niebla y regla
   gl/mapa-gl.js      Motor del mapa en PixiJS (WebGL), archivo aparte
@@ -94,11 +99,13 @@ web/                 La aplicación (sin framework)
   src/grupo.js       Bestiario del grupo
 server/
   campaigns.mjs      Lógica de las campañas (probada sin red)
+  tactico.mjs        Combate táctico: movimiento, ataques de oportunidad, zonas, estados, concentración, muerte
   store.mjs          Guardado: Postgres, archivos o memoria
   index.mjs          HTTP (sirve web/dist) + WebSocket en /ws
 tools/
   build-web.mjs      Junta todo en web/dist/index.html
   crear-paquete-diario.mjs  Crea diario-5e.json desde tu copia de 5etools
+  hechizos.mjs       Escribe docs/HECHIZOS.md (automáticos y asistidos) desde el paquete
 tests/               Pruebas del servidor (node:test) y de la web (jsdom)
 docs/                Arquitectura, protocolo de las campañas y pendientes
 ```
@@ -133,7 +140,7 @@ npm test                                   # servidor + web
 DIARIO_PAQUETE=./diario-5e.json npm test   # si tu paquete está en otro lado
 ```
 
-Las pruebas de la web necesitan un paquete; sin él se saltan y solo corren las del servidor (así pasa en GitHub Actions).
+Las pruebas de la web necesitan un paquete; sin él se saltan y solo corren las del servidor (así pasa en GitHub Actions). `npm run test:gl` corre las de Chromium (Playwright) con WebGL y con Canvas 2D, incluida la del combate táctico.
 
 ## Desplegar
 
@@ -157,4 +164,4 @@ Las tablas se crean solas. Sin `DATABASE_URL` el servidor funciona igual, pero l
 
 ## Licencia y contenido
 
-El código es de este proyecto. Las reglas y textos de D&D pertenecen a Wizards of the Coast; el diario solo lee la copia de 5etools que cada usuario carga en su dispositivo.
+El código es de este proyecto. Los dados 3D usan three.js (MIT). Las reglas y textos de D&D pertenecen a Wizards of the Coast; el diario solo lee la copia de 5etools que cada usuario carga en su dispositivo.

@@ -1,0 +1,75 @@
+/* ==================== COMBATE TÁCTICO (módulo 9) ==================== */
+/* Efectos y zonas encima del mapa (no reciben toques) */
+.map-fx{position:absolute;left:0;top:0;z-index:2;pointer-events:none;display:block}
+
+/* Movimiento en tu ronda */
+.hud-row.mv{gap:6px}
+.hud-mv{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:3px 12px 3px 9px;border-radius:17px;border:1px solid rgba(143,208,255,.45);background:rgba(60,110,160,.18);font-size:13px}
+.hud-mv .ic{width:18px;height:18px;color:#bfe3ff}
+.hud-mv b{font-family:var(--display);color:#fff;letter-spacing:.03em}
+.hud-mv small{color:#bcd0e0}
+.mv-bar{display:inline-block;width:54px;height:6px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden}
+.mv-bar i{display:block;height:100%;background:linear-gradient(90deg,#5fb8e8,#bfe3ff);transition:width .3s}
+.hud-row.mv .btn[aria-pressed="true"]{border-color:#8fd0ff;background:rgba(95,184,232,.25);color:#fff}
+
+/* Apuntar en el mapa */
+.hud-row.aim .hud-st{--sc:#ff8a5a}
+.hud-row.aim .hud-st .bad{color:#ff8a7a}
+.hud-row.aim-list{flex-wrap:wrap;gap:5px}
+.chip.aim-t{background:rgba(255,138,90,.16);border-color:rgba(255,138,90,.55);color:#ffe2d4}
+.chip.aim-t.bad{background:rgba(210,74,58,.2);border-color:#d24a3a;color:#ffb3a8;text-decoration:line-through}
+.hud-row.aim-go{gap:6px}
+.hud-row.fxsel .hud-st{--sc:#b48cff}
+
+/* Panel de la ficha: altura y distancia */
+.tok-z{display:flex;align-items:center;gap:8px}
+.tok-z > span{display:inline-flex;align-items:center;gap:5px;flex:1;font-size:14px}
+.tok-z .ic{width:16px;height:16px;color:var(--gold)}
+.tok-z b{min-width:84px;text-align:center;font-family:var(--display);font-size:14px}
+.tok-dist{display:flex;align-items:center;gap:7px;margin:6px 0;font-size:14px}
+.tok-dist .ic{flex:none;width:16px;height:16px;color:var(--gold)}
+
+/* Compositor: mapa, ventaja sugerida, estados, dados físicos */
+.cs-aim{align-items:center;gap:8px}
+.cs-aim small{flex:1;min-width:0}
+.cs-sug{display:flex;align-items:center;gap:8px;margin:0;padding:6px 10px;border-radius:8px;border:1px solid rgba(95,184,90,.5);background:rgba(95,184,90,.12);font-size:14px}
+.cs-sug.dis{border-color:rgba(224,87,74,.55);background:rgba(224,87,74,.12)}
+.cs-sug .ic{flex:none;width:16px;height:16px;color:var(--gold)}
+.cs-sug span{flex:1;min-width:0}
+.cs-conds{flex-wrap:wrap;align-items:center;gap:6px}
+.cs-conds .chip[aria-pressed="true"]{border-color:#e0574a;background:rgba(224,87,74,.18);color:var(--ink)}
+.cs-conds .chip[aria-pressed="false"]{opacity:.55;text-decoration:line-through}
+.cs-assist{display:flex;gap:6px;align-items:flex-start;font-size:13.5px}
+.cs-assist .ic{flex:none;width:16px;height:16px;margin-top:2px;color:var(--gold)}
+.cs-man{align-items:flex-end;gap:8px}
+
+/* Tarjetas: cobertura, estados, muerte, zonas y avisos del sistema */
+.ac-badge.cover{background:rgba(143,208,255,.16);border-color:rgba(143,208,255,.55);color:#2a5a80}
+.ac-tags{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 0}
+.ac-tags span{padding:1px 8px;border-radius:9px;border:1px solid var(--rule);font-size:12px;color:var(--ink-2,#5a4630)}
+.ac-death{display:flex;align-items:center;gap:8px;margin:4px 0}
+.ac-death .ic{width:18px;height:18px}
+.ac-death.ok .ac-n{color:#2f7a3a}.ac-death.ko .ac-n{color:#a8322a}
+.cs-pic.fx{border-color:#b48cff;background:radial-gradient(circle at 40% 30%, #4a3a72, #1e1434)}
+.cs-pic.sys{border-color:var(--gold);background:radial-gradient(circle at 40% 30%, #3a3a3a, #161616)}
+.ac-card.fx,.ac-card.sys{border-style:dashed}
+
+/* Hoja: salvaciones contra la muerte y cansancio */
+.vt-death{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-top:10px;padding:8px 12px;border-radius:10px;border:1px solid #a8322a;background:linear-gradient(180deg, rgba(168,50,42,.14), rgba(40,10,8,.08))}
+.vt-death > b{flex-basis:100%;font-family:var(--display);letter-spacing:.04em;color:#a8322a}
+.vt-death.stable{border-color:#2f7a3a}.vt-death.stable > b{color:#2f7a3a}
+.vt-death.dead{border-color:#2b1d12;filter:grayscale(.6)}
+.ds-row{display:inline-flex;align-items:center;gap:5px;font-size:13px}
+.ds-p{display:inline-block;width:16px;height:16px;border-radius:50%;border:2px solid currentColor;opacity:.45}
+.ds-p.ok{color:#2f7a3a}.ds-p.ko{color:#a8322a}
+.ds-p.on{background:currentColor;opacity:1}
+.vt-chip.exh{border-color:#a07a4a;background:rgba(160,122,74,.14)}
+.vt-chip.exh small{color:var(--ink-2,#6a5232)}
+
+/* Dados 3D */
+.dice3d{position:fixed;inset:0;z-index:9000;pointer-events:none;transition:opacity .35s}
+.dice3d.out{opacity:0}
+.dice3d-tip{position:fixed;left:50%;bottom:22%;z-index:9001;transform:translate(-50%, 12px);padding:8px 18px;border-radius:20px;background:rgba(18,13,11,.9);border:1px solid var(--gold);color:var(--gold-hi);font-family:var(--display);font-size:18px;letter-spacing:.04em;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap}
+.dice3d-tip.on{opacity:1;transform:translate(-50%, 0)}
+.dice3d-tip.out{opacity:0}
+@media (prefers-reduced-motion: reduce){.dice3d{display:none}}

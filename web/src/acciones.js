@@ -4,7 +4,10 @@
    (sus acciones del Manual de Monstruos, o libres) y cada jugador lo suyo (sus armas y conjuros, o libre).
    Los dados los tira el servidor. Cada tarjeta dice si impacta contra la CA de cada objetivo y deja aplicar el daño
    (al enemigo: el DM o quien lo hizo; a un personaje: su jugador en su hoja) o tirar la salvación.
-   Si la vida de los enemigos está oculta, el daño que reciben tampoco se ve (lo decide el servidor). */
+   Si la vida de los enemigos está oculta, el daño que reciben tampoco se ve (lo decide el servidor).
+   Con un mapa (módulo 9): se apunta el área o los objetivos en el mapa (Mapas.aim), la app propone la ventaja o
+   desventaja por los estados y el flanqueo, el servidor suma la cobertura, y cada tarjeta deja aplicar los estados que
+   impone (con su salvación repetida) y la concentración. Con dados físicos se escribe lo que salió. */
 var Acciones = (function(){
   var esc = function(s){ return Render5e.esc(s == null ? '' : s); }, attr = function(s){ return Render5e.attr(s == null ? '' : s); };
   var $ = function(s, r){ return (r || document).querySelector(s); };
@@ -62,7 +65,8 @@ var Acciones = (function(){
         + (next ? '<p class="cs-next">Sigue: <b>' + esc(next.name) + '</b></p>' : '') + '</div>'
         + '<div class="cs-ctl">' + (dm ? '<button class="icon-btn sm" type="button" data-act="salaturn" data-v="prev" aria-label="Turno anterior"><svg class="ic"><use href="#i-back"/></svg></button>' : '')
         + (dm && !cur.pc ? '<button class="btn sm" type="button" data-act="actopen" data-actor="' + attr(cur.id) + '"><svg class="ic"><use href="#i-swords"/></svg>Su acción</button>' : '')
-        + (mine ? '<button class="btn sm" type="button" data-act="actopen"><svg class="ic"><use href="#i-swords"/></svg>Mi acción</button>' : '')
+        + (mine && cur.down ? '<button class="btn main sm" type="button" data-act="actdeath"><svg class="ic"><use href="#i-skull"/></svg>Salvación contra la muerte</button>' : '')
+        + (mine && !cur.down ? '<button class="btn sm" type="button" data-act="actopen"><svg class="ic"><use href="#i-swords"/></svg>Mi acción</button>' : '')
         + (dm || mine ? '<button class="btn main sm" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>' + (mine && !dm ? 'Terminar turno' : 'Siguiente') + '</button>' : '') + '</div></div>';
     }
     return h + '</section>';
@@ -79,9 +83,10 @@ var Acciones = (function(){
     // desde el mapa (o desde Mi turno): primero a la escena de combate
     if (!box() || !box().offsetParent) { if ((o.tries = (o.tries || 0) + 1) > 3) return; goCombat(); setTimeout(function(){ open(o); }, 60); return; }
     var dm = isDm(), actor = o.actor || (dm ? (r.turnId && (r.npcs || []).some(function(n){ return n.id === r.turnId; }) ? r.turnId : (r.npcs[0] || {}).id || 'dm') : 'me');
-    comp = {actor:actor, comp:'', key:'free', title:'', atkOn:false, bonus:0, k:'n', saveOn:false, ab:'dex', dc:13, half:true, dmg:'', type:'', heal:false, text:'', lv:'', targets:{}};
+    comp = {actor:actor, comp:'', key:'free', title:'', atkOn:false, bonus:0, k:'n', kSet:false, saveOn:false, ab:'dex', dc:13, half:true, dmg:'', type:'', heal:false, text:'', lv:'', targets:{}, conds:[], repeat:false, conc:false, def:null, area:null, map:null, man:{}};
     if (o.key) pick(o.key);
     if (o.target) comp.targets[o.target] = 1;
+    if (o.title) { comp.title = o.title; if (o.reaction) comp.text = 'Reacción'; }
     if (dm && window.Bestiario && !Bestiario.has()) Bestiario.ready().then(function(){ render.force = true; render(); });
     render.force = true; render();
     var b = box(); if (b) { var el = b.querySelector('.cs-comp'); if (el && el.scrollIntoView) try { el.scrollIntoView({block:'nearest', behavior:'smooth'}); } catch(e){} }
@@ -90,7 +95,10 @@ var Acciones = (function(){
     var r = room(), src = sources(r), a = src.filter(function(x){ return x.key === key; })[0];
     comp.key = key;
     if (!a) { comp.title = comp.title || ''; return; }
-    comp.title = a.title; comp.text = a.text || ''; comp.atkOn = !!a.atk; comp.bonus = a.atk ? a.atk.bonus : 0; comp.saveOn = !!a.save;
+    comp.title = a.title; comp.text = a.text || ''; comp.atkOn = !!a.atk; comp.bonus = a.atk ? a.atk.bonus + (comp.actor === 'me' && window.Diario && Diario.exhPen ? Diario.exhPen() : 0) : 0; comp.saveOn = !!a.save;
+    // lo del mapa: cuerpo a cuerpo o a distancia, el área, los estados que impone, si se repite la salvación y la concentración
+    var d = a.def || {}; comp.def = a.def || null; comp.melee = !!a.melee; comp.reach = a.reach || 1; comp.range = a.range || (d.range ? [d.range] : null);
+    comp.conds = (d.conds || []).slice(); comp.repeat = !!d.repeat; comp.conc = !!d.conc; comp.area = null; comp.map = null; comp.kSet = false;
     if (a.save) { comp.ab = a.save.ab; comp.dc = a.save.dc; comp.half = a.save.half !== false; }
     comp.dmg = (a.dmg || []).map(function(d){ return d.dice; }).join(' + '); comp.type = (a.dmg && a.dmg[0] && a.dmg[0].type) || ''; comp.heal = !!a.heal; comp.extra = (a.dmg || []).slice(1);
     comp.lv = a.lv ? '' : null; comp.spell = a.lv != null && key.indexOf('sp:') === 0 ? {ref:key.slice(3), lv:a.lv} : null;
@@ -120,12 +128,64 @@ var Acciones = (function(){
       + '</div><div class="cs-f"><label class="fl cs-dice">' + (comp.heal ? 'Curación' : 'Daño') + '<input class="field" data-actf="dmg" value="' + attr(comp.dmg) + '" placeholder="2d6 + 3" autocomplete="off" spellcheck="false"></label>'
       + (comp.heal ? '' : '<label class="fl">Tipo<select class="field" data-actf="type">' + TYPES.map(function(t){ return '<option value="' + attr(t) + '"' + (comp.type === t ? ' selected' : '') + '>' + (t || '—') + '</option>'; }).join('') + '</select></label>')
       + '<label class="toggle sm"><input type="checkbox" data-actf="heal"' + (comp.heal ? ' checked' : '') + '> Cura</label></div>'
+      + tacHtml(r)
       + '<label class="fl">Detalle<textarea class="field" data-actf="text" rows="2" maxlength="500" placeholder="Lo que pasa, alcance, efectos…">' + esc(comp.text) + '</textarea></label>';
     // objetivos: los del combate (los enemigos primero para un jugador; el grupo primero para el DM)
     var tg = function(x){ return '<button type="button" class="cs-tg' + (x.pc ? ' pc' : ' npc') + (x.down ? ' down' : '') + '" data-act="acttg" data-id="' + attr(x.id) + '" aria-pressed="' + !!comp.targets[x.id] + '">' + pic(x) + '<span>' + esc(x.name) + '</span></button>'; };
     var npcs = foes.map(function(n){ return who(r, n.id); }).filter(Boolean), ps = pcs.map(function(m){ return who(r, m.id); }).filter(Boolean), list = dm ? ps.concat(npcs) : npcs.concat(ps);
     h += '<div class="cs-tgs"><span class="label">objetivos</span><div class="cs-tg-l">' + (list.length ? list.filter(function(x){ return x.id !== comp.actor; }).map(tg).join('') : '<small class="muted">Nadie en el combate todavía.</small>') + '</div></div>';
     return h + '<div class="cs-go"><button class="btn main" type="submit"><svg class="ic"><use href="#i-d20"/></svg>Tirar y publicar</button><small class="muted">Los dados se tiran en el servidor; lo ve todo el grupo.</small></div></form>';
+  }
+  /* ---------- Lo táctico del compositor: el mapa, la ventaja sugerida, los estados y los dados físicos ---------- */
+  var COND_ES = function(k){ return (Sala.COND || {})[k] || k; };
+  function mapNow(){ return window.Mapas && Mapas.curMap ? Mapas.curMap() : null; }
+  function actorKey(){ return comp.actor === 'dm' ? null : comp.actor === 'me' ? (comp.comp ? null : 'me') : comp.actor; }
+  /* Ventaja o desventaja por los estados (2024), el flanqueo y un enemigo al lado: la app la propone, tú decides */
+  function suggest(r){
+    if (!comp || !comp.atkOn || !window.Tactica) return null;
+    var ids = Object.keys(comp.targets); if (ids.length !== 1) return null;
+    var tg = who(r, ids[0]); if (!tg) return null;
+    var att = comp.actor === 'me' ? {conds:window.Diario && Diario.conds ? Diario.conds() : []} : comp.actor !== 'dm' ? {conds:(who(r, comp.actor) || {}).conds || []} : null; if (!att) return null;
+    var mp = mapNow(), ak = actorKey(), at = mp && ak ? Mapas.actorTok(ak) : null, tt = mp ? mp.tokens.filter(function(t){ return t.ref === ids[0] && !t.comp; })[0] : null;
+    var near = at && tt ? Tactica.dist(at, tt) <= 1 : !!comp.melee, flank = false, threat = false;
+    if (mp && at && tt && comp.melee && mp.tac && mp.tac.flank) flank = Tactica.flanked(at, tt, mp.tokens.filter(function(x){ return x !== at && x !== tt && x.kind === at.kind && !x.hidden; }));
+    if (mp && at && !comp.melee) threat = mp.tokens.some(function(x){ return x.kind !== 'obj' && x.kind !== at.kind && x !== at && !x.hidden && Tactica.dist(at, x) <= 1; });
+    var o = Tactica.attackMods({att:att, tgt:{conds:tg.conds}, near:near, ranged:!comp.melee, flank:flank, threat:threat}); o.far = at && tt && comp.range && !comp.melee ? Tactica.dist(at, tt) > Math.ceil(comp.range[comp.range.length - 1] / 5) : at && tt && comp.melee ? Tactica.dist(at, tt) > (comp.reach || 1) : false;
+    return o;
+  }
+  function tacHtml(r){
+    var h = '', d = comp.def, mp = mapNow(), ak = actorKey(), canAim = !!(window.Mapas && Mapas.aim && ak && (r.maps || []).length);
+    if (d && d.why && d.why.length && window.Hechizos) h += '<p class="note cs-assist"><svg class="ic"><use href="#i-scroll"/></svg>Asistido: ' + d.why.map(function(w){ return esc(Hechizos.whyText(w)); }).join('; ') + '.</p>';
+    if (canAim) {
+      var A = d && d.area, nT = Object.keys(comp.targets).length;
+      h += '<div class="cs-f cs-aim"><button class="btn sm' + (comp.area || (comp.map && nT) ? ' main' : '') + '" type="button" data-act="actaim"><svg class="ic"><use href="#i-aim"/></svg>' + (A ? (comp.area ? 'Mover el área' : 'Poner el área en el mapa') : 'Elegir objetivos en el mapa') + '</button>'
+        + '<small class="muted">' + (A && window.Hechizos ? esc(Hechizos.line(d)) : comp.melee ? 'Cuerpo a cuerpo · ' + String((comp.reach || 1) * 1.5).replace('.', ',') + ' m' : comp.range ? 'A distancia · ' + String(Math.round(comp.range[0] / 5 * 1.5 * 10) / 10).replace('.', ',') + ' m' : '') + (comp.area ? ' · área puesta' : '') + '</small></div>';
+    }
+    var sg = suggest(r);
+    if (sg && (sg.why.length || sg.crit || sg.pen || sg.far)) {
+      var lab = sg.k === 'adv' ? 'ventaja' : sg.k === 'dis' ? 'desventaja' : sg.adv.length && sg.dis.length ? 'se anulan' : '';
+      if (sg.k && !comp.kSet && comp.k === 'n') comp.k = sg.k;
+      h += '<p class="cs-sug' + (sg.k === 'dis' || sg.far ? ' dis' : '') + '"><svg class="ic"><use href="#i-star"/></svg><span>' + (lab ? '<b>' + esc(lab.charAt(0).toUpperCase() + lab.slice(1)) + '</b>: ' : '') + esc(sg.why.join(', ')) + (sg.crit ? (sg.why.length ? '. ' : '') + '<b>Si impacta, es crítico</b>' : '') + (sg.far ? (sg.why.length || sg.crit ? '. ' : '') + '<b>Está fuera de tu alcance</b>' : '') + '</span>'
+        + (sg.k && comp.k !== sg.k ? '<button class="btn sm" type="button" data-act="actk" data-v="' + sg.k + '">Usar</button>' : '') + '</p>';
+    }
+    if (comp.conds.length || (d && d.conds)) h += '<div class="cs-f cs-conds"><span class="label">impone</span>' + ((d && d.conds) || comp.conds).map(function(k){ return '<button type="button" class="chip" data-act="actcondt" data-v="' + attr(k) + '" aria-pressed="' + (comp.conds.indexOf(k) >= 0) + '">' + esc(COND_ES(k)) + '</button>'; }).join('') + (comp.saveOn ? '<label class="toggle sm"><input type="checkbox" data-actf="repeat"' + (comp.repeat ? ' checked' : '') + '> repite la salvación al final de cada turno</label>' : '') + '</div>';
+    if (d && d.conc !== undefined || comp.conc) h += '<label class="toggle sm cs-conc"><input type="checkbox" data-actf="conc"' + (comp.conc ? ' checked' : '') + '> Concentración' + (d && d.zone ? ' (la zona dura mientras te concentres)' : '') + '</label>';
+    if (window.Dados && Dados.mode() === 'fisico' && (comp.atkOn || comp.dmg)) {
+      var parts = String(comp.dmg || '').trim() ? String(comp.dmg).split(/\s*\+\s*(?=\d*d\d)/i) : [];
+      h += '<div class="cs-f cs-man"><span class="label">tus dados</span>' + (comp.atkOn ? '<label class="fl mini-l">d20<input class="field mini" data-actman="d0" inputmode="numeric" value="' + attr(comp.man.d0 || '') + '"></label>' + (comp.k !== 'n' ? '<label class="fl mini-l">y<input class="field mini" data-actman="d1" inputmode="numeric" value="' + attr(comp.man.d1 || '') + '"></label>' : '') : '')
+        + parts.map(function(p, i){ return '<label class="fl mini-l">' + esc(p) + '<input class="field mini" data-actman="m' + i + '" inputmode="numeric" value="' + attr(comp.man['m' + i] || '') + '" placeholder="total"></label>'; }).join('') + '</div>';
+    }
+    return h;
+  }
+  /* Apuntar en el mapa: el área del conjuro (o de la acción del monstruo) y los objetivos */
+  function aimNow(){
+    var d = comp.def || {}, ak = actorKey(); if (!ak) { Sala.toast('Elige quién actúa (tú o un enemigo).'); return; }
+    var c0 = comp;
+    Mapas.aim({actor:ak, area:d.area || null, range:d.range || (comp.range ? comp.range[comp.range.length - 1] : comp.melee ? (comp.reach || 1) * 5 : 0), title:comp.title || 'Acción', dtype:comp.type, heal:comp.heal, atk:comp.atkOn, dex:comp.saveOn && comp.ab === 'dex', targets:comp.targets,
+      onDone:function(res, go){
+        if (comp !== c0) return; comp.map = res.map; comp.area = res.area || null; comp.self = !!res.self; comp.zoneR = res.zoneR || null; comp.targets = {}; res.targets.forEach(function(id){ comp.targets[id] = 1; });
+        if (go) post(); else { goCombat(); render.force = true; setTimeout(render, 60); }
+      }});
   }
   function srcLine(a){ var p = []; if (a.atk) p.push('1d20 ' + sgn(a.atk.bonus)); if (a.save) p.push(ABS[a.save.ab] + ' CD ' + a.save.dc); if (a.dmg && a.dmg.length) p.push(a.dmg.map(function(d){ return d.dice + (d.type ? ' ' + d.type : ''); }).join(' + ')); if (a.heal) p.push('cura'); if (a.lv) p.push('nivel ' + a.lv); else if (a.lv === 0) p.push('truco'); return p.join(' · ') || 'sin tirada'; }
   function post(){
@@ -138,7 +198,23 @@ var Acciones = (function(){
     if (comp.saveOn) act.save = {ab:comp.ab, dc:+comp.dc || 10, half:!!comp.half};
     if (dice) act.dmg = comp.heal ? [{dice:dice}] : parts.map(function(d, i){ var ex = comp.extra && comp.key !== 'free' ? comp.extra.filter(function(x){ return x.dice.replace(/\s+/g, '') === d.replace(/\s+/g, ''); })[0] : null; return {dice:d, type:ex ? ex.type : i === 0 ? comp.type : comp.type}; });
     if (comp.heal) act.heal = true;
-    if (!act.title && !act.text && !act.atk && !act.dmg && !act.save) { Sala.toast('Escribe qué haces o elige una acción.'); return; }
+    // en el mapa: de dónde sale, el área y la zona que deja; estados, salvación repetida, concentración y críticos automáticos
+    var d = comp.def || {}, sg = suggest(r);
+    if (comp.map) act.map = comp.map; else { var mp = mapNow(), ak = actorKey(); if (mp && ak && Mapas.actorTok(ak)) act.map = mp.id; }
+    if (act.atk && comp.melee) act.atk.melee = true;
+    if (act.atk && sg && sg.crit) act.atk.autoCrit = true;
+    if (comp.area) { act.area = comp.area; if (comp.self) act.self = true; }
+    if (comp.conds.length) act.conds = comp.conds.slice();
+    if (comp.repeat && act.save && act.conds) act.repeat = true;
+    if (comp.conc) act.conc = true;
+    if (d.zone && act.map && (comp.area || d.zone.follow)) act.zone = {on:d.zone.on, terrain:d.zone.terrain, obscure:d.zone.obscure, move:d.zone.move, follow:!!d.zone.follow, r:comp.zoneR || (d.area ? d.area.ft / 5 : 1)};
+    if (window.Dados && Dados.mode() === 'fisico') {
+      var man = {}, d20 = [comp.man.d0, comp.man.d1].filter(function(v){ return v !== undefined && v !== ''; }).map(Number);
+      if (act.atk) { if (!d20.length || d20.some(function(v){ return !(v >= 1 && v <= 20); })) { Sala.toast('Escribe lo que sacaste en el d20.'); return; } man.d20 = d20; }
+      if (act.dmg) man.dmg = act.dmg.map(function(x, i){ var v = comp.man['m' + i]; return v === undefined || v === '' ? null : +v; });
+      act.man = man;
+    }
+    if (!act.title && !act.text && !act.atk && !act.dmg && !act.save && !act.conds) { Sala.toast('Escribe qué haces o elige una acción.'); return; }
     if (!act.title) act.title = act.heal ? 'Curación' : act.atk ? 'Ataque' : 'Acción';
     if (!Sala.send({t:'act.post', act:act})) return;
     // un conjuro con espacio: se gasta en tu hoja (y queda la concentración si la pide)
@@ -163,12 +239,15 @@ var Acciones = (function(){
   }
   function cardHtml(k, r){
     var dm = isDm(), a = k.actor, mineCard = k.by === r.you, x = a.kind === 'npc' ? who(r, a.id) : a.kind === 'pc' ? who(r, a.id) : null;
-    var face = a.kind === 'dm' ? '<span class="cs-pic dm ic"><svg class="ic"><use href="#i-crown"/></svg></span>' : x && !a.of ? pic(x) : '<span class="cs-pic ini' + (a.kind === 'pc' ? ' pc' : '') + '">' + esc(ini(a.name)) + '</span>';
+    var face = a.kind === 'dm' ? '<span class="cs-pic dm ic"><svg class="ic"><use href="#i-crown"/></svg></span>' : a.kind === 'fx' ? '<span class="cs-pic fx ic"><svg class="ic"><use href="#i-cube"/></svg></span>' : a.kind === 'sys' ? '<span class="cs-pic sys ic"><svg class="ic"><use href="#i-' + (k.concChk ? 'star' : 'turn') + '"/></svg></span>' : x && !a.of ? pic(x) : '<span class="cs-pic ini' + (a.kind === 'pc' ? ' pc' : '') + '">' + esc(ini(a.name)) + '</span>';
     var h = '<article class="ac-card ' + a.kind + (k.atk && k.atk.crit ? ' crit' : '') + '" data-id="' + attr(k.id) + '"><header>' + face + '<span class="ac-who"><b>' + esc(a.name) + '</b>' + (a.of ? '<small>de ' + esc(a.of) + '</small>' : '') + '<span>' + esc(k.title) + '</span></span><small class="ac-r">' + (k.round ? 'ronda ' + k.round : '') + '</small>'
       + (dm || mineCard ? '<button class="icon-btn sm ac-x" type="button" data-act="actdel" data-id="' + attr(k.id) + '" aria-label="Quitar esta acción"><svg class="ic"><use href="#i-x"/></svg></button>' : '') + '</header>';
     if (k.atk) h += '<p class="ac-atk"><svg class="ic"><use href="#i-d20"/></svg><b class="ac-n">' + k.atk.total + '</b> para impactar <small>' + (k.atk.k ? '[' + k.atk.dice.join(', ') + '] ' + (k.atk.k === 'adv' ? 'con ventaja' : 'con desventaja') + ' · ' : '') + k.atk.nat + ' ' + sgn(k.atk.bonus).replace(/^([+−])/, '$1 ') + '</small>' + (k.atk.crit ? '<i class="ac-badge crit">¡Crítico!</i>' : k.atk.fumble ? '<i class="ac-badge fumble">Pifia</i>' : '') + '</p>';
     if (k.save) h += '<p class="ac-save"><svg class="ic"><use href="#i-shield"/></svg>Salvación de <b>' + AB[k.save.ab] + '</b> CD <b>' + k.save.dc + '</b>' + (k.save.half ? ' <small>(mitad si la supera)</small>' : '') + '</p>';
+    if (k.death) h += '<p class="ac-death ' + (k.death.res === 'revive' || k.death.res === 'éxito' ? 'ok' : 'ko') + '"><svg class="ic"><use href="#i-skull"/></svg><b class="ac-n">' + k.death.nat + '</b> ' + esc(k.death.res === 'revive' ? '¡20! Recupera 1 PG' : k.death.res === 'dos fallos' ? '1: cuenta como dos fallos' : k.death.res === 'éxito' ? 'éxito' : 'fallo') + '</p>';
     h += dmgLine(k);
+    var tags = []; if (k.conds && k.conds.length) tags.push('impone ' + k.conds.map(function(c){ return COND_ES(c).toLowerCase(); }).join(', ')); if (k.repeat) tags.push('repite la salvación'); if (k.conc) tags.push('concentración'); if (k.fx) tags.push('deja una zona en el mapa'); if (k.area) tags.push('área'); if (k.man) tags.push('dados físicos'); if (k.atk && k.atk.auto) tags.push('crítico automático');
+    if (tags.length) h += '<p class="ac-tags">' + tags.map(function(t){ return '<span>' + esc(t) + '</span>'; }).join('') + '</p>';
     if (k.text) h += '<p class="ac-text">' + esc(k.text) + '</p>';
     if (k.targets && k.targets.length) h += '<ul class="ac-tgs">' + k.targets.map(function(t){ return tgHtml(k, t, r); }).join('') + '</ul>';
     return h + '</article>';
@@ -176,11 +255,22 @@ var Acciones = (function(){
   function tgHtml(k, t, r){
     var dm = isDm(), me = r.you, canApply = !t.res && (t.kind === 'npc' ? dm || k.by === me : t.id === me) && k.amt != null && !(k.atk && !t.hit), canSave = k.save && !t.sv && (t.kind === 'npc' ? dm : t.id === me);
     var h = '<li class="ac-tg' + (t.kind === 'pc' && t.id === me ? ' me' : '') + '"><b>' + esc(t.name) + '</b>' + (dm && t.kind === 'npc' && t.ac != null ? '<small>CA ' + t.ac + '</small>' : t.kind === 'pc' && t.ac != null ? '<small>CA ' + t.ac + '</small>' : '');
+    if (t.cover) h += '<i class="ac-badge cover" title="' + attr(window.Tactica ? Tactica.coverName(t.cover) : '') + '">' + (t.cover === 'total' ? 'cobertura total' : 'cobertura +' + t.cover) + '</i>';
     if (k.atk) h += t.hit ? '<i class="ac-badge hit">impacta</i>' : '<i class="ac-badge miss">falla</i>';
     if (t.sv) h += '<i class="ac-badge ' + (t.sv.ok ? 'ok' : 'ko') + '">' + t.sv.total + ' · ' + (t.sv.ok ? 'la supera' : 'falla') + '</i>';
     if (t.res) h += '<i class="ac-badge done">' + (t.res === 'none' ? 'sin efecto' : (t.amt != null ? t.amt + ' ' : '') + (k.heal ? 'PG curados' : 'de daño') + (t.res === 'half' ? ' (mitad)' : '')) + '</i>';
     var btns = '';
-    if (canSave) { var mod = t.kind === 'pc' ? (window.Diario && Diario.saveMod ? Diario.saveMod(k.save.ab) : 0) : saveOfNpc(r, t.id, k.save.ab); btns += '<button class="btn sm" type="button" data-act="actsave" data-id="' + attr(k.id) + '" data-tid="' + attr(t.id) + '" data-mod="' + mod + '"><svg class="ic"><use href="#i-d20"/></svg>Salvación ' + sgn(mod) + '</button>'; }
+    if (canSave) {
+      // los estados del que tira: paralizado o aturdido fallan Fuerza y Destreza; apresado, desventaja en Destreza; cansancio, −2
+      var tc = (who(r, t.id) || {}).conds || [], sm = window.Tactica ? Tactica.saveMods(tc, k.save.ab) : {}, mod = t.kind === 'pc' ? (window.Diario && Diario.saveMod ? Diario.saveMod(k.save.ab) + (Diario.exhPen ? Diario.exhPen() : 0) : 0) : saveOfNpc(r, t.id, k.save.ab), cov = k.save.ab === 'dex' && typeof t.cover === 'number' ? t.cover : 0;
+      var man = window.Dados && Dados.mode() === 'fisico' && t.kind === 'pc' ? '<input class="field mini" data-actsvman="' + attr(k.id + '|' + t.id) + '" inputmode="numeric" placeholder="d20" aria-label="Tu d20">' : '';
+      if (sm.fail) btns += '<button class="btn sm" type="button" data-act="actsave" data-id="' + attr(k.id) + '" data-tid="' + attr(t.id) + '" data-mod="' + mod + '" data-fail="1" title="Falla sola por su estado">Falla sola</button>';
+      else btns += man + '<button class="btn sm" type="button" data-act="actsave" data-id="' + attr(k.id) + '" data-tid="' + attr(t.id) + '" data-mod="' + mod + '"' + (sm.k ? ' data-k="' + sm.k + '"' : '') + '><svg class="ic"><use href="#i-d20"/></svg>Salvación ' + sgn(mod + cov) + (sm.k ? ' (desv.)' : '') + '</button>';
+    }
+    // estados que impone: al fallar la salvación, al impactar (o sin tirada); los aplica el DM (enemigos), quien lo hizo o el jugador en su hoja
+    var condOk = k.conds && k.conds.length && !t.cd && (t.kind === 'npc' ? dm || k.by === me : t.id === me) && (k.save ? t.sv && !t.sv.ok : k.atk ? t.hit : true);
+    if (condOk) btns += '<button class="btn sm" type="button" data-act="actcond" data-id="' + attr(k.id) + '" data-tid="' + attr(t.id) + '">Aplicar ' + esc(k.conds.map(function(c){ return COND_ES(c).toLowerCase(); }).join(', ')) + '</button>';
+    if (t.cd) h += '<i class="ac-badge ko">' + esc(k.conds.map(function(c){ return COND_ES(c).toLowerCase(); }).join(', ')) + '</i>';
     if (canApply && (!k.save || t.sv || !canSave)) {
       var n = k.amt, half = Math.floor(n / 2), sug = k.save && t.sv ? (t.sv.ok ? (k.save.half ? 'half' : 'none') : 'full') : 'full';
       btns += '<button class="btn sm' + (sug === 'full' ? ' main' : '') + '" type="button" data-act="actapply" data-id="' + attr(k.id) + '" data-tid="' + attr(t.id) + '" data-v="full">' + (k.heal ? 'Curar ' : (t.kind === 'pc' && t.id === me ? 'Recibir ' : 'Aplicar ')) + n + '</button>'
@@ -197,7 +287,9 @@ var Acciones = (function(){
     Sala.on('mesa.init', function(m){ cards = m.acts || []; fightN = m.fightN || 0; render(); });
     Sala.on('state', function(r){ if (r.fightN != null && r.fightN !== fightN) { fightN = r.fightN; older = false; } if (comp && isDm() && comp.actor !== 'dm' && !(r.npcs || []).some(function(n){ return n.id === comp.actor; })) comp.actor = 'dm'; render(); });
     Sala.on('act', function(m){
-      var k = m.card, r = room(), isNew = !cards.some(function(x){ return x.id === k.id; }); upsert(k); render();
+      var k = m.card, r = room(), old = cards.filter(function(x){ return x.id === k.id; })[0], isNew = !old; upsert(k); render();
+      // tus dados ruedan (los de tu acción y los de tus salvaciones)
+      if (window.Dados && r) { if (isNew && k.by === r.you && !k.man && (k.atk || k.dmg || k.death)) Dados.card(k); (k.targets || []).forEach(function(t){ var was = old && (old.targets || []).filter(function(x){ return x.id === t.id; })[0]; if (t.sv && !t.sv.man && !t.sv.auto && !(was && was.sv) && (t.id === r.you || (isDm() && t.kind === 'npc'))) Dados.save(t.sv, t.name); }); }
       if (isNew && window.Sfx) Sfx.play(k.atk && k.atk.crit ? 'crit' : k.heal ? 'heal' : k.atk && (k.targets || []).some(function(x){ return x.hit; }) ? 'hit' : k.save ? 'spell' : 'dice');
       // te toca a ti: impacta, pide tu salvación o te cura
       var t = r && (k.targets || []).filter(function(x){ return x.kind === 'pc' && x.id === r.you; })[0];
@@ -205,6 +297,8 @@ var Acciones = (function(){
         Sala.toast(msg, {act:'actgo', label:'Ver'}); try { if (navigator.vibrate) navigator.vibrate([60, 40, 60]); } catch(e){} }
     });
     Sala.on('act.del', function(m){ cards = cards.filter(function(x){ return x.id !== m.id; }); render(); });
+    /* Alguien salió del alcance de tu enemigo (o del tuyo): ataque de oportunidad con su reacción */
+    Sala.on('oa', function(m){ Sala.toast(m.byName + ' puede hacerle un ataque de oportunidad a ' + m.targetName + '.', {act:'actoa', v:m.by + '|' + m.target, label:'Atacar'}); if (window.Sfx) Sfx.play('locked'); });
     Sala.on('left', function(){ cards = []; comp = null; fightN = 0; });
   }
   document.addEventListener('focusout', function(){ if (render.pending) setTimeout(function(){ var a = document.activeElement, b = box(); if (!(a && b && b.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) render(); }, 0); });
@@ -217,10 +311,20 @@ var Acciones = (function(){
       if (!comp || !box() || !box().offsetParent) { open({key:b.dataset.k}); return; }
       pick(b.dataset.k); render.force = true; render();
     }
-    else if (a === 'actk' && comp) { comp.k = b.dataset.v; render.force = true; render(); }
+    else if (a === 'actk' && comp) { comp.k = b.dataset.v; comp.kSet = true; render.force = true; render(); }
+    else if (a === 'actaim' && comp) aimNow();
+    else if (a === 'actcondt' && comp) { var ck = b.dataset.v, ci = comp.conds.indexOf(ck); if (ci >= 0) comp.conds.splice(ci, 1); else comp.conds.push(ck); render.force = true; render(); }
+    else if (a === 'actcond') { Sala.send({t:'act.cond', id:b.dataset.id, tid:b.dataset.tid}); b.disabled = true; }
+    else if (a === 'actdeath') { if (window.Diario && Diario.rollDeath) Diario.rollDeath(); }
+    else if (a === 'actoa') { var pr = String(b.dataset.v || '').split('|'); open({actor:isDm() ? pr[0] : undefined, target:pr[1], title:'Ataque de oportunidad', reaction:true}); }
     else if (a === 'acttg' && comp) { var id = b.dataset.id; if (comp.targets[id]) delete comp.targets[id]; else comp.targets[id] = 1; b.setAttribute('aria-pressed', String(!!comp.targets[id])); }
     else if (a === 'actapply') { Sala.send({t:'act.apply', id:b.dataset.id, tid:b.dataset.tid, how:b.dataset.v}); b.disabled = true; }
-    else if (a === 'actsave') { Sala.send({t:'act.save', id:b.dataset.id, tid:b.dataset.tid, mod:+b.dataset.mod || 0}); b.disabled = true; if (window.Sfx) Sfx.play('dice'); }
+    else if (a === 'actsave') {
+      var sv = {t:'act.save', id:b.dataset.id, tid:b.dataset.tid, mod:+b.dataset.mod || 0}; if (b.dataset.k) sv.k = b.dataset.k; if (b.dataset.fail) sv.fail = true;
+      var mi = document.querySelector('[data-actsvman="' + b.dataset.id + '|' + b.dataset.tid + '"]');
+      if (mi) { var nv = parseInt(mi.value, 10); if (!(nv >= 1 && nv <= 20)) { Sala.toast('Escribe lo que sacaste en el d20.'); mi.focus(); return; } sv.man = nv; }
+      Sala.send(sv); b.disabled = true; if (window.Sfx) Sfx.play('dice');
+    }
     else if (a === 'actdel') { if (!b.dataset.sure) { b.dataset.sure = 1; b.style.borderColor = 'var(--bad)'; b.setAttribute('aria-label', 'Toca otra vez para quitarla'); return; } Sala.send({t:'act.del', id:b.dataset.id}); }
     else if (a === 'actolder') { older = !older; render.force = true; render(); }
     else if (a === 'actgo') goCombat();
@@ -239,7 +343,7 @@ var Acciones = (function(){
     if (f === 'lv' && comp.spell) { var sl = Diario.slotsFor(comp.spell.lv).filter(function(x){ return x.v === t.value; })[0]; if (sl) comp.dmg = recast(comp.spell, sl) || comp.dmg; }
     if (/^(actor|comp|atkOn|saveOn|heal|lv)$/.test(f)) { render.force = true; render(); }
   });
-  document.addEventListener('input', function(ev){ var t = ev.target; if (comp && t.dataset && t.dataset.actf && t.type !== 'checkbox' && t.tagName !== 'SELECT') comp[t.dataset.actf] = t.value; });
+  document.addEventListener('input', function(ev){ var t = ev.target; if (comp && t.dataset && t.dataset.actman) comp.man[t.dataset.actman] = t.value.replace(/[^0-9]/g, ''); if (comp && t.dataset && t.dataset.actf && t.type !== 'checkbox' && t.tagName !== 'SELECT') comp[t.dataset.actf] = t.value; });
   document.addEventListener('submit', function(ev){ var f = ev.target; if (!f.dataset || f.dataset.form !== 'actpost') return; ev.preventDefault(); post(); });
 
   return {render:render, open:open, _cards:function(){ return cards; }, _comp:function(){ return comp; }};

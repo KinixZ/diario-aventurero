@@ -183,7 +183,7 @@ var Bestiario = (function(){
     var v = function(n){ return f.elements[n].type === 'checkbox' ? f.elements[n].checked : f.elements[n].value.trim(); };
     var hp = parseInt(v('hp'), 10), count = Math.max(1, Math.min(12, parseInt(v('count'), 10) || 1));
     if (!(hp > 0)) { f.elements.hp.focus(); return; }
-    var msg = {t:'npc.add', name:v('name') || m.name, ac:parseInt(v('ac'), 10) || acOf(m), hp:hp, init:v('init'), count:count, hidden:v('hidden'), ref:m.name + '|' + m.source, initMod:initOf(m), formula:m.hp && m.hp.formula || null, binfo:{type:TYPE_ES[m._t] || m._t || '', size:SIZE_ES[(m.size || [])[0]] || ''}};
+    var msg = {t:'npc.add', name:v('name') || m.name, ac:parseInt(v('ac'), 10) || acOf(m), hp:hp, init:v('init'), count:count, hidden:v('hidden'), ref:m.name + '|' + m.source, initMod:initOf(m), formula:m.hp && m.hp.formula || null, binfo:{type:TYPE_ES[m._t] || m._t || '', size:SIZE_ES[(m.size || [])[0]] || ''}, reach:actionsOf(m.name + '|' + m.source).reduce(function(x, a){ return a.melee ? Math.max(x, a.reach) : x; }, 1)};
     var label = (count > 1 ? count + ' × ' : '') + (v('name') || m.name), btn = f.querySelector('[type="submit"]'); if (btn) btn.disabled = true;
     // la imagen del monstruo (carpeta 5etools-img del DM), sin hacer esperar más de 4 segundos
     var img = window.Retratos ? Promise.race([Retratos.monster(msg.ref), new Promise(function(res){ setTimeout(function(){ res(null); }, 4000); })]) : Promise.resolve(null);
@@ -215,9 +215,14 @@ var Bestiario = (function(){
         var s = JSON.stringify(a.entries || []), hit = /\{@hit (-?\d+)\}/.exec(s), dc = /\{@dc (\d+)\}/.exec(s), sv = /\{@actSave (\w+)\}/.exec(s) || /(strength|dexterity|constitution|intelligence|wisdom|charisma) saving throw/i.exec(s);
         var dmg = [], re = /\{@damage ([^}|]+)\}\)?\s*([A-Za-z]+)?/g, mm;
         while ((mm = re.exec(s)) && dmg.length < 4) dmg.push({dice:mm[1].replace(/\s+/g, ''), type:mm[2] && DMG_ES[mm[2].toLowerCase()] || ''});
+        // en el mapa: cuerpo a cuerpo con su alcance o a distancia, el área (alientos, conos) y los estados que impone
+        var reach = /reach (\d+) ?f(?:ee|oo)?t/i.exec(s), rng = /range (\d+)(?:\/(\d+))? ?f(?:ee|oo)?t/i.exec(s), melee = /\{@atkr? m|Melee (?:Weapon |Spell )?Attack/i.test(s) && !/\{@atkr? r\}|Ranged (?:Weapon |Spell )?Attack/i.test(s);
+        var conds = [], cr = /\{@condition (\w+)/g, cm; while ((cm = cr.exec(s))) { var ck = cm[1].toLowerCase(); if (conds.indexOf(ck) < 0) conds.push(ck); }
+        var area = !hit && window.Hechizos ? Hechizos.areaIn(a.entries) : null;
         out.push({key:'m:' + g[0] + ':' + a.name, group:g[1], title:strip(a.name), atk:hit ? {bonus:+hit[1]} : null,
           save:dc ? {ab:sv ? SAVE_EN[sv[1].toLowerCase()] || sv[1].toLowerCase() : 'dex', dc:+dc[1], half:/half as much damage|half damage|Success:[^.]*half/i.test(s)} : null,
-          dmg:dmg, text:plain(a.entries).slice(0, 400)});
+          dmg:dmg, text:plain(a.entries).slice(0, 400), melee:!!hit && melee, reach:reach ? Math.max(1, Math.round(+reach[1] / 5)) : 1, range:rng ? [+rng[1], +(rng[2] || rng[1])] : null,
+          def:area || conds.length ? {area:area, self:!!(area && area.self), conds:conds.length ? conds : null, repeat:/end of each of (?:its|their) turns|repeat the save/i.test(s) && conds.length > 0} : null});
       });
     });
     return out;
@@ -225,7 +230,7 @@ var Bestiario = (function(){
   /* Su modificador de salvación (para tirarla desde la escena de combate) */
   function saveOf(ref, ab){ var m = find(ref); if (!m) return 0; var v = m.save && m.save[ab]; return v != null ? parseInt(String(v).replace('−', '-'), 10) || 0 : mod(m[ab]); }
   /* Lo que necesita un enemigo de un encuentro: CA, PG, iniciativa, tipo y cuántas casillas ocupa */
-  function npcOf(ref){ var m = find(ref); if (!m) return null; var sz = (m.size || [])[0]; return {name:Render5e.Tname(m.name), ac:acOf(m), hp:hpOf(m), initMod:initOf(m), formula:m.hp && m.hp.formula || null, ref:m.name + '|' + m.source, binfo:{type:TYPE_ES[m._t] || m._t || '', size:SIZE_ES[sz] || ''}, s:{L:2, H:3, G:4}[sz] || 1, cr:crText(m.cr)}; }
+  function npcOf(ref){ var m = find(ref); if (!m) return null; var sz = (m.size || [])[0]; return {name:Render5e.Tname(m.name), ac:acOf(m), hp:hpOf(m), initMod:initOf(m), formula:m.hp && m.hp.formula || null, ref:m.name + '|' + m.source, binfo:{type:TYPE_ES[m._t] || m._t || '', size:SIZE_ES[sz] || ''}, s:{L:2, H:3, G:4}[sz] || 1, cr:crText(m.cr), reach:actionsOf(ref).reduce(function(x, a){ return a.melee ? Math.max(x, a.reach) : x; }, 1)}; }
 
   function count(){ return list ? list.filter(function(m){ return !m.rep; }).length : 0; }
   return {open:open, count:count, settings:settings, ready:ready, has:has, find:find, initOf:initOf, _set:setData, statHtml:statHtml, search:search, infoOf:infoOf, statOf:statOf, nameOf:nameOf, npcOf:npcOf, actionsOf:actionsOf, saveOf:saveOf};

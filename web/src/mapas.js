@@ -40,7 +40,7 @@ var Mapas = (function(){
   function index(){ try { return JSON.parse(localStorage.getItem(IDX) || '[]'); } catch(e){ return []; } }
   function setIndex(a){ try { localStorage.setItem(IDX, JSON.stringify(a)); } catch(e){} }
   var saveT = {};
-  function norm(mp){ if (!mp.tokens) mp.tokens = []; if (!mp.fog) mp.fog = {on:false, cells:''}; if (!mp.layers || !mp.layers.length) mp.layers = [{id:'l1', name:'Terreno'}]; if (!mp.strokes) mp.strokes = []; if (!mp.walls) mp.walls = []; if (!mp.vis) mp.vis = {on:false, range:0, lines:'auto'}; if (mp.wrev == null) mp.wrev = 0; if (!mp.light) mp.light = {time:'dia', amb:'auto', wx:'despejado'}; if (!mp.trig) mp.trig = []; return mp; }
+  function norm(mp){ if (!mp.tokens) mp.tokens = []; if (!mp.fog) mp.fog = {on:false, cells:''}; if (!mp.layers || !mp.layers.length) mp.layers = [{id:'l1', name:'Terreno'}]; if (!mp.strokes) mp.strokes = []; if (!mp.walls) mp.walls = []; if (!mp.vis) mp.vis = {on:false, range:0, lines:'auto'}; if (mp.wrev == null) mp.wrev = 0; if (!mp.light) mp.light = {time:'dia', amb:'auto', wx:'despejado'}; if (!mp.trig) mp.trig = []; if (!mp.fx) mp.fx = []; return mp; }
   function keep(mp){
     norm(mp); maps[mp.id] = mp;
     var ix = index().filter(function(x){ return x.id !== mp.id; });
@@ -80,6 +80,7 @@ var Mapas = (function(){
   if (window.Sala) {
     Sala.on('state', function(r){
       if (!preloaded && window.Gfx) { preloaded = true; setTimeout(Gfx.preload, 1500); } // el motor del mapa se baja en segundo plano al entrar a la campaña
+      mvs = Object.assign({}, r.mv || {});
       (r.maps || []).forEach(function(m){
         if (maps[m.id] && m.state) { maps[m.id].state = m.state; maps[m.id].frozen = !!m.frozen; maps[m.id].hidden = !!m.hidden; }
         var have = maps[m.id] || index().filter(function(x){ return x.id === m.id; })[0];
@@ -114,7 +115,12 @@ var Mapas = (function(){
       mp.updated = m.updated || mp.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); }
     });
     Sala.on('trig', function(m){ trigEvent(m); });
-    Sala.on('map.play', function(m){ var mp = maps[m.id]; if (!mp) return; mp.state = m.state; mp.frozen = !!m.frozen; mp.turnOnly = m.turnOnly !== false; mp.hidden = m.state === 'prep'; mp.updated = m.updated || mp.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
+    /* Combate táctico: zonas de conjuro, movimiento gastado y lo que pasa en el mapa (los efectos) */
+    Sala.on('fx', function(m){ var mp = maps[m.id]; if (!mp) return; mp.fx = mp.fx || []; (m.put || []).forEach(function(z){ var i = -1; mp.fx.forEach(function(x, j){ if (x.id === z.id) i = j; }); if (i >= 0) mp.fx[i] = z; else mp.fx.push(z); }); if (m.del && m.del.length) { mp.fx = mp.fx.filter(function(z){ return m.del.indexOf(z.id) < 0; }); if (m.del.indexOf(selFx) >= 0) { selFx = null; fxMoving = false; } } keep(mp); if (cur === m.id) { toolbar(); paint(); } });
+    Sala.on('mv', function(m){ mvs[m.tid] = {u:m.u, dash:m.dash, dis:m.dis, max:m.max}; if (cur === m.id) { toolbar(); if (drag) paint(); } });
+    Sala.on('act', function(m){ var k = m.card; if (!k || played[k.id]) return; played[k.id] = 1; if (k.map && cur === k.map && visible() && window.Efectos) Efectos.play(k); });
+    Sala.on('mesa.init', function(m){ (m.acts || []).forEach(function(k){ played[k.id] = 1; }); });
+    Sala.on('map.play', function(m){ var mp = maps[m.id]; if (!mp) return; mp.state = m.state; mp.frozen = !!m.frozen; mp.turnOnly = m.turnOnly !== false; mp.hidden = m.state === 'prep'; if (m.tac !== undefined) mp.tac = m.tac; mp.updated = m.updated || mp.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
     /* El DM prepara un combate (o empieza un encuentro): quien está ahí se acomoda; quien no, se puede unir */
     Sala.on('combat', function(m){
       if (isDm()) return; var mp = m.map && maps[m.map], here = mp && myTok(mp);
@@ -278,7 +284,7 @@ var Mapas = (function(){
   /* ---------- Zonas: pasos a otro mapa, trampas, textos y emboscadas ----------
      Un rectángulo de casillas {id, k, x, y, w, h, name, to:{map, zid}, lock, hidden, text, once, fired, say, all}.
      En la campaña las pone el DM y el servidor las dispara; en tu copia se disparan aquí mismo. */
-  var ZK = [['paso','Paso a otro mapa','i-stairs','#e8c26a','Escalera, puerta o salida: lleva a otro mapa (pregunta antes).'],['trampa','Trampa','i-trap','#e0574a','Te avisa a ti cuando alguien la pisa (o la cruza).'],['texto','Texto','i-scroll','#5fa8e8','Una descripción que se lee al entrar.'],['encuentro','Emboscada','i-ambush','#b07ae8','Al entrar, aparecen los enemigos ocultos de este mapa.']];
+  var ZK = [['paso','Paso a otro mapa','i-stairs','#e8c26a','Escalera, puerta o salida: lleva a otro mapa (pregunta antes).'],['trampa','Trampa','i-trap','#e0574a','Te avisa a ti cuando alguien la pisa (o la cruza).'],['texto','Texto','i-scroll','#5fa8e8','Una descripción que se lee al entrar.'],['encuentro','Emboscada','i-ambush','#b07ae8','Al entrar, aparecen los enemigos ocultos de este mapa.'],['dificil','Terreno difícil','i-rough','#b8875a','Moverse aquí cuesta el doble (escombros, barro, maleza). Los jugadores la ven.']];
   function zoneT(k){ return ZK.filter(function(x){ return x[0] === k; })[0] || ZK[0]; }
   function zoneIdx(mp, id){ for (var i = 0; i < mp.trig.length; i++) if (mp.trig[i].id === id) return i; return -1; }
   function zoneById(mp, id){ var i = zoneIdx(mp, id); return i >= 0 ? mp.trig[i] : null; }
@@ -310,6 +316,8 @@ var Mapas = (function(){
         + (z.to && z.to.map && !tz.some(function(q){ return q.k === 'paso' && q.to && q.to.map === mp.id; }) ? '<button class="btn sm" type="button" data-act="mapzback"><svg class="ic"><use href="#i-stairs"/></svg>Crear la vuelta en ese mapa</button>' : '')
         + '<label class="toggle"><input type="checkbox" id="mapZLock"' + (z.lock ? ' checked' : '') + '> Bloqueada: los jugadores no pasan</label>'
         + '<label class="toggle"><input type="checkbox" id="mapZHide"' + (z.hidden ? ' checked' : '') + '> Oculta para los jugadores</label>';
+    } else if (z.k === 'dificil') {
+      h += '<p class="note">En combate, cada casilla de aquí cuesta 3 m de movimiento en lugar de 1,5 m (volando no cuenta).</p>';
     } else {
       if (z.k !== 'encuentro') h += '<label class="fl">' + (z.k === 'trampa' ? 'Qué pasa (para ti)' : 'Lo que se lee') + '<textarea class="field" id="mapZText" rows="3" maxlength="600">' + esc(z.text || '') + '</textarea></label>';
       if (z.k === 'trampa') h += '<label class="toggle"><input type="checkbox" id="mapZSay"' + (z.say ? ' checked' : '') + '> Decírselo también al jugador</label>';
@@ -616,11 +624,12 @@ var Mapas = (function(){
   /* ---------- Editor: el mapa ocupa todo; las herramientas flotan encima ---------- */
   var pop = null; // 'set' | 'layers' | 'add' | 'pen' | null
   function editor(box){
-    box.innerHTML = '<div class="map-ed vtt"><div class="map-bar" id="mapBar"></div><div class="map-wrap" id="mapWrap"><canvas id="mapCv" aria-label="Mapa: arrastra tu ficha, mantén presionado para señalar; con dos dedos mueves y haces zoom"></canvas><canvas class="map-wx" id="mapWx" aria-hidden="true" hidden></canvas>'
+    box.innerHTML = '<div class="map-ed vtt"><div class="map-bar" id="mapBar"></div><div class="map-wrap" id="mapWrap"><canvas id="mapCv" aria-label="Mapa: arrastra tu ficha, mantén presionado para señalar; con dos dedos mueves y haces zoom"></canvas><canvas class="map-wx" id="mapWx" aria-hidden="true" hidden></canvas><canvas class="map-fx" id="mapFx" aria-hidden="true"></canvas>'
       + '<div class="vtt-init" id="vttInit" hidden></div><div class="map-pal" id="mapPal"></div>'
       + '<div class="map-zoom"><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="1" aria-label="Acercar"><svg class="ic"><use href="#i-plus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="-1" aria-label="Alejar"><svg class="ic"><use href="#i-minus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapfit" aria-label="Encuadrar el mapa" title="Encuadrar"><svg class="ic"><use href="#i-fit"/></svg></button></div>'
       + '<div class="map-pop" id="mapPop" hidden></div><div class="vtt-hud" id="vttHud"></div><div class="map-txt" id="mapTxt" hidden></div><div class="map-tok" id="mapTok" hidden></div><div class="map-selbar" id="mapSel" hidden></div><div class="map-ask" id="mapAsk" hidden></div></div></div>';
-    dropGL(); canvas = $('#mapCv', box); bind(); if (window.Gfx && Gfx.wantGL()) startGL(canvas); toolbar(); fit(); frame(maps[cur]); var mt = !master(maps[cur]) && myTok(maps[cur]); if (mt) focus(maps[cur], mt); paint(); tokPanel(); badge(); askPaint();
+    dropGL(); canvas = $('#mapCv', box); bind(); if (window.Gfx && Gfx.wantGL()) startGL(canvas); toolbar(); fit();
+    if (window.Efectos) Efectos.attach($('#mapFx', box), {map:function(){ return cur && maps[cur]; }, view:V, visible:function(){ return !!cur && visible(); }, seen:fxSeen, aim:aimView}); frame(maps[cur]); var mt = !master(maps[cur]) && myTok(maps[cur]); if (mt) focus(maps[cur], mt); paint(); tokPanel(); badge(); askPaint();
     var r0 = room(); if (r0 && r0.split && isDm() && shared(cur) && r0.fight !== cur) Sala.send({t:'fight.focus', map:cur}); // con el combate separado, el DM ve el de este mapa
   }
   /* No repinta un bloque mientras escribes en él (el estado llega seguido) */
@@ -759,6 +768,146 @@ var Mapas = (function(){
     return h;
   }
 
+  /* ---------- Combate táctico (módulo 9) ----------
+     Movimiento por velocidad (con terreno difícil, Correr, Retirarse y levantarse), aviso de ataques de oportunidad,
+     altura de vuelo, apuntar áreas y objetivos para el compositor de acciones (Acciones) y las zonas de conjuro. */
+  var mvs = {}, aim = null, aimOp = null, selFx = null, fxMoving = false, played = {};
+  function mtr(c){ return String(Math.round(c * 1.5 * 10) / 10).replace('.', ','); }
+  function liftOf(t, s){ return Math.min(0.42, 0.14 + (t.z || 0) * 0.025) * (t.s || 1) * s; }
+  function fxSeen(x, y){ var mp = maps[cur]; if (!mp || master(mp) && !viewAs || !mp.fog || !mp.fog.on) return true; return !!seen(fogBits(mp), mp, x, y); }
+  function tacOf(mp){ var t = mp && mp.tac || {}; return {flank:!!t.flank, mov:t.mov !== false, oa:t.oa !== false}; }
+  function inFight(mp){ return !!mp && shared(mp.id) && stateOf(mp) === 'combat' && started(mp); }
+  /* Quién es una ficha en el combate: id, nombre, estados, alcance y si está caído */
+  function crOf(t){
+    var r = room(); if (!r || !t.ref || t.comp || t.kind === 'obj') return null;
+    if (t.kind === 'npc') { var n = (r.npcs || []).filter(function(x){ return x.id === t.ref; })[0]; return n ? {id:n.id, kind:'npc', name:n.name, conds:n.conds || [], reach:n.reach || 1, down:n.hp != null ? n.hp <= 0 : n.state === 'caído', ac:n.ac} : null; }
+    var m = r.members.filter(function(x){ return x.id === t.ref && x.role !== 'dm'; })[0]; if (!m) return null; var c = m.char || {};
+    return {id:m.id, kind:'pc', name:c.name || m.name, conds:c.conds || [], reach:c.reach || 1, down:c.hpMax > 1 && c.hp <= 0, ac:c.ac, exh:c.exh || 0};
+  }
+  function speedCells(mp, t){ var ch = charOf(mp, t); if (!ch) return null; if (window.Tactica && Tactica.speed0(ch.conds)) return 0; return Math.max(0, Math.floor((ch.speed || 9) / 1.5 + 1e-6) - (ch.exh || 0)); }
+  /* Lo que lleva gastado y le queda a una ficha en su ronda */
+  function mvLeft(mp, t){ var sp = speedCells(mp, t); if (sp == null) return null; var x = mvs[t.id] || {u:0, dash:false, dis:false}, max = x.max != null ? x.max : sp * (x.dash ? 2 : 1); return {u:x.u || 0, max:max, left:Math.max(0, max - (x.u || 0)), dash:!!x.dash, dis:!!x.dis, sp:sp}; }
+  function limited(mp, t){ return !master(mp) && t.kind === 'pc' && !t.comp && inFight(mp) && tacOf(mp).mov && !!window.Tactica; }
+  /* Quién te haría un ataque de oportunidad si te mueves por estas casillas */
+  function oaOf(mp, t, cells){
+    if (!window.Tactica || !inFight(mp) || !tacOf(mp).oa || !cells || cells.length < 2) return [];
+    var me0 = crOf(t); if (!me0 || me0.down) return []; var ml = mvs[t.id]; if (ml && ml.dis) return [];
+    var foes = mp.tokens.filter(function(x){ return x !== t && x.kind !== 'obj' && (x.kind === 'npc') !== (t.kind === 'npc') && !(x.hidden && !master(mp)); }).map(function(x){ var c = crOf(x); return c && !c.down && !Tactica.incapacitated(c.conds) ? {id:c.id, name:c.name, t:x, reach:c.reach} : null; }).filter(Boolean);
+    return Tactica.provokes(t, cells, foes).map(function(p){ return foes.filter(function(f){ return f.id === p.id; })[0].name; });
+  }
+  /* Distancia y cobertura desde tu ficha (o la del turno) hasta otra */
+  function rangeLine(mp, t){
+    if (!window.Tactica || !shared(mp.id)) return ''; var from = master(mp) ? null : myTok(mp); if (!from || from === t) return '';
+    var d = Tactica.dist(from, t), cv = d > 0 ? Tactica.cover(mp, from, t, mp.tokens.filter(function(x){ return x.kind !== 'obj'; })) : 0;
+    return '<p class="tok-dist"><svg class="ic"><use href="#i-ruler"/></svg><span>A <b>' + mtr(d) + ' m</b> de ti' + (d <= 1 ? ' · a tu alcance' : '') + (cv ? ' · <b>' + esc(Tactica.coverName(cv)) + '</b>' : '') + '</span></p>';
+  }
+  /* El movimiento del jugador en su ronda: lo que le queda, Correr, Retirarse y levantarse */
+  function mvHud(mp, t){
+    if (!t || !limited(mp, t)) return ''; var L = mvLeft(mp, t); if (!L) return '';
+    var ch = charOf(mp, t) || {}, prone = (ch.conds || []).indexOf('prone') >= 0, pct = L.max ? Math.round(L.left / L.max * 100) : 0;
+    return '<div class="hud-row pj mv"><span class="hud-mv" title="Movimiento en esta ronda"><svg class="ic"><use href="#i-boot"/></svg><span class="mv-bar"><i style="width:' + pct + '%"></i></span><b>' + mtr(L.left) + ' m</b><small>de ' + mtr(L.max) + ' m</small></span>'
+      + '<button class="btn sm" type="button" data-act="mapmv" data-v="dash" aria-pressed="' + L.dash + '" title="Carrera: tu acción para moverte el doble"><svg class="ic"><use href="#i-run"/></svg>Correr</button>'
+      + '<button class="btn sm" type="button" data-act="mapmv" data-v="dis" aria-pressed="' + L.dis + '" title="Retirarse: tu acción para no provocar ataques de oportunidad"><svg class="ic"><use href="#i-retreat"/></svg>Retirarse</button>'
+      + (prone ? '<button class="btn sm" type="button" data-act="mapmv" data-v="stand" title="Levantarte cuesta la mitad de tu velocidad">Levantarme</button>' : '') + '</div>';
+  }
+  /* Las reglas del combate en este mapa (el DM): movimiento limitado, ataques de oportunidad y flanqueo */
+  function tacBtns(mp){
+    var T = tacOf(mp);
+    return '<button class="icon-btn sm" type="button" data-act="maptac" data-v="mov" aria-pressed="' + T.mov + '" aria-label="Movimiento limitado por la velocidad" title="' + (T.mov ? 'Cada personaje gasta su velocidad' : 'Movimiento libre') + '"><svg class="ic"><use href="#i-boot"/></svg></button>'
+      + '<button class="icon-btn sm" type="button" data-act="maptac" data-v="oa" aria-pressed="' + T.oa + '" aria-label="Avisar ataques de oportunidad" title="' + (T.oa ? 'Avisa los ataques de oportunidad' : 'Sin avisos de ataques de oportunidad') + '"><svg class="ic"><use href="#i-retreat"/></svg></button>'
+      + '<button class="icon-btn sm" type="button" data-act="maptac" data-v="flank" aria-pressed="' + T.flank + '" aria-label="Flanqueo (regla opcional)" title="' + (T.flank ? 'Flanqueo: ventaja al rodear a un enemigo' : 'Sin flanqueo') + '"><svg class="ic"><use href="#i-group"/></svg></button>';
+  }
+  /* Zonas de conjuro: tocar una (si es tuya o eres el DM) la elige para moverla o quitarla */
+  function fxAt(mp, m){ if (!window.Tactica || !mp.fx || !mp.fx.length) return null; var x = Math.floor(m[0]), y = Math.floor(m[1]); for (var i = mp.fx.length - 1; i >= 0; i--) { var z = mp.fx[i]; if (Tactica.zoneCells(mp, z).some(function(c){ return c[0] === x && c[1] === y; })) return z; } return null; }
+  function fxMine(z){ return isDm() || z.by === me(); }
+  function fxHud(mp){
+    var z = selFx && (mp.fx || []).filter(function(x){ return x.id === selFx; })[0]; if (!z) { selFx = null; return ''; }
+    return '<div class="hud-row fxsel"><span class="hud-st"><svg class="ic"><use href="#i-cube"/></svg><span><b>' + esc(z.name) + '</b>' + (z.conc ? ' · concentración' : '') + (z.terrain ? ' · terreno difícil' : '') + (fxMoving ? ' · toca dónde ponerla' : '') + '</span></span><span class="hud-sp"></span>'
+      + (z.move && z.sh && fxMine(z) || isDm() && z.sh ? '<button class="btn sm" type="button" data-act="mapfxmove" aria-pressed="' + fxMoving + '">Mover</button>' : '')
+      + (fxMine(z) ? '<button class="btn sm del" type="button" data-act="mapfxrm"><svg class="ic"><use href="#i-trash"/></svg>Quitar</button>' : '') + '<button class="icon-btn sm" type="button" data-act="mapfxx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>';
+  }
+  function fxMoveTo(mp, z, m){
+    var sh = z.sh, p = mp.grid !== 'none' ? [Math.round(m[0]), Math.round(m[1])] : m, x = p[0], y = p[1];
+    if (sh.t === 'cube') { x = Math.round(m[0] - sh.w / 2); y = Math.round(m[1] - sh.w / 2); }
+    Sala.send({t:'fx.move', id:mp.id, fid:z.id, x:x, y:y}); fxMoving = false; toolbar();
+  }
+
+  /* ---------- Apuntar: el área de un conjuro o los objetivos de un ataque ----------
+     Mapas.aim({actor (id del combate o 'me'), area:{t, ft, w, self}, range (pies), title, dtype, heal, targets, onDone, onPost})
+     En el mapa: el área sigue al dedo (desde tu ficha si sale de ti) y propone los objetivos que toca; tocar una ficha la
+     agrega o la quita. «Listo» vuelve a la acción; «Tirar y publicar» la manda desde aquí. */
+  function actorTok(mp, actor){ if (!actor || actor === 'me') return myTok(mp); return mp.tokens.filter(function(t){ return t.ref === actor && !t.comp; })[0] || null; }
+  function aimStart(o){
+    var r = room(); if (!r) return false;
+    var mid = o.map || cur || r.scene || (function(){ var mine0 = Object.keys(maps).filter(function(k){ return maps[k].room === r.code && actorTok(maps[k], o.actor); }); return mine0[0]; })();
+    if (!mid) { Sala.toast('Abre el mapa donde está ' + (o.actor === 'me' || !o.actor ? 'tu ficha' : 'quien actúa') + '.'); return false; }
+    aim = {o:o, map:mid, sh:null, targets:Object.assign({}, o.targets || {}), pt:null};
+    var cb = document.getElementById('combat'); if (cb) cb.hidden = false; if (window.Mesa) Mesa.show('mapas');
+    if (cur !== mid) openMap(mid); else { toolbar(); paint(); }
+    setTimeout(function(){ var mp = maps[mid], t = mp && actorTok(mp, o.actor); if (!mp) return; if (t && canvas) { focus(mp, t); } if (o.area && o.area.self && t) aimPlace(mp, Vision.center(t)); toolbar(); paint(); }, 80);
+    return true;
+  }
+  function aimCells(mp){ return aim && aim.sh && window.Tactica ? Tactica.area(mp, aim.sh) : []; }
+  /* La forma del área según dónde apunta el dedo */
+  function aimPlace(mp, m){
+    var o = aim.o, A = o.area; if (!A) return; var t = actorTok(mp, o.actor), s = t ? t.s || 1 : 1, c = t ? Vision.center(t) : m, n = Math.max(1, A.ft / 5);
+    var ang = Math.atan2(m[1] - c[1], m[0] - c[0]); if (!isFinite(ang) || (Math.abs(m[0] - c[0]) < 0.01 && Math.abs(m[1] - c[1]) < 0.01)) ang = aim.ang || 0; aim.ang = ang;
+    var snap = function(v){ return mp.grid !== 'none' ? Math.round(v) : Math.round(v * 2) / 2; };
+    if (A.self && A.t === 'emanation') aim.sh = t ? {t:'emanation', tok:t, r:n} : null;
+    else if (A.self && A.t === 'cone') aim.sh = {t:'cone', x:c[0], y:c[1], a:ang, l:n + s / 2};
+    else if (A.self && A.t === 'line') aim.sh = {t:'line', x:c[0], y:c[1], a:ang, l:n + s / 2, w:Math.max(1, (A.w || 5) / 5)};
+    else if (A.self && A.t === 'cube' && t) {
+      var dx = m[0] - c[0], dy = m[1] - c[1], W = n, x, y;
+      if (Math.abs(dx) >= Math.abs(dy)) { x = dx >= 0 ? t.x + s : t.x - W; y = Math.max(t.y - W + 1, Math.min(t.y + s - 1, Math.round(m[1] - W / 2))); }
+      else { y = dy >= 0 ? t.y + s : t.y - W; x = Math.max(t.x - W + 1, Math.min(t.x + s - 1, Math.round(m[0] - W / 2))); }
+      aim.sh = {t:'cube', x:x, y:y, w:W};
+    }
+    else if (A.t === 'cube') aim.sh = {t:'cube', x:Math.round(m[0] - n / 2), y:Math.round(m[1] - n / 2), w:n};
+    else if (A.t === 'wall' || A.t === 'line') { var a0 = aim.from || m; aim.sh = {t:'line', x:a0[0], y:a0[1], a:Math.atan2(m[1] - a0[1], m[0] - a0[0]) || 0, l:Math.max(1, Math.min(n, Math.hypot(m[0] - a0[0], m[1] - a0[1]))), w:Math.max(1, (A.w || 5) / 5)}; }
+    else aim.sh = {t:A.t === 'cylinder' ? 'cylinder' : 'sphere', x:snap(m[0]), y:snap(m[1]), r:n};
+    aim.pt = m;
+    // propone los objetivos que toca (menos quien lo lanza, si sale de él)
+    var set = Tactica.cellSet(aimCells(mp), mp.cols), next = {};
+    mp.tokens.forEach(function(x){ var cr = crOf(x); if (!cr) return; if (A.self && t && x === t) return; if (x.hidden && !master(mp)) return; if (Tactica.touches(set, x, mp.cols)) next[cr.id] = 1; });
+    aim.targets = next;
+  }
+  /* Lo que Efectos dibuja mientras apuntas */
+  function aimView(){
+    var mp = cur && maps[cur]; if (!aim || !mp || aim.map !== mp.id) return null;
+    var o = aim.o, t = actorTok(mp, o.actor), out = {cells:aimCells(mp), col:window.Efectos ? Efectos.colOf(o.dtype || '', o.heal) : ['#ffd66e'], rings:[], range:null, label:''};
+    mp.tokens.forEach(function(x){ var cr = crOf(x); if (cr && aim.targets[cr.id]) { var c = Vision.center(x); out.rings.push([c[0], c[1] - (x.z ? liftOf(x, 1) : 0), (x.s || 1) * 0.55]); } });
+    if (t && o.range && !(o.area && o.area.self)) { var c0 = Vision.center(t); out.range = [c0[0], c0[1], o.range / 5 + (t.s || 1) / 2]; }
+    if (aim.sh && t && !(o.area && o.area.self) && o.range) { var cc = aim.sh.t === 'cube' ? [aim.sh.x + aim.sh.w / 2, aim.sh.y + aim.sh.w / 2] : [aim.sh.x, aim.sh.y]; if (Tactica.distPt([cc[0] - 0.01, cc[1] - 0.01, 0], t) > o.range / 5 + 0.01) out.far = true; }
+    return out;
+  }
+  function aimHud(mp){
+    var o = aim.o, n = Object.keys(aim.targets).length, A = o.area, t = actorTok(mp, o.actor), v = aimView() || {};
+    var help = A ? (A.self ? (A.t === 'emanation' ? 'El área va contigo.' : 'Apunta con el dedo hacia dónde sale.') : 'Toca o arrastra para poner el área.') + ' Toca una ficha para quitarla o agregarla.' : 'Toca a tus objetivos en el mapa.';
+    var list = mp.tokens.map(function(x){ var cr = crOf(x); if (!cr || !aim.targets[cr.id]) return ''; var d = t ? Tactica.dist(t, x) : null, org = aim.sh && !(A && A.self) ? (aim.sh.t === 'cube' ? [aim.sh.x + aim.sh.w / 2, aim.sh.y + aim.sh.w / 2] : [aim.sh.x, aim.sh.y]) : null, cv = (t || org) && (o.atk || o.dex) ? Tactica.cover(mp, org || t, x, mp.tokens.filter(function(q){ return q.kind !== 'obj'; })) : 0, far = !A && o.range && d != null && d > Math.ceil(o.range / 5);
+      return '<span class="chip aim-t' + (cv === 'total' || far ? ' bad' : '') + '">' + esc(cr.name) + (d != null ? ' · ' + mtr(d) + ' m' : '') + (cv ? ' · ' + (cv === 'total' ? 'cobertura total' : '+' + cv) : '') + (far ? ' · lejos' : '') + '</span>'; }).join('');
+    return '<div class="hud-row aim"><span class="hud-st"><svg class="ic"><use href="#i-aim"/></svg><span><b>' + esc(o.title || 'Apuntar') + '</b> · ' + help + (v.far ? ' <b class="bad">Fuera de alcance</b>' : '') + '</span></span></div>'
+      + (list ? '<div class="hud-row aim-list">' + list + '</div>' : '')
+      + '<div class="hud-row aim-go"><button class="btn sm" type="button" data-act="mapaimx">Cancelar</button><span class="hud-sp"></span><button class="btn sm" type="button" data-act="mapaimok">Ajustar la acción</button><button class="btn main sm" type="button" data-act="mapaimgo"><svg class="ic"><use href="#i-d20"/></svg>Tirar y publicar' + (n ? ' (' + n + ')' : '') + '</button></div>';
+  }
+  /* Lo que se entrega al compositor: objetivos, el área (en la forma que guarda el servidor) y el mapa */
+  function aimResult(mp){
+    var o = aim.o, sh = aim.sh, out = {map:mp.id, targets:Object.keys(aim.targets)};
+    if (sh) { if (sh.t === 'emanation') { var t = sh.tok, s = t.s || 1; out.area = {t:'cube', x:t.x - sh.r, y:t.y - sh.r, w:s + sh.r * 2}; out.zoneR = sh.r; } else out.area = sh; out.self = !!(o.area && o.area.self); }
+    return out;
+  }
+  function aimEnd(go){
+    var mp = maps[aim.map], o = aim.o, res = mp ? aimResult(mp) : null; aim = null; aimOp = null; toolbar(); paint();
+    if (go === false || !res) { if (o.onCancel) o.onCancel(); return; }
+    if (o.onDone) o.onDone(res, go === 'post');
+  }
+  function aimDown(mp, m){ if (aim.o.area && (aim.o.area.t === 'wall' || (aim.o.area.t === 'line' && !aim.o.area.self))) aim.from = m; aimOp = {m0:m, moved:false, tok:tokAt(mp, m)}; if (!aimOp.tok && aim.o.area) { aimPlace(mp, m); paint(); toolbar(); } }
+  function aimMove(mp, m){ if (!aimOp) return; if (Math.hypot(m[0] - aimOp.m0[0], m[1] - aimOp.m0[1]) > 0.25) aimOp.moved = true; if (aim.o.area && (aimOp.moved || !aimOp.tok)) { aimPlace(mp, m); paint(); } }
+  function aimUp(mp, m){
+    var op = aimOp; aimOp = null; if (!op) return;
+    if (!op.moved && op.tok) { var cr = crOf(op.tok); if (cr) { if (aim.targets[cr.id]) delete aim.targets[cr.id]; else aim.targets[cr.id] = 1; } }
+    toolbar(); paint();
+  }
+
   /* ---------- Combate dentro del mapa ---------- */
   function fight(){ var r = room(); return r && ((r.round > 0) || (r.npcs || []).length || r.order.length) ? r : null; }
   function combatants(r){
@@ -803,6 +952,7 @@ var Mapas = (function(){
         + '<p class="hud-hint">' + (vo ? 'Se descubre solo lo que ven las fichas del grupo al moverse; las paredes tapan la vista.' + (mp.walls.length ? '' : ' Todavía no hay paredes: ponlas en Dibujar → Paredes.') + ' Tú ves en penumbra lo que ellos no ven ahora.'
           : fo ? 'Arrastra sobre el mapa para ' + (tool.fogV ? 'descubrir' : 'cubrir') + '. Tú la ves translúcida; los jugadores, negra.' : 'Actívala para que los jugadores solo vean lo descubierto.') + '</p>';
     } else if (mode === 'jugar' && encEd) h = encHud(mp);
+    else if (mode === 'jugar' && aim && aim.map === mp.id) h = aimHud(mp);
     else if (mode === 'jugar') {
       var f = fight(), mt = myTok(mp), st = stateOf(mp), dep = deploying(mp), zs = dep ? deployZ(mp, me()) : [];
       var canPut = !(isDm() && sh) && (!!(window.Sala && Sala.summary && Sala.summary()) || !sh);
@@ -811,8 +961,9 @@ var Mapas = (function(){
       var tokBtns = (canPut ? (noTp ? '' : '<button class="btn main sm" type="button" data-act="mapputme"><svg class="ic"><use href="#' + (dep && zs.length ? 'i-flag' : 'i-token') + '"/></svg>' + (mt ? (dep && zs.length ? 'A mi zona' : 'Traer mi ficha') : 'Poner mi ficha') + '</button>') + (mt ? '<button class="icon-btn sm" type="button" data-act="mapfindme" aria-label="Ir a mi ficha" title="Ir a mi ficha"><svg class="ic"><use href="#i-target"/></svg></button>' : '') : '')
         + '<button class="icon-btn sm" type="button" data-act="mapadd" aria-expanded="' + (pop === 'add') + '" aria-label="' + (dm ? 'Agregar ficha' : 'Otra ficha (familiar, montura)') + '" title="' + (dm ? 'Agregar ficha' : 'Otra ficha') + '"><svg class="ic"><use href="#i-plus"/></svg></button>';
       if (r && isDm() && sh) h = dmHud(mp, r, f, st, dep, scene, tokBtns);
-      else if (r && sh) h = pjHud(mp, r, f, st, dep, zs, mt, tokBtns);
+      else if (r && sh) h = pjHud(mp, r, f, st, dep, zs, mt, tokBtns) + mvHud(mp, mt);
       else h = '<div class="hud-row">' + tokBtns + '</div>';
+      h = fxHud(mp) + h;
     }
     if (mode === 'niebla') h = scTabs() + h;
     put(el, h); el.hidden = !h;
@@ -840,7 +991,7 @@ var Mapas = (function(){
     var lead = dep ? '<span class="hud-st dep"><svg class="ic"><use href="#i-flag"/></svg><span><b>Despliegue</b> · ' + (pcs.length ? ready + ' de ' + pcs.length + ' con iniciativa' : 'esperando al grupo') + '</span></span>'
       : '<span class="hud-st"><svg class="ic"><use href="#i-swords"/></svg><span><b>Ronda ' + (f ? f.round : 0) + '</b>' + (f && f.turnId ? ' · ' + esc(nameIn(r, f.turnId)) : '') + '</span></span>';
     var row2 = '<div class="hud-row dm fight">' + lead + '<span class="hud-sp"></span>' + (noInit ? '<button class="btn sm" type="button" data-act="mapnpcinit" title="Tira 1d20 + su modificador a cada enemigo sin iniciativa (los iguales comparten tirada)"><svg class="ic"><use href="#i-d20"/></svg><span class="lb">Iniciativa de enemigos</span><small>' + noInit + '</small></button>' : '') + waves
-      + '<button class="icon-btn sm" type="button" data-act="mapturnonly" aria-pressed="' + (mp.turnOnly !== false) + '" aria-label="' + (mp.turnOnly !== false ? 'Cada quien se mueve en su turno (toca para dejarlos libres)' : 'Se mueven libres (toca para que sea en su turno)') + '" title="' + (mp.turnOnly !== false ? 'Se mueve quien tiene el turno' : 'Se mueven libres') + '"><svg class="ic"><use href="#i-turn"/></svg></button>' + ctl + '</div>';
+      + tacBtns(mp) + '<button class="icon-btn sm" type="button" data-act="mapturnonly" aria-pressed="' + (mp.turnOnly !== false) + '" aria-label="' + (mp.turnOnly !== false ? 'Cada quien se mueve en su turno (toca para dejarlos libres)' : 'Se mueven libres (toca para que sea en su turno)') + '" title="' + (mp.turnOnly !== false ? 'Se mueve quien tiene el turno' : 'Se mueven libres') + '"><svg class="ic"><use href="#i-turn"/></svg></button>' + ctl + '</div>';
     return row2 + row + fsplit;
   }
   function nameIn(r, id){ var m = r.members.filter(function(x){ return x.id === id; })[0]; if (m) return m.char ? m.char.name : m.name; var n = (r.npcs || []).filter(function(x){ return x.id === id; })[0]; return n ? n.name : ''; }
@@ -931,6 +1082,8 @@ var Mapas = (function(){
     var can = mine(t), dm = master(mp), info = tokInfo(t), r = room(), cb = r && t.ref && !t.comp ? combatant(r, t.ref) : null;
     var h = '<div class="row map-tok-h">' + avatar(t) + '<span style="flex:1;min-width:0"><b>' + esc(info.name) + '</b><small>' + esc(info.sub) + (cb && cb.init != null ? ' · inic. ' + cb.init : '') + '</small></span><button class="icon-btn sm" type="button" data-act="maptokx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>';
     if (cb) h += combatHtml(t, cb, r);
+    h += rangeLine(mp, t);
+    if (can && t.kind !== 'obj') h += '<div class="tok-row tok-z"><span><svg class="ic"><use href="#i-wing"/></svg>Altura</span><button class="icon-btn sm" type="button" data-act="maptokz" data-v="-1" aria-label="Bajar 1,5 m"' + (t.z ? '' : ' disabled') + '><svg class="ic"><use href="#i-minus"/></svg></button><b>' + (t.z ? mtr(t.z) + ' m' : 'En el suelo') + '</b><button class="icon-btn sm" type="button" data-act="maptokz" data-v="1" aria-label="Subir 1,5 m"><svg class="ic"><use href="#i-plus"/></svg></button></div>';
     h += tokLightInfo(mp, t);
     if (can) h += '<details class="map-tok-more"' + (cb ? '' : ' open') + '><summary>Ficha en el mapa</summary><div class="map-tok-b"><label>Tamaño<select class="field" data-tokset="s">' + TSIZE.map(function(x){ return '<option value="' + x[0] + '"' + (t.s === x[0] ? ' selected' : '') + '>' + x[1].split(' (')[0] + '</option>'; }).join('') + '</select></label>'
       + tokLightCtl(mp, t)
@@ -1001,6 +1154,7 @@ var Mapas = (function(){
     var hh = Math.max(300, Math.min(1600, (window.innerHeight || 800) - top - (document.querySelector('.app.camp-wide') ? 0 : 12))), dpr = window.devicePixelRatio || 1;
     canvas.style.width = w + 'px'; canvas.style.height = hh + 'px';
     var wx = document.getElementById('mapWx'); if (wx) { wx.style.width = w + 'px'; wx.style.height = hh + 'px'; }
+    var fxc = document.getElementById('mapFx'); if (fxc) { fxc.style.width = w + 'px'; fxc.style.height = hh + 'px'; }
     if (canvas.dataset.engine === 'gl') { if (gl) gl.resize(w, hh, Gfx.resolution()); return; }
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(hh * dpr);
   }
@@ -1025,6 +1179,7 @@ var Mapas = (function(){
     if (drawing) strokeOn(c, drawing, V());
     if (erasing) { var v = V(); mp.strokes.forEach(function(k){ if (erasing.hits[k.id]) { c.save(); c.globalAlpha = 0.25; strokeOn(c, Object.assign({}, k, {c:'#ff3b30'}), v); c.restore(); } }); }
     overlay(c, mp, V());
+    if (window.Efectos) Efectos.sync();
   }
 
   /* ---------- Motor WebGL: arranca aparte y, si falla, el mapa vuelve a Canvas 2D ---------- */
@@ -1047,6 +1202,7 @@ var Mapas = (function(){
   function glPaint(){
     glRaf = 0; var mp = maps[cur]; if (!gl || !mp || !canvas || !document.contains(canvas)) return;
     var sc = scene(mp, V(), canvas.clientWidth, canvas.clientHeight); gl.render(sc); flicker(sc);
+    if (window.Efectos) Efectos.sync();
   }
   /* ---------- Luz: velo, brillos y tinte (los usan los dos motores) ---------- */
   function hiddenObj(k){ return k.k === 'asset' && k.a === 'luz'; } // la luz invisible solo la ve el DM
@@ -1157,13 +1313,18 @@ var Mapas = (function(){
   }
   function tokScene(t, v, late){
     var info = tokInfo(t);
-    return {id:t.id, x:t.x, y:t.y, s:t.s || 1, color:t.color || '#8c2626', img:tokImg(t) ? Mesa.imgUrl(tokImg(t)) : null, ini:ini(info.name), name:info.name, pct:info.pct, turn:info.turn, down:info.down, hidden:!!t.hidden, sel:selTok === t.id, late:late, label:v.s >= 40 || selTok === t.id || info.turn};
+    return {id:t.id, x:t.x, y:t.y, s:t.s || 1, color:t.color || '#8c2626', img:tokImg(t) ? Mesa.imgUrl(tokImg(t)) : null, ini:ini(info.name), name:info.name, pct:info.pct, turn:info.turn, down:info.down, hidden:!!t.hidden, sel:selTok === t.id, late:late, label:v.s >= 40 || selTok === t.id || info.turn, z:t.z || 0};
   }
   /* La regla de la ficha que arrastras: en recto o rodeando paredes; si no hay camino, avisa */
   function ruler(mp){
     if (drag.dep) { var dz = deployZ(mp, ownerOf(drag.tok)), s0 = drag.tok.s || 1, rx = mp.grid !== 'none' ? Math.round(drag.x) : drag.x, ry = mp.grid !== 'none' ? Math.round(drag.y) : drag.y, out = dz.length && !inDeploy(dz, rx, ry, s0); return {bad:out, text:out ? 'Fuera de tu zona de despliegue' : 'Aquí te acomodas', path:null}; }
     var rt = drag.route, bad = !!(rt && !rt.ok), steps = rt && rt.cells ? rt.steps : Math.max(Math.abs(Math.round(drag.x - drag.sx)), Math.abs(Math.round(drag.y - drag.sy)));
     var text = bad ? (master(mp) ? 'Atraviesa paredes (solo el DM)' : 'Hay una pared en medio') : (steps * 1.5).toString().replace('.', ',') + ' m · ' + steps + ' casilla' + (steps === 1 ? '' : 's') + (rt && rt.cells ? ' · rodeando' : '');
+    if (!bad && drag.cost != null) {
+      var L = limited(mp, drag.tok) ? mvLeft(mp, drag.tok) : null; text = mtr(drag.cost) + ' m' + (drag.cost > steps ? ' (terreno difícil)' : '');
+      if (L) { if (drag.cost > L.left + 1e-6) { bad = true; text += ' · solo te quedan ' + mtr(L.left) + ' m'; } else text += ' · te quedan ' + mtr(L.left - drag.cost) + ' m'; }
+      if (drag.oa && drag.oa.length) text += ' · ⚠ ataque de oportunidad: ' + drag.oa.join(', ');
+    }
     return {bad:bad, text:text, path:rt && rt.cells ? drag.path : null};
   }
   /* Largo de la pared que trazas */
@@ -1246,6 +1407,9 @@ var Mapas = (function(){
         glyph(top, z.k, cx, cy, r, col, o); if (z.lock) glyph(top, 'lock', z.x + z.w - 0.3, z.y + 0.35, 0.22, col, o);
         top.push({p:'label', x:cx, y:z.y + z.h + 0.08, t:(z.name || T[1]) + (z.k === 'paso' && z.toName ? ' » ' + z.toName : '') + (z.fired ? ' ✓' : ''), c:col});
         if (sel) top.push({p:'dot', x:z.x + z.w, y:z.y + z.h, r:6, c:'#fff8e6'});
+      } else if (z.k === 'dificil') {
+        ink.push({p:'zone', x:z.x, y:z.y, w:z.w, h:z.h, c:'#b8875a', a:0.16, o:0.8, d:4, lw:1.5});
+        if (z.name) ink.push({p:'label', x:cx, y:z.y + z.h + 0.08, t:z.name, c:'#5a3d1c'});
       } else if (z.k === 'paso' && !z.hidden) {
         ink.push({p:'zone', x:z.x, y:z.y, w:z.w, h:z.h, c:'#e8c26a', a:0.14, o:0.85, d:0, lw:2});
         glyph(ink, 'paso', cx, cy, r, '#7a5a1c', 1); if (z.lock) glyph(ink, 'lock', z.x + z.w - 0.3, z.y + 0.35, 0.22, '#7a5a1c', 1);
@@ -1325,6 +1489,8 @@ var Mapas = (function(){
   function tokOn(c, t, v, mp, ghost){
     var info = tokInfo(t), s = t.s || 1, cx = v.x + (t.x + s / 2) * v.s, cy = v.y + (t.y + s / 2) * v.s, rad = Math.max(5, s * v.s * 0.44);
     c.save(); if (t.hidden) c.globalAlpha = 0.5; if (ghost) c.globalAlpha = 0.85;
+    // volando: la sombra queda en el suelo y la ficha sube un poco, con su altura
+    if (t.z) { c.save(); c.globalAlpha *= 0.4; c.fillStyle = '#000'; c.beginPath(); c.ellipse(cx, cy + rad * 0.2, rad * 0.85, rad * 0.42, 0, 0, Math.PI * 2); c.fill(); c.restore(); cy -= liftOf(t, v.s); }
     if (info.turn) { c.beginPath(); c.arc(cx, cy, rad + Math.max(3, v.s * 0.12), 0, Math.PI * 2); c.fillStyle = 'rgba(255,214,110,.55)'; c.fill(); }
     c.beginPath(); c.arc(cx, cy, rad, 0, Math.PI * 2); c.fillStyle = t.color || '#8c2626'; c.fill();
     var tid = tokImg(t), im = tid && tokImage(tid);
@@ -1333,6 +1499,7 @@ var Mapas = (function(){
     c.lineWidth = Math.max(1.5, v.s * (ghost === 'bad' ? 0.1 : 0.06)); c.strokeStyle = ghost === 'bad' ? '#ff4b3a' : selTok === t.id ? '#ffd66e' : 'rgba(20,12,8,.85)'; if (t.hidden) c.setLineDash([4, 3]); c.stroke(); c.setLineDash([]);
     if (info.pct != null && v.s >= 10) { var p = Math.max(0, Math.min(1, info.pct)); c.beginPath(); c.arc(cx, cy, rad + c.lineWidth, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); c.strokeStyle = p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a'; c.lineWidth = Math.max(2, v.s * 0.08); c.stroke(); }
     if (info.down) { c.strokeStyle = '#d24a3a'; c.lineWidth = Math.max(2, rad * 0.18); c.beginPath(); c.moveTo(cx - rad * 0.6, cy - rad * 0.6); c.lineTo(cx + rad * 0.6, cy + rad * 0.6); c.moveTo(cx + rad * 0.6, cy - rad * 0.6); c.lineTo(cx - rad * 0.6, cy + rad * 0.6); c.stroke(); }
+    if (t.z) { var zt = '↑' + mtr(t.z) + ' m', zf = Math.max(9, Math.min(13, v.s * 0.3)); c.font = '700 ' + zf + 'px Georgia, serif'; var zw = c.measureText(zt).width + 8; c.fillStyle = 'rgba(18,13,11,.85)'; c.fillRect(cx + rad * 0.5, cy - rad - zf * 0.4, zw, zf + 4); c.fillStyle = '#bfe3ff'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(zt, cx + rad * 0.5 + 4, cy - rad + 2 + zf * 0.1); }
     if (v.s >= 40 || selTok === t.id || info.turn) { var fs = Math.max(10, Math.min(15, v.s * 0.38)); var lbl = info.name.length > 14 ? info.name.slice(0, 13) + '…' : info.name; c.font = '600 ' + fs + 'px Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'top'; c.lineWidth = 3; c.strokeStyle = 'rgba(243,233,210,.9)'; var ly = cy + rad + 3; c.strokeText(lbl, cx, ly); c.fillStyle = '#2b1d12'; c.fillText(lbl, cx, ly); }
     c.restore();
   }
@@ -1428,6 +1595,7 @@ var Mapas = (function(){
       var p = local(ev), m = toMap(p[0], p[1]);
       if (ev.button === 1 || ev.button === 2) { gesture = {pan:true, px:p[0], py:p[1]}; return; }
       if (encEd && encHere(mp)) { encDown(mp, m, ev, p); return; }
+      if (mode === 'jugar' && aim && aim.map === mp.id) { aimDown(mp, m); return; }
       if (mode === 'jugar') {
         var t = tokAt(mp, m), dw = doorAt(mp, m);
         // junto a una puerta, la ficha solo se toma si tocas su círculo (si no, se toca la puerta)
@@ -1460,6 +1628,7 @@ var Mapas = (function(){
       if (gesture && gesture.pan) { if (gesture.tap && Math.hypot(p[0] - gesture.x0, p[1] - gesture.y0) > 8) { gesture.tap = false; clearTimeout(press && press.t); } var v2 = V(); v2.x += p[0] - gesture.px; v2.y += p[1] - gesture.py; gesture.px = p[0]; gesture.py = p[1]; paint(); return; }
       var m = toMap(p[0], p[1]);
       if (eop) { encMove(mp, m, p); return; }
+      if (aimOp) { aimMove(mp, m); return; }
       if (drag) {
         if (!drag.can) { if (drag.blk && !drag.told && Math.hypot(p[0] - drag.px, p[1] - drag.py) > 8) { drag.told = true; Sala.toast(drag.blk); if (window.Sfx) Sfx.play('locked'); } return; }
         if (!drag.moved && Math.hypot(p[0] - drag.px, p[1] - drag.py) < 6) return;
@@ -1481,7 +1650,15 @@ var Mapas = (function(){
       delete ptr[ev.pointerId]; clearTimeout(press && press.t);
       var mp = maps[cur];
       if (eop) { encUp(mp); return; }
-      if (gesture) { var tap = gesture.tap, door = gesture.door, gz = gesture.zone; if (!Object.keys(ptr).length) gesture = null; if (tap && door) { doorClick(mp, door); return; } if (tap && gz) { zoneClick(mp, gz); return; } if (tap && selTok) { selTok = null; tokPanel(); paint(); } return; }
+      if (aimOp) { var am = toMap(local(ev)[0], local(ev)[1]); aimUp(mp, am); return; }
+      if (gesture) {
+        var tap = gesture.tap, door = gesture.door, gz = gesture.zone, tm = tap ? toMap(gesture.x0, gesture.y0) : null; if (!Object.keys(ptr).length) gesture = null;
+        if (tap && door) { doorClick(mp, door); return; } if (tap && gz) { zoneClick(mp, gz); return; }
+        // zonas de conjuro: moverla a donde tocas, o elegirla
+        if (tap && fxMoving && selFx) { var zz = (mp.fx || []).filter(function(x){ return x.id === selFx; })[0]; if (zz) { fxMoveTo(mp, zz, tm); return; } }
+        if (tap && mode === 'jugar') { var fz = fxAt(mp, tm); if (fz && fxMine(fz)) { selFx = selFx === fz.id ? null : fz.id; fxMoving = false; selTok = null; tokPanel(); toolbar(); paint(); return; } }
+        if (tap && (selTok || selFx)) { selTok = null; selFx = null; fxMoving = false; tokPanel(); toolbar(); paint(); } return;
+      }
       if (wop) { wallUp(mp); return; }
       if (zop) { zoneUp(mp); return; }
       if (drag) {
@@ -1492,6 +1669,8 @@ var Mapas = (function(){
           if (d.dep) { var dz = deployZ(mp, ownerOf(d.tok)); if (dz.length && !inDeploy(dz, nx, ny, s)) { Sala.toast('Acomódate dentro de la zona de despliegue.'); if (window.Sfx) Sfx.play('locked'); selTok = d.tok.id; tokPanel(); paint(); return; } tokMove(mp, d.tok, nx, ny, null); selTok = d.tok.id; tokPanel(); paint(); return; }
           var rt = mp.walls.length && window.Vision ? Vision.route(mp, d.tok, nx, ny) : {ok:true};
           if (!rt.ok && !master(mp)) { Sala.toast('Hay una pared en medio: por ahí no se llega.'); if (window.Sfx) Sfx.play('locked'); selTok = d.tok.id; tokPanel(); paint(); return; }
+          // en pleno combate: no más lejos que tu velocidad (el terreno difícil cuesta el doble)
+          if (limited(mp, d.tok)) { var wk = Tactica.walk(mp, d.tok, nx, ny, {fly:(d.tok.z || 0) > 0}), L = mvLeft(mp, d.tok); if (L && wk.ok && wk.cost > L.left + 1e-6) { Sala.toast(L.left > 0 ? 'Te quedan ' + mtr(L.left) + ' m de movimiento (ahí son ' + mtr(wk.cost) + ' m).' : 'Ya usaste todo tu movimiento en esta ronda.'); if (window.Sfx) Sfx.play('locked'); selTok = d.tok.id; tokPanel(); paint(); return; } if (wk.ok && wk.cells) rt = {ok:true, cells:wk.cells}; }
           tokMove(mp, d.tok, nx, ny, rt.cells); selTok = d.tok.id;
         }
         else selTok = selTok === d.tok.id ? null : d.tok.id;
@@ -1521,6 +1700,12 @@ var Mapas = (function(){
     if (drag.ck === ck) return; drag.ck = ck;
     drag.route = mp.walls.length && !drag.dep ? Vision.route(mp, t, rx, ry) : null;
     drag.path = drag.route && drag.route.cells ? Vision.smooth(Vision.moveOf(mp), drag.route.cells, s) : null;
+    // combate: lo que cuesta (terreno difícil) contra lo que te queda, y quién te haría un ataque de oportunidad
+    drag.cost = null; drag.oa = null;
+    if (!drag.dep && window.Tactica && inFight(mp)) {
+      var wk = Tactica.walk(mp, t, rx, ry, {fly:(t.z || 0) > 0});
+      if (wk.ok) { drag.cost = wk.cost; if (wk.cells && wk.cells.length > 2 && Tactica.rough(mp)) { drag.route = {ok:true, cells:wk.cells, steps:wk.cost}; drag.path = Vision.smooth(Vision.moveOf(mp), wk.cells, s); } drag.oa = oaOf(mp, t, wk.cells || Tactica.line(t.x, t.y, rx, ry)); }
+    }
     drag.pv = master(mp) && !viewAs && mp.vis && mp.vis.on && Vision.isViewer(t, charOf(mp, t)) ? Vision.poly(Vision.sightOf(mp), rx + s / 2, ry + s / 2, mp.vis.range, mp.cols, mp.rows) : null;
   }
   /* ---------- Herramienta de paredes ----------
@@ -1775,6 +1960,15 @@ var Mapas = (function(){
     else if (a === 'mapfogall') { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = '¿Seguro?'; setTimeout(function(){ if (document.contains(b)) toolbar(); }, 3000); return; } fogDo(mp, {t:'fog.all', value:+b.dataset.v}); }
     else if (a === 'mapbgx') { if (shared(mp.id)) Sala.send({t:'map.bg', id:mp.id, img:null}); else { mp.bg = null; keep(mp); toolbar(); paint(); } }
     else if (a === 'maptokx') { selTok = null; tokPanel(); paint(); }
+    else if (a === 'maptokz') { var tz = mp && mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (tz) { var nz = Math.max(0, Math.min(60, (tz.z || 0) + (+b.dataset.v))); tz.z = nz || undefined; if (!shared(mp.id)) { keep(mp); paint(); tokPanel(); } else { tokSet(mp, tz, {z:nz}); paint(); tokPanel(); } } }
+    else if (a === 'mapmv') { var tm0 = mp && myTok(mp); if (!tm0) return; var L0 = mvLeft(mp, tm0) || {}; var o0 = {t:'mv.set', id:mp.id, tid:tm0.id}; if (b.dataset.v === 'dash') o0.dash = !L0.dash; else if (b.dataset.v === 'dis') o0.dis = !L0.dis; else { o0.stand = true; if (window.Diario) { var r0 = Diario.cur() && Diario.rt(Diario.cur()); if (r0) { r0.conds = (r0.conds || []).filter(function(k){ return k !== 'prone'; }); Diario.save(); } } } Sala.send(o0); }
+    else if (a === 'maptac') { var T0 = tacOf(mp), o1 = {t:'map.tac', id:mp.id}; o1[b.dataset.v] = !T0[b.dataset.v]; Sala.send(o1); }
+    else if (a === 'mapfxmove') { fxMoving = !fxMoving; toolbar(); }
+    else if (a === 'mapfxrm') { if (!b.dataset.sure) { b.dataset.sure = 1; b.style.borderColor = 'var(--bad)'; b.lastChild.textContent = '¿Quitar?'; return; } if (selFx) Sala.send({t:'fx.rm', id:mp.id, fid:selFx}); selFx = null; fxMoving = false; toolbar(); }
+    else if (a === 'mapfxx') { selFx = null; fxMoving = false; toolbar(); }
+    else if (a === 'mapaimx') { if (aim) aimEnd(false); }
+    else if (a === 'mapaimok') { if (aim) aimEnd(true); }
+    else if (a === 'mapaimgo') { if (aim) aimEnd('post'); }
     else if (a.indexOf('maptok') === 0) {
       var tk = mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (!tk) return;
       if (a === 'maptokcol') tokSet(mp, tk, {color:b.dataset.v});
@@ -1879,6 +2073,7 @@ var Mapas = (function(){
   setTimeout(initEd, 0);
   window.addEventListener('resize', function(){ if (cur && canvas && visible()) { fit(); paint(); } });
 
-  return {refreshPop:function(){ if (cur) toolbar(); }, render:render, editEnc:editEnc, encDone:encDone, closePop:function(){ if (pop) { pop = null; if (cur) toolbar(); } }, _enc:function(){ return encEd; }, cur:function(){ return cur; }, png:png, open:openMap, _maps:function(){ return maps; }, _open:openMap, _tool:tool, _mode:function(v){ if (v) { mode = v; toolbar(); } return mode; }, _sel:function(){ return selTok; },
+  return {aim:aimStart, aiming:function(){ return !!aim; }, actorTok:function(actor){ var mp = cur && maps[cur]; return mp ? actorTok(mp, actor) : null; }, curMap:function(){ return cur && maps[cur] || null; },
+    refreshPop:function(){ if (cur) toolbar(); }, render:render, editEnc:editEnc, encDone:encDone, closePop:function(){ if (pop) { pop = null; if (cur) toolbar(); } }, _enc:function(){ return encEd; }, cur:function(){ return cur; }, png:png, open:openMap, _maps:function(){ return maps; }, _open:openMap, _tool:tool, _mode:function(v){ if (v) { mode = v; toolbar(); } return mode; }, _sel:function(){ return selTok; },
     _view:function(){ return V(); }, _cur:function(){ return cur; }, _wall:function(){ return selWall; }, _shown:function(tid){ var mp = maps[cur], t = mp && mp.tokens.filter(function(x){ return x.id === tid; })[0]; if (!t) return null; var dv = master(mp) && !viewAs; return tokShown(mp, t, visOf(mp), dv); }, _vis:function(id){ var mp = maps[id || cur]; return mp ? visOf(mp) : null; }, _viewAs:function(v){ if (v != null) { viewAs = !!v; if (cur) { toolbar(); paint(); } } return viewAs; }};
 })();

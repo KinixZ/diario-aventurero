@@ -652,7 +652,7 @@ var Rules5e = (function(){
       var dice = props.indexOf('V') >= 0 && twoFree && d.dmg2 ? d.dmg2 : d.dmg1;
       var extra = []; if (!ranged && radiant) extra.push({dice:'1d8', type:'radiante', note:'Golpes radiantes'});
       if (d.hbExtra) extra.push(d.hbExtra);
-      D.attacks.push({id:i.id, name:i.n || d.name, ref:i.ref, ab:ab, atk:D.mod[ab] + (prof ? D.pb : 0) + magic + archery, dice:dice, mod:dmgMod, type:DT[d.dmgType] || d.dmgType || '', extra:extra, ranged:ranged, hb:!!d.hb, hbNotes:d.hb ? d.hb.notes || '' : '',
+      D.attacks.push({id:i.id, name:i.n || d.name, ref:i.ref, ab:ab, atk:D.mod[ab] + (prof ? D.pb : 0) + magic + archery, dice:dice, mod:dmgMod, type:DT[d.dmgType] || d.dmgType || '', extra:extra, ranged:ranged, reach:!ranged && props.indexOf('R') >= 0 ? 2 : 1, range:d.range || null, thrown:props.indexOf('T') >= 0, hb:!!d.hb, hbNotes:d.hb ? d.hb.notes || '' : '',
         notes:[AB[ab] + ' ' + sgn(D.mod[ab])].concat(prof ? ['competencia ' + sgn(D.pb)] : []).concat(!ranged && auraHate ? ['Aura de odio ' + sgn(auraHate)] : []).concat(magic ? ['mágica ' + sgn(magic)] : []).concat(dueling ? ['Duelo +2'] : []).concat(archery ? ['Arquería +2 al ataque'] : []).join(' · '),
         mastery:(d.mastery || []).map(function(m){ return m.split('|')[0]; }).filter(function(m){ return d.hb || !D.mastery || D.mastery.indexOf(d.name) >= 0; })});
     });

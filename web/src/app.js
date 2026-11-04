@@ -1208,12 +1208,32 @@
   function applyToMe(m){
     var C = cur(); if (!C || !D || !D.ok) return;
     var r = rt(C), n = Math.max(0, +m.amount || 0); r.conds = r.conds || [];
-    if (m.kind === 'damage') { var t = Math.min(r.temp || 0, n); r.temp = (r.temp || 0) - t; r.hp = Math.max(0, r.hp - (n - t)); if (r.conc) r.concDc = Math.max(10, Math.floor(n / 2)); }
-    else if (m.kind === 'heal') r.hp = Math.min(D.hp.max, r.hp + n);
+    if (m.kind === 'damage') {
+      var was = r.hp, t = Math.min(r.temp || 0, n); r.temp = (r.temp || 0) - t; var left = n - t; r.hp = Math.max(0, r.hp - left); if (r.conc) r.concDc = Math.max(10, Math.floor(n / 2));
+      // a 0 PG: salvaciones contra la muerte; el daño que sobra igual a tus PG máximos te mata; ya caído, cada golpe es un fallo
+      if (was > 0 && r.hp === 0) { r.death = {s:0, f:0}; if (left - was >= D.hp.max) r.death.dead = true; }
+      else if (was === 0 && left > 0) { r.death = r.death || {s:0, f:0}; r.death.f = Math.min(3, (r.death.f || 0) + 1); r.death.stable = false; if (r.death.f >= 3) r.death.dead = true; }
+    }
+    else if (m.kind === 'heal') { if (r.hp === 0 && n > 0) r.death = null; r.hp = Math.min(D.hp.max, r.hp + n); }
+    else if (m.kind === 'death') deathSave(r, n);
+    else if (m.kind === 'conc-') { r.conc = null; r.concDc = 10; }
     else if (m.kind === 'temp') r.temp = Math.max(r.temp || 0, n);
     else if (m.kind === 'cond+' && m.cond && r.conds.indexOf(m.cond) < 0) r.conds.push(m.cond);
     else if (m.kind === 'cond-') r.conds = r.conds.filter(function(k){ return k !== m.cond; });
     save(); render(false);
+  }
+  /* Salvación contra la muerte (reglas 2024): 10 o más, éxito; menos, fallo; 1, dos fallos; 20, recuperas 1 PG.
+     Tres éxitos: estable. Tres fallos: muerto. */
+  function deathSave(r, nat){
+    var ds = r.death = r.death || {s:0, f:0}; if (ds.dead || ds.stable) return;
+    if (nat >= 20) { r.hp = 1; r.death = null; if (window.Fx) Fx.announce('¡De pie!', 'Un 20: recuperas 1 PG', 'level'); return; }
+    if (nat <= 1) ds.f = Math.min(3, ds.f + 2); else if (nat >= 10) ds.s = Math.min(3, ds.s + 1); else ds.f = Math.min(3, ds.f + 1);
+    if (ds.f >= 3) ds.dead = true; else if (ds.s >= 3) ds.stable = true;
+  }
+  function rollDeath(){
+    var C = cur(); if (!C || !D || !D.ok) return; var r = rt(C);
+    if (inRoom()) { var man = window.Dados && Dados.mode() === 'fisico' ? Dados.ask('Tu d20 de salvación contra la muerte') : null; if (man === false) return; Sala.send(man ? {t:'death', man:man} : {t:'death'}); return; }
+    var nat = 1 + Math.floor(Math.random() * 20); deathSave(r, nat); if (window.Sala && Sala.toast) Sala.toast('Salvación contra la muerte: ' + nat); save(); render(false);
   }
   window.Diario = {cur:cur, D:function(){ return D; }, rt:rt, save:function(){ save(); }, redraw:function(){ renderHead(); if (cur() && D && D.ok) renderPersonaje(cur()); if (!$('#combat').hidden) combatHead(); }, applyToMe:applyToMe, trWrap:function(h, k){ return trWrap(h, k); }, trInit:function(r){ trInit(r); }, openSheet:function(id){ openSheet(id); }, closeSheets:function(){ closeSheets(); },
     addNote:function(text){ var C = cur(); if (!C) return false; var r = rt(C); r.notes = (r.notes ? r.notes.replace(/\s+$/, '') + '\n\n' : '') + text; save(); if ($('#notes')) $('#notes').value = r.notes; return true; },
@@ -1227,7 +1247,9 @@
     actions:combatActions, slotsFor:freeSlots, spellDice:function(ref, lv){ var e = R.findSpell(ref); return e ? spellDice(e, lv) : ''; },
     saveMod:function(ab){ return D && D.ok && D.save ? D.save[ab] || 0 : 0; },
     /* Lanzar desde la escena de combate: gasta el espacio (o el del pacto), marca la acción y la concentración */
-    cast:function(ref, lv){ quickUse('sp:' + ref, lv); }};
+    cast:function(ref, lv){ quickUse('sp:' + ref, lv); },
+    /* Combate táctico: el cansancio resta 2 a las tiradas d20; tus estados; tirar la salvación contra la muerte */
+    exhPen:function(){ var C = cur(); return C ? -2 * (rt(C).exh || 0) : 0; }, conds:function(){ var C = cur(); return C ? (rt(C).conds || []).slice() : []; }, rollDeath:rollDeath};
 
   /* ==================== ACCIONES PARA EL COMBATE COMPARTIDO ====================
      Lo que la escena de combate (acciones.js) ofrece al jugador: sus armas con su ataque y daño, y sus conjuros con
@@ -1249,16 +1271,22 @@
     var out = [], r = rt(C), K = (D.casters || [])[0];
     D.attacks.forEach(function(a){
       var dm = [{dice:dmgExpr(a.dice, a.mod), type:a.type}]; a.extra.forEach(function(x){ if (/^\d+d\d+/.test(x.dice)) dm.push({dice:x.dice, type:x.type}); });
-      out.push({key:'w:' + a.id, group:'Armas', title:a.name, atk:{bonus:a.atk}, dmg:dm, text:a.notes || ''});
+      // alcance: cuerpo a cuerpo (1,5 m, o 3 m con «alcance») o a distancia («80/320» pies)
+      var rg = a.range ? String(a.range).split('/').map(function(v){ return +v || 0; }) : null;
+      out.push({key:'w:' + a.id, group:'Armas', title:a.name, atk:{bonus:a.atk}, dmg:dm, text:a.notes || '', melee:!a.ranged, reach:a.reach || 1, range:a.ranged || a.thrown ? rg : null});
     });
     allSpells().forEach(function(x){
       var e = x.e, json = JSON.stringify(e.entries || []), heal = (e.miscTags || []).indexOf('HL') >= 0, dice = spellDice(e, e.level);
-      if (!(e.spellAttack && e.spellAttack.length) && !(e.savingThrow && e.savingThrow.length) && !dice) return;
+      // la definición de efecto (área, zona, estados, concentración); los que no tienen tirada también van, como asistidos
+      var H = window.Hechizos ? Hechizos.def(e) : null, key = 'sp:' + e.name + '|' + e.source;
+      if (!(e.spellAttack && e.spellAttack.length) && !(e.savingThrow && e.savingThrow.length) && !dice) { if (H) out.push({key:key, group:'Otros conjuros', title:e.name, lv:e.level || 0, dmg:[], text:'', def:H}); return; }
       var mod = K && heal && /spellcasting ability modifier/i.test(json) ? D.mod[K.ability] : 0;
-      out.push({key:'sp:' + e.name + '|' + e.source, group:'Conjuros', title:e.name, lv:e.level || 0,
+      var dm = dice ? [{dice:dmgExpr(dice, mod), type:heal ? '' : DMG_EN[(e.damageInflict || [])[0]] || ''}] : [];
+      if (H && H.dmg && H.dmg.length > 1 && dice) H.dmg.slice(1).forEach(function(d){ dm.push({dice:d.dice, type:d.type}); });
+      out.push({key:key, group:'Conjuros', title:e.name, lv:e.level || 0,
         atk:e.spellAttack && e.spellAttack.length && K ? {bonus:K.atk} : null,
         save:e.savingThrow && e.savingThrow.length && K ? {ab:SAVE_EN[e.savingThrow[0]] || 'dex', dc:K.dc, half:/half as much damage|half damage/i.test(json)} : null,
-        dmg:dice ? [{dice:dmgExpr(dice, mod), type:heal ? '' : DMG_EN[(e.damageInflict || [])[0]] || ''}] : [], heal:heal, text:''});
+        dmg:dm, heal:heal, text:'', def:H, melee:H && H.atk === 'melee'});
     });
     return out;
   }
@@ -1288,8 +1316,16 @@
     if (myTurnNow()) chips.push('<span class="vt-turn">Tu turno · ronda ' + Sala.room().round + '</span>');
     if (r.conc) { var cs = R.findSpell(r.conc); chips.push('<span class="vt-chip conc"><svg class="ic"><use href="#i-star"/></svg>' + (cs ? spellLink(cs).replace('class="ref"', 'class="ref" style="color:inherit"') : esc(r.conc)) + ' <small>CD ' + (r.concDc || 10) + ' si te dañan</small><button type="button" data-act="endconc" aria-label="Terminar concentración">×</button></span>'); }
     (r.conds || []).forEach(function(k){ chips.push('<button type="button" class="vt-chip cond" data-act="condoff" data-v="' + attr(k) + '" aria-label="Quitar ' + attr(COND_ES[k] || k) + '">' + esc(COND_ES[k] || k) + ' ×</button>'); });
+    if (r.exh) chips.push('<span class="vt-chip exh" title="Reglas 2024: −2 a las tiradas d20 y −1,5 m de velocidad por nivel">Cansancio ' + r.exh + ' <small>−' + 2 * r.exh + ' al d20</small></span>');
     if (chips.length) h += '<div class="vt-chips">' + chips.join('') + '</div>';
+    if (r.hp <= 0 && D.hp.max > 1) h += deathHtml(r);
     return h;
+  }
+  function deathHtml(r){
+    var ds = r.death || {s:0, f:0}, pip = function(n, k){ var o = ''; for (var i = 0; i < 3; i++) o += '<i class="ds-p ' + k + (i < n ? ' on' : '') + '"></i>'; return o; };
+    return '<div class="vt-death' + (ds.dead ? ' dead' : ds.stable ? ' stable' : '') + '" role="group" aria-label="Salvaciones contra la muerte"><b>' + (ds.dead ? 'Muerto' : ds.stable ? 'Estable (inconsciente)' : 'Salvaciones contra la muerte') + '</b>'
+      + '<span class="ds-row"><small>Éxitos</small>' + pip(ds.s || 0, 'ok') + '</span><span class="ds-row"><small>Fallos</small>' + pip(ds.f || 0, 'ko') + '</span>'
+      + (!ds.dead && !ds.stable ? '<button class="btn sm main" type="button" data-act="deathroll"><svg class="ic"><use href="#i-d20"/></svg>Tirar</button>' : '') + '</div>';
   }
   function weaponHtml(a, r){
     var m = r.crit ? 2 : 1, dice = a.dice.replace(/^(\d+)d/, function(_, n){ return (n * m) + 'd'; });
@@ -1337,6 +1373,7 @@
     var concSp = allSpells().filter(function(x){ return (x.e.duration || []).some(function(d){ return d.concentration; }); });
     if (!r.conc && concSp.length) Rc += '<div class="card"><label class="label" for="concSel">¿te concentras en un conjuro?</label><select class="field" id="concSel" style="margin-top:6px"><option value="">No me estoy concentrando</option>' + concSp.map(function(x){ return '<option value="' + attr(x.e.name + '|' + x.e.source) + '">' + nm(x.e.name) + '</option>'; }).join('') + '</select></div>';
     Rc += compSection(true);
+    Rc += '<div class="card"><div class="line"><span>Cansancio <small class="muted">−2 al d20 y −1,5 m por nivel</small></span><div class="row"><button class="btn sm" type="button" data-act="exh" data-v="-1" aria-label="Menos cansancio">−</button><span class="num">' + (r.exh || 0) + ' <small class="muted">/ 6</small></span><button class="btn sm" type="button" data-act="exh" data-v="1" aria-label="Más cansancio">+</button></div></div></div>';
     Rc += '<div class="row rest-row"><button class="btn" type="button" data-act="short">Descanso corto</button><button class="btn" type="button" data-act="long">Descanso largo</button></div>';
     $('#cRec').innerHTML = Rc;
     /* Orden: la sala */
@@ -1443,6 +1480,8 @@
     var v = G.view, d = Render5e.detail(v.type, v.e), e = v.e, extra = '';
     var title = e.name || (e.entries && e.entries[0] && e.entries[0].name) || e.abbreviation || '';
     if ((v.type === 'item' || v.type === 'baseitem') && cur()) extra = '<button class="btn main" type="button" data-act="additem">Añadir a la mochila</button>';
+    // en el combate táctico: lo que la app resuelve sola de este conjuro y lo que queda a mano
+    if (v.type === 'spell' && window.Hechizos) { var hd = Hechizos.def(e); if (hd) { var hl = Hechizos.line(hd); extra += '<div class="req ' + (hd.auto === 'auto' ? 'ok' : 'dm') + '" style="margin-top:8px"><span class="mark" aria-hidden="true"></span><span><b>En el combate: ' + (hd.auto === 'auto' ? 'automático' : 'asistido') + '.</b> ' + esc(hl ? hl.charAt(0).toUpperCase() + hl.slice(1) + '. ' : '') + esc(hd.why.map(Hechizos.whyText).join('; ')) + '</span></div>'; } }
     if (v.type === 'feat') { var cx = featCtx(); if (cx) { var pr = R.featPrereq(e, cx); extra = '<div class="req ' + pr.st + '" style="margin-top:8px"><span class="mark" aria-hidden="true"></span><span><b>' + (pr.st === 'ok' ? 'Cumples' : pr.st === 'dm' ? 'Lo decide el DM' : 'No cumples') + '.</b> ' + esc(pr.text) + '</span></div><p class="note" style="margin-top:6px">Las dotes se toman al subir de nivel, desde el creador.</p>'; } }
     var back = G.hist.length ? 'Volver' : (G.from ? 'Volver a ' + G.from[1] : 'Volver a la lista');
     grim.innerHTML = (showSecs ? grimSecs() : '') + '<button class="gback" type="button" data-act="gback"><svg class="ic" style="width:18px;height:18px"><use href="#i-back"/></svg>'+esc(back)+'</button>'
@@ -2187,11 +2226,16 @@
       case 'crit': r.crit = !r.crit; save(); renderCombat(); if (r.crit && window.Fx) Fx.crit(); break;
       case 'smite': r.smite = +b.dataset.v; save(); renderCombat(); break;
       case 'endconc': r.conc = null; save(); renderCombat(); break;
+      case 'deathroll': rollDeath(); break;
+      case 'exh': r.exh = Math.max(0, Math.min(6, (r.exh || 0) + (+b.dataset.v))); if (r.exh) { if ((r.conds || []).indexOf('exhaustion') < 0) (r.conds = r.conds || []).push('exhaustion'); } else r.conds = (r.conds || []).filter(function(k){ return k !== 'exhaustion'; }); if (r.exh >= 6 && r.death) r.death.dead = true; save(); render(false); break;
       case 'condoff': r.conds = (r.conds || []).filter(function(k){ return k !== b.dataset.v; }); save(); renderCombat(); break;
       case 'pool': r.res[b.dataset.key] = Math.min((D.resources.filter(function(x){ return x.key === b.dataset.key; })[0] || {pool:0}).pool, (r.res[b.dataset.key] || 0) + (+b.dataset.v)); save(); renderCombat(); break;
       case 'pip': var max = +b.dataset.max, i = +b.dataset.i, k = b.dataset.key, used0 = k === 'pact' ? r.pactUsed || 0 : k.indexOf('slot:') === 0 ? r.slotsUsed[+k.slice(5)] || 0 : r.res[k.slice(4)] || 0, avail = max - used0, next = i < avail ? i : i + 1; setUsed(k, max - next); save(); render(false); break;
       case 'short': r.pactUsed = 0; ['channel divinity','second wind','focus points','ki points','superiority dice','wild shape'].forEach(function(kk){ if (r.res[kk]) r.res[kk] = kk === 'channel divinity' || kk === 'second wind' || kk === 'wild shape' ? Math.max(0, r.res[kk] - 1) : 0; }); D.resources.forEach(function(x){ if (x.hb && x.rest === 'short') delete r.res[x.key]; }); save(); render(false); break;
-      case 'long': var keepRes = {}; D.resources.forEach(function(x){ if (x.rest === 'none' && r.res[x.key]) keepRes[x.key] = r.res[x.key]; }); r.hp = D.hp.max; r.temp = 0; r.slotsUsed = []; r.pactUsed = 0; r.res = keepRes; r.conc = null; r.econ = {a:false,b:false,r:false,m:false}; r.round = 1; save(); render(false); break;
+      case 'long': var keepRes = {}; D.resources.forEach(function(x){ if (x.rest === 'none' && r.res[x.key]) keepRes[x.key] = r.res[x.key]; }); r.hp = D.hp.max; r.temp = 0; r.slotsUsed = []; r.pactUsed = 0; r.res = keepRes; r.conc = null; r.econ = {a:false,b:false,r:false,m:false}; r.round = 1; r.death = null;
+        // reglas 2024: el descanso largo quita un nivel de cansancio
+        if (r.exh) { r.exh--; if (!r.exh) r.conds = (r.conds || []).filter(function(k){ return k !== 'exhaustion'; }); }
+        save(); render(false); break;
       /* creador */
       case 'crclose': closeCreator(); break;
       case 'crstep': CR.step = b.dataset.v; renderCreator(); $('#crBody').scrollTop = 0; break;

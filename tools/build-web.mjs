@@ -16,17 +16,22 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 let css = readdirSync(join(root, 'styles')).filter(f => f.endsWith('.css')).sort().map(f => read('styles/' + f)).join('\n');
 const icons = read('assets/icons.svg');
 const body = read('body.html');
-const order = ['gfx.js', 'fx.js', 'sonido.js', 'iconos.js', 'lib.js', 'render.js', 'rules.js', 'app.js', 'sala.js', 'mesa.js', 'retratos.js', 'campana.js', 'bestiario.js', 'grupo.js', 'cronica.js', 'assets.js', 'editor.js', 'vision.cjs', 'clima.js', 'mapas.js', 'encuentros.js', 'acciones.js'];
+const order = ['gfx.js', 'fx.js', 'sonido.js', 'dados.js', 'iconos.js', 'lib.js', 'render.js', 'hechizos.cjs', 'rules.js', 'app.js', 'sala.js', 'mesa.js', 'retratos.js', 'campana.js', 'bestiario.js', 'grupo.js', 'cronica.js', 'assets.js', 'editor.js', 'vision.cjs', 'tactica.cjs', 'clima.js', 'efectos.js', 'mapas.js', 'encuentros.js', 'acciones.js'];
 const js = order.map(f => `/* ---- ${f} ---- */\n` + read('src/' + f)).join('\n');
 // Motor del mapa (PixiJS): archivo aparte que se baja solo al abrir un mapa. El artefacto de claude.ai usa Canvas 2D.
 const plain = process.argv.includes('--plain');
-let glHash = '';
+let glHash = '', diceHash = '';
 if (!artifact) {
   const gl = buildSync({ entryPoints: [join(root, 'gl', 'mapa-gl.js')], bundle: true, format: 'iife', minify: !plain, target: 'es2020', write: false, legalComments: 'none', logLevel: 'warning' }).outputFiles[0].text;
   mkdirSync(join(root, 'dist'), { recursive: true });
   writeFileSync(join(root, 'dist', 'mapa-gl.js'), gl);
   glHash = createHash('sha1').update(gl).digest('hex').slice(0, 10);
   console.log(`Motor del mapa: mapa-gl.js (${(gl.length / 1024).toFixed(0)} KB)`);
+  // Dados 3D (three.js): otro archivo aparte, solo para quien los usa
+  const dice = buildSync({ entryPoints: [join(root, 'gl', 'dados3d.js')], bundle: true, format: 'iife', minify: !plain, target: 'es2020', write: false, legalComments: 'none', logLevel: 'warning' }).outputFiles[0].text;
+  writeFileSync(join(root, 'dist', 'dados3d.js'), dice);
+  diceHash = createHash('sha1').update(dice).digest('hex').slice(0, 10);
+  console.log(`Dados 3D: dados3d.js (${(dice.length / 1024).toFixed(0)} KB)`);
 }
 // Iconos de juego (game-icons.net, CC BY 3.0): solo los que lista web/src/iconos.js, en un archivo aparte.
 // En el artefacto van dentro de la página (window.DIARIO_ICONS) porque no hay archivos aparte.
@@ -44,7 +49,7 @@ let iconsHash = '', iconsInline = '';
   console.log(`Iconos de juego: ${list.length} (${(sprite.length / 1024).toFixed(0)} KB)`);
 }
 const sha = process.env.RENDER_GIT_COMMIT || process.env.GITHUB_SHA || '';
-const config = `window.DIARIO_CONFIG = ${JSON.stringify({ salaUrl: process.env.SALA_URL || '', artifact, version: sha ? sha.slice(0, 7) : 'dev', gl: glHash, icons: iconsHash })};${iconsInline}`;
+const config = `window.DIARIO_CONFIG = ${JSON.stringify({ salaUrl: process.env.SALA_URL || '', artifact, version: sha ? sha.slice(0, 7) : 'dev', gl: glHash, dice: diceHash, icons: iconsHash })};${iconsInline}`;
 // Minificado: los scripts siguen siendo globales (sin "format"), así que Diario, Sala, Mapas… conservan su nombre.
 const jsOut = plain ? js : transformSync(js, { minify: true, target: 'es2017', legalComments: 'none', charset: 'utf8' }).code;
 // Fuentes propias (sin Google): se sirven desde el servidor, funcionan sin internet y se ven igual en todos los teléfonos.

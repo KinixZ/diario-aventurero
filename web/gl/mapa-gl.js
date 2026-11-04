@@ -279,9 +279,13 @@ async function create(canvas, opts = {}) {
     for (let i = 0; i < n; i++) { const a0 = (i / n) * Math.PI * 2, a1 = a0 + (Math.PI * 2 / n) * 0.55; g.moveTo(cx + r * Math.cos(a0), cy + r * Math.sin(a0)).arc(cx, cy, r, a0, a1); }
     g.stroke({ width: w, color });
   }
-  function tokSig(t) { return [t.color, t.img || '', t.ini, t.s, t.hidden ? 1 : 0, t.sel ? 1 : 0, t.turn ? 1 : 0, t.pct == null ? '' : Math.round(t.pct * 40), t.down ? 1 : 0, t.ghost ? 1 : 0, t.bad ? 1 : 0, t.img && image(t.img) ? 1 : 0].join('|'); }
+  function tokSig(t) { return [t.color, t.img || '', t.ini, t.s, t.hidden ? 1 : 0, t.sel ? 1 : 0, t.turn ? 1 : 0, t.pct == null ? '' : Math.round(t.pct * 40), t.down ? 1 : 0, t.ghost ? 1 : 0, t.bad ? 1 : 0, t.img && image(t.img) ? 1 : 0, t.z || 0].join('|'); }
+  // volando: la ficha sube un poco y deja su sombra en el suelo, con un letrero de su altura
+  const liftOf = (t) => (t.z ? Math.min(0.42, 0.14 + t.z * 0.025) * (t.s || 1) : 0);
   function buildTok(t) {
-    const box = new Container(), s = t.s || 1, rad = s * 0.44, g = new Graphics();
+    const outer = new Container(), s = t.s || 1, rad = s * 0.44, lift = liftOf(t);
+    if (lift) { const sh = new Graphics(); sh.ellipse(0, rad * 0.2, rad * 0.85, rad * 0.42).fill({ color: 0x000000, alpha: 0.38 }); outer.addChild(sh); }
+    const box = new Container(), g = new Graphics(); box.position.set(0, -lift); outer.addChild(box);
     if (t.turn) g.circle(0, 0, rad + Math.max(0.12, s * 0.08)).fill({ color: 0xffd66e, alpha: 0.55 });
     g.circle(0, 0, rad).fill(t.color || '#8c2626');
     box.addChild(g);
@@ -301,8 +305,12 @@ async function create(canvas, opts = {}) {
     }
     if (t.down) { const r6 = rad * 0.6; ring.moveTo(-r6, -r6).lineTo(r6, r6).moveTo(r6, -r6).lineTo(-r6, r6).stroke({ width: Math.max(0.06, rad * 0.18), color: 0xd24a3a }); }
     box.addChild(ring);
-    box.alpha = t.ghost ? 0.85 : t.hidden ? 0.5 : 1;
-    return box;
+    if (t.z) {
+      const zt = new Text({ text: '↑' + String(Math.round(t.z * 15) / 10).replace('.', ',') + ' m', resolution: 2, style: { fontFamily: 'Georgia, serif', fontWeight: '700', fontSize: TXT_BASE, fill: 0xbfe3ff, stroke: { color: 0x120d0b, width: 6 } } });
+      zt.anchor.set(0, 0.5); zt.scale.set(0.26 / TXT_BASE * s); zt.position.set(rad * 0.5, -rad * 0.95); box.addChild(zt);
+    }
+    outer.alpha = t.ghost ? 0.85 : t.hidden ? 0.5 : 1;
+    return outer;
   }
   function label(i) {
     let l = labelPool[i];
@@ -323,7 +331,7 @@ async function create(canvas, opts = {}) {
       if (t.label) {
         const l = label(li++), fs = Math.max(10, Math.min(15, v.s * 0.38)), txt = t.name.length > 14 ? t.name.slice(0, 13) + '…' : t.name;
         if (l.text !== txt) l.text = txt;
-        l.scale.set(fs / LBL_BASE / v.s); l.position.set(t.x + s / 2, t.y + s / 2 + s * 0.44 + 3 / v.s);
+        l.scale.set(fs / LBL_BASE / v.s); l.position.set(t.x + s / 2, t.y + s / 2 + s * 0.44 + 3 / v.s - liftOf(t));
         (t.late ? tokHigh : tokLow).addChild(l);
       }
     });
