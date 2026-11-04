@@ -28,8 +28,11 @@ async function create(canvas, opts = {}) {
   const paper = new Graphics(), bg = new Sprite(), grid = new Graphics(), strokesBox = new Container(), wallInk = new Graphics(), tint = new Graphics(), glow = new Sprite();
   const tokLow = new Container(), fog = new Sprite(), tokHigh = new Container(), border = new Graphics(), top = new Container();
   const preview = new Graphics(), marks = new Graphics(), wallTech = new Graphics(), ghostBox = new Container();
-  top.addChild(wallTech, marks, preview, ghostBox);
-  world.addChild(paper, bg, grid, strokesBox, wallInk, tint, glow, tokLow, fog, tokHigh, border, top);
+  // zonas: las de los jugadores (pasos) van debajo de la niebla; las del DM, encima de todo
+  const zoneInk = new Container(), zoneInkG = new Graphics(), zoneInkL = new Container(), zoneTop = new Container(), zoneTopG = new Graphics(), zoneTopL = new Container();
+  zoneInk.addChild(zoneInkG, zoneInkL); zoneTop.addChild(zoneTopG, zoneTopL);
+  top.addChild(wallTech, zoneTop, marks, preview, ghostBox);
+  world.addChild(paper, bg, grid, strokesBox, wallInk, tint, glow, zoneInk, tokLow, fog, tokHigh, border, top);
   tint.blendMode = 'multiply'; glow.blendMode = 'add'; glow.visible = false;
   app.stage.addChild(world, screen);
   bg.visible = false; fog.visible = false;
@@ -247,6 +250,23 @@ async function create(canvas, opts = {}) {
     }
     return g;
   }
+  /* Zonas: rectángulos, sus dibujos (path) y sus nombres (con un juego de textos reutilizables por capa) */
+  function zoneLabel(box, i) {
+    let l = box.children[i];
+    if (!l) { l = new Text({ text: '', resolution: 2, style: { fontFamily: 'Georgia, serif', fontWeight: '600', fontSize: LBL_BASE, fill: 0x2b1d12, stroke: { color: 0xf3e9d2, alpha: 0.9, width: 6, join: 'round' } } }); l.anchor.set(0.5, 0); box.addChild(l); }
+    return l;
+  }
+  function drawZones(g, box, list, v) {
+    g.clear(); const px = 1 / v.s; let li = 0;
+    for (const q of list || []) {
+      if (q.p === 'zone') { g.rect(q.x, q.y, q.w, q.h).fill({ color: q.c, alpha: q.a }); if (q.d) { const pts = [[q.x, q.y], [q.x + q.w, q.y], [q.x + q.w, q.y + q.h], [q.x, q.y + q.h]]; for (let i = 0; i < 4; i++) { const a = pts[i], b = pts[(i + 1) % 4]; dashed(g, a[0], a[1], b[0], b[1], q.d * px, q.d * 0.7 * px); } g.stroke({ width: (q.lw || 2) * px, color: q.c, alpha: q.o }); } else g.rect(q.x, q.y, q.w, q.h).stroke({ width: (q.lw || 2) * px, color: q.c, alpha: q.o }); }
+      else if (q.p === 'path') { q.pts.forEach((pt, i) => { if (i) g.lineTo(pt[0], pt[1]); else g.moveTo(pt[0], pt[1]); }); g.stroke({ width: (q.lw || 2) * px, color: q.c, alpha: q.o == null ? 1 : q.o, cap: 'round', join: 'round' }); }
+      else if (q.p === 'dot') g.circle(q.x, q.y, q.r * px).fill({ color: q.c }).stroke({ width: 1.5 * px, color: 0x2b1d12 });
+      else if (q.p === 'label' && v.s >= 14) { const l = zoneLabel(box, li++); if (l.text !== q.t) l.text = q.t; l.style.fill = q.c; l.scale.set(12 / LBL_BASE / v.s); l.position.set(q.x, q.y); l.visible = true; }
+    }
+    for (let i = li; i < box.children.length; i++) box.children[i].visible = false;
+  }
+  function syncZones(z, v) { drawZones(zoneInkG, zoneInkL, z && z.ink, v); drawZones(zoneTopG, zoneTopL, z && z.top, v); }
   function syncWalls(w, v) {
     if (!w) { if (wallKey) { wallInk.clear(); wallKey = ''; } wallTech.clear(); return; }
     if (w.key !== wallKey) { wallKey = w.key; wallInk.clear(); drawPrims(wallInk, w.ink || [], 1 / v.s); }
@@ -382,7 +402,7 @@ async function create(canvas, opts = {}) {
     if (dead) return;
     const v = sc.v, m = sc.map;
     world.position.set(v.x, v.y); world.scale.set(v.s);
-    syncPaper(m); syncGrid(m, v); syncStrokes(m); syncWalls(sc.walls, v); syncLight(sc.light, m); syncTokens(sc.tokens || [], v); syncFog(sc.fog, m); syncTop(sc, v);
+    syncPaper(m); syncGrid(m, v); syncStrokes(m); syncWalls(sc.walls, v); syncLight(sc.light, m); syncZones(sc.zones, v); syncTokens(sc.tokens || [], v); syncFog(sc.fog, m); syncTop(sc, v);
     app.render();
   }
   function resize(w, h, resolution) { if (dead) return; app.renderer.resize(w, h, resolution || app.renderer.resolution); }

@@ -1,0 +1,49 @@
+/* ==================== PISOS, ZONAS Y VIAJES ==================== */
+.map-pal .zone-btn{position:relative}
+.map-pal .zone-btn::after{content:'';position:absolute;left:9px;right:9px;bottom:5px;height:3px;border-radius:2px;background:var(--zc,#e8c26a);opacity:.85}
+
+/* Panel de la zona elegida */
+.map-pop.p-zone{width:min(380px,calc(100% - 74px))}
+.zonepop{display:flex;flex-direction:column;gap:8px}
+.zonepop .row{margin:0}
+.zonepop .row b{display:inline-flex;align-items:center;gap:6px}
+.zonepop .row b .ic{width:20px;height:20px;color:var(--zc)}
+.zone-kinds{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.zone-kinds button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 4px;border-radius:4px;border:1px solid color-mix(in srgb, var(--gold) 30%, transparent);background:rgba(255,255,255,.03);color:var(--on-dark);font-family:var(--display);font-size:11px;letter-spacing:.03em;cursor:pointer}
+.zone-kinds button .ic{width:22px;height:22px;color:var(--zc)}
+.zone-kinds button[aria-pressed="true"]{border-color:var(--zc);background:linear-gradient(180deg, color-mix(in srgb, var(--zc) 22%, transparent), transparent);box-shadow:0 0 10px color-mix(in srgb, var(--zc) 30%, transparent)}
+.zonepop .note{margin:0;color:var(--on-dark-2)}
+.zonepop .field{background-color:rgba(255,255,255,.06);color:var(--on-dark)}
+.zonepop textarea.field{min-height:64px;resize:vertical;font-family:var(--body, inherit)}
+.zonepop .dm-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.zonepop .btn.del{color:#ff9c8c}
+
+/* Tarjeta en medio del mapa: subir o bajar, o el texto que se lee al entrar */
+.map-ask{position:absolute;z-index:6;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,calc(100% - 32px));pointer-events:auto}
+.map-ask[hidden]{display:none}
+.ask-card{padding:16px 18px 14px;border-radius:6px;color:#2b1d12;background:radial-gradient(circle at 50% 0%, #fbf3df, #ead9b4);border:1px solid #b08a3e;box-shadow:inset 0 0 0 3px rgba(255,255,255,.35),inset 0 0 0 4px rgba(176,138,62,.5),0 18px 40px rgba(0,0,0,.6);animation:dropDown .25s ease both}
+.ask-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.ask-h .ic{width:24px;height:24px;color:#8c5a1c}
+.ask-h b{font-family:var(--display);font-size:17px;letter-spacing:.04em}
+.ask-card p{margin:0 0 12px;font-size:15.5px;line-height:1.45;font-style:italic}
+.map-ask.k-paso .ask-card p{font-style:normal}
+.map-ask.k-trampa .ask-card{background:radial-gradient(circle at 50% 0%, #fbe7df, #e8c3b0);border-color:#a8452e}
+.map-ask.k-trampa .ask-h .ic{color:#a8452e}
+.ask-b{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+
+/* El DM lleva al grupo */
+.map-pop.p-travel{left:auto;right:8px;width:min(380px,calc(100% - 16px))}
+.travelpop .row b{display:inline-flex;align-items:center;gap:6px}
+.travel-list{display:flex;flex-direction:column;gap:8px;max-height:min(50vh,380px);overflow-y:auto}
+.travel-map{padding:8px;border-radius:4px;border:1px solid color-mix(in srgb, var(--gold) 30%, transparent);background:rgba(255,255,255,.03)}
+.travel-map>b{display:block;font-family:var(--display);font-size:13px;margin-bottom:6px;color:#fff}
+.travel-map small{color:var(--on-dark-2);font-family:var(--body, inherit)}
+.travel-map .btn .ic{width:15px;height:15px}
+
+/* Combates separados por mapa */
+.hud-row.fights{gap:6px}
+.fight-chip{display:flex;flex-direction:column;align-items:flex-start;padding:4px 10px;border-radius:6px;border:1px solid rgba(217,184,102,.45);background:rgba(255,255,255,.04);color:var(--on-dark);cursor:pointer;line-height:1.15}
+.fight-chip b{font-family:var(--display);font-size:12px;letter-spacing:.03em}
+.fight-chip small{font-size:11px;color:var(--on-dark-2)}
+.fight-chip.on{border-color:var(--gold-hi);box-shadow:0 0 0 1px var(--gold-hi) inset,0 0 10px color-mix(in srgb, var(--gold-hi) 30%, transparent)}
+.map-tok-b .tok-travel{height:34px;width:auto;font-size:13px}

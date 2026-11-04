@@ -91,4 +91,9 @@
   <symbol id="i-snow" viewBox="-17 -17 34 34"><path d="M0 -14 V14 M-12 -7 L12 7 M-12 7 L12 -7 M-3 -11 L0 -8 L3 -11 M-3 11 L0 8 L3 11"/></symbol>
   <symbol id="i-wind" viewBox="-17 -17 34 34"><path d="M-15 -5 H6 Q11 -5 11 -10 Q11 -14 7 -14 Q4 -14 4 -11 M-15 2 H11 Q15 2 15 6 Q15 10 11 10 Q8 10 8 7 M-12 9 H0"/></symbol>
   <symbol id="i-bulb" viewBox="-17 -17 34 34"><path d="M-5 8 Q-5 3 -8 0 Q-11 -4 -9 -9 Q-6 -15 0 -15 Q6 -15 9 -9 Q11 -4 8 0 Q5 3 5 8 Z M-4 12 H4 M-3 15 H3 M0 -9 Q-4 -9 -4 -5"/></symbol>
+  <symbol id="i-stairs" viewBox="-17 -17 34 34"><path d="M-14 13 H-7 V6 H0 V-1 H7 V-8 H14 M-14 13 V-14 M8 -14 L14 -14 L14 -8"/></symbol>
+  <symbol id="i-zone" viewBox="-17 -17 34 34"><path d="M-13 -13 H-7 M-3 -13 H3 M7 -13 H13 V-7 M13 -3 V3 M13 7 V13 H7 M3 13 H-3 M-7 13 H-13 V7 M-13 3 V-3 M-13 -7 V-13 M-4 0 H5 M1 -4 L5 0 L1 4"/></symbol>
+  <symbol id="i-trap" viewBox="-17 -17 34 34"><path d="M-14 12 H14 M-12 12 L-8 2 L-4 12 M-4 12 L0 -2 L4 12 M4 12 L8 2 L12 12 M-10 -12 L-6 -6 M10 -12 L6 -6 M0 -14 V-8"/></symbol>
+  <symbol id="i-ambush" viewBox="-17 -17 34 34"><path d="M0 -14 A14 14 0 1 0 0.01 -14 M0 -7 V3 M0 8 V9 M-14 -14 L-9 -9 M14 -14 L9 -9"/></symbol>
+  <symbol id="i-group" viewBox="-17 -17 34 34"><path d="M-6 -6 A5 5 0 1 0 -5.99 -6 M7 -8 A4 4 0 1 0 7.01 -8 M-15 13 Q-15 3 -6 3 Q3 3 3 13 M5 1 Q14 0 14 10"/></symbol>
 </svg>

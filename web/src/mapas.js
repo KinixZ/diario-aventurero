@@ -20,12 +20,13 @@ var Mapas = (function(){
   var WALLT = [['wall','Pared','i-wall','Tapa la vista y el paso.'],['door','Puerta','i-door','Se abre y se cierra; cerrada tapa todo.'],['secret','Puerta secreta','i-secret','Para los jugadores es pared hasta que la encuentran.',1],['window','Ventana','i-window','Se ve a través, no se pasa.'],['oneway','Un sentido','i-oneway','Se ve solo desde el lado de la flecha.'],['low','Muro bajo','i-lowwall','No tapa la vista ni el paso; dará cobertura.'],['curtain','Cortina','i-curtain','Tapa la vista; se puede cruzar.'],['barrier','Barrera invisible','i-barrier','Nadie la ve ni tapa la vista; no deja pasar.',1]];
   var WCOL = {wall:'#e8c26a', door:'#e0873a', secret:'#d070e0', window:'#5fc6e8', oneway:'#f0d040', low:'#7cc86a', curtain:'#a98ae8', barrier:'#5b9cf0'};
   var RANGES = [[0,'Sin límite'],[4,'6 m'],[8,'12 m'],[12,'18 m'],[20,'30 m'],[40,'60 m']];
-  var maps = {}, cur = null, mode = 'jugar', tool = {k:'pen', c:COLORS[0][0], w:0.14, snap:true, fill:false, layer:null, fogV:1, wt:'wall', wroom:false, sc:'niebla'}, hidden = {}, views = {}, asked = {};
+  var maps = {}, cur = null, mode = 'jugar', tool = {k:'pen', c:COLORS[0][0], w:0.14, snap:true, fill:false, layer:null, fogV:1, wt:'wall', wroom:false, sc:'niebla', zk:'paso'}, hidden = {}, views = {}, asked = {};
   var locked = {}; // capas bloqueadas por mapa (solo en tu vista)
   var newOpen = false, layersOpen = false, pendingText = null, selTok = null, pings = [], imgs = {}, fogCache = {}, newImg = null, busyUp = false;
   var waitOpen = null, canvas = null, ptr = {}, gesture = null, drawing = null, erasing = null, drag = null, fogDrag = null, press = null, raf = 0;
   var edOn = false; // un gesto del editor (seleccionar, mover, girar…) en curso
   var gl = null, glRaf = 0, fogSeq = 0, preloaded = false; // motor WebGL (mapa-gl.js) cuando el aparato lo permite; si no, Canvas 2D
+  var selZone = null, zop = null, ask = null; // zona elegida, gesto de zona y la pregunta abierta (subir, leer…)
   var selWall = null, wop = null, viewAs = false, doorAnim = {}, visCache = {}, visSeq = 0; // paredes elegida y en edición; el DM viendo como jugador
 
   /* ---------- Guardado en el dispositivo ---------- */
@@ -36,7 +37,7 @@ var Mapas = (function(){
   function index(){ try { return JSON.parse(localStorage.getItem(IDX) || '[]'); } catch(e){ return []; } }
   function setIndex(a){ try { localStorage.setItem(IDX, JSON.stringify(a)); } catch(e){} }
   var saveT = {};
-  function norm(mp){ if (!mp.tokens) mp.tokens = []; if (!mp.fog) mp.fog = {on:false, cells:''}; if (!mp.layers || !mp.layers.length) mp.layers = [{id:'l1', name:'Terreno'}]; if (!mp.strokes) mp.strokes = []; if (!mp.walls) mp.walls = []; if (!mp.vis) mp.vis = {on:false, range:0, lines:'auto'}; if (mp.wrev == null) mp.wrev = 0; if (!mp.light) mp.light = {time:'dia', amb:'auto', wx:'despejado'}; return mp; }
+  function norm(mp){ if (!mp.tokens) mp.tokens = []; if (!mp.fog) mp.fog = {on:false, cells:''}; if (!mp.layers || !mp.layers.length) mp.layers = [{id:'l1', name:'Terreno'}]; if (!mp.strokes) mp.strokes = []; if (!mp.walls) mp.walls = []; if (!mp.vis) mp.vis = {on:false, range:0, lines:'auto'}; if (mp.wrev == null) mp.wrev = 0; if (!mp.light) mp.light = {time:'dia', amb:'auto', wx:'despejado'}; if (!mp.trig) mp.trig = []; return mp; }
   function keep(mp){
     norm(mp); maps[mp.id] = mp;
     var ix = index().filter(function(x){ return x.id !== mp.id; });
@@ -87,6 +88,14 @@ var Mapas = (function(){
       if (m.del && m.del.length) { var set = {}; m.del.forEach(function(x){ set[x] = 1; }); mp.walls = mp.walls.filter(function(w){ return !set[w.id]; }); if (set[selWall]) selWall = null; }
       mp.wrev = (mp.wrev || 0) + 1; mp.updated = m.updated || mp.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); animate(); }
     });
+    Sala.on('trigs', function(m){
+      var mp = maps[m.id]; if (!mp) return;
+      (m.put || []).forEach(function(z){ var i = zoneIdx(mp, z.id); if (i >= 0) mp.trig[i] = z; else mp.trig.push(z); });
+      if (m.del && m.del.length) { mp.trig = mp.trig.filter(function(z){ return m.del.indexOf(z.id) < 0; }); if (m.del.indexOf(selZone) >= 0) { selZone = null; if (pop === 'zone') pop = null; } }
+      mp.updated = m.updated || mp.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); }
+    });
+    Sala.on('trig', function(m){ trigEvent(m); });
+    Sala.on('goto', function(m){ arrive(m.map, m.name); });
     Sala.on('map.light', function(m){ var mp = maps[m.id]; if (!mp) return; mp.light = m.light; mp.updated = m.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
     Sala.on('map.vis', function(m){ var mp = maps[m.id]; if (!mp) return; mp.vis = m.vis; if (m.vis.on) mp.fog.on = true; mp.updated = m.updated; keep(mp); if (cur === m.id) { toolbar(); paint(); } });
     Sala.on('tok', function(m){ var mp = maps[m.id]; if (!mp) return; var i = mp.tokens.findIndex(function(t){ return t.id === m.tok.id; }); if (i >= 0) mp.tokens[i] = m.tok; else mp.tokens.push(m.tok); mp.updated = m.updated || mp.updated; keep(mp); if (drag && drag.tok.id === m.tok.id) return; repaintIfCur(m.id); });
@@ -150,7 +159,7 @@ var Mapas = (function(){
   }
   function tokMove(mp, t, x, y, cells){
     if (shared(mp.id)) { t.x = x; t.y = y; paint(); Sala.send({t:'tok.move', id:mp.id, tid:t.id, x:x, y:y}); return; }
-    var from = window.Vision ? Vision.center(t) : null; t.x = x; t.y = y; exploreLocal(mp, [t], from, cells); mp.updated = Date.now(); keep(mp); paint();
+    var from = window.Vision ? Vision.center(t) : null, ox = t.x, oy = t.y; t.x = x; t.y = y; exploreLocal(mp, [t], from, cells); mp.updated = Date.now(); keep(mp); paint(); zonesLocal(mp, t, ox, oy);
   }
   function tokSet(mp, t, o){
     if (shared(mp.id)) { o.t = 'tok.set'; o.id = mp.id; o.tid = t.id; Sala.send(o); return; }
@@ -238,6 +247,147 @@ var Mapas = (function(){
     if (mp.vis.on) mp.fog.on = true; exploreLocal(mp); mp.updated = Date.now(); keep(mp); toolbar(); paint();
   }
   function linesOn(mp){ var l = mp.vis && mp.vis.lines || 'auto'; return l === 'yes' || (l === 'auto' && !mp.bg); }
+
+  /* ---------- Zonas: pasos a otro mapa, trampas, textos y emboscadas ----------
+     Un rectángulo de casillas {id, k, x, y, w, h, name, to:{map, zid}, lock, hidden, text, once, fired, say, all}.
+     En la campaña las pone el DM y el servidor las dispara; en tu copia se disparan aquí mismo. */
+  var ZK = [['paso','Paso a otro mapa','i-stairs','#e8c26a','Escalera, puerta o salida: lleva a otro mapa (pregunta antes).'],['trampa','Trampa','i-trap','#e0574a','Te avisa a ti cuando alguien la pisa (o la cruza).'],['texto','Texto','i-scroll','#5fa8e8','Una descripción que se lee al entrar.'],['encuentro','Emboscada','i-ambush','#b07ae8','Al entrar, aparecen los enemigos ocultos de este mapa.']];
+  function zoneT(k){ return ZK.filter(function(x){ return x[0] === k; })[0] || ZK[0]; }
+  function zoneIdx(mp, id){ for (var i = 0; i < mp.trig.length; i++) if (mp.trig[i].id === id) return i; return -1; }
+  function zoneById(mp, id){ var i = zoneIdx(mp, id); return i >= 0 ? mp.trig[i] : null; }
+  function newZid(){ return 'z' + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 6); }
+  function zput(mp, z){
+    var i = zoneIdx(mp, z.id); if (i >= 0) mp.trig[i] = z; else mp.trig.push(z);
+    if (z.to && z.to.map) { var tm = maps[z.to.map] || roomMeta(z.to.map); z.toName = tm ? tm.name : ''; }
+    if (shared(mp.id)) Sala.send({t:'trig.add', id:mp.id, trig:z}); mp.updated = Date.now(); keep(mp); toolbar(); paint();
+  }
+  function zrm(mp, id){ mp.trig = mp.trig.filter(function(z){ return z.id !== id; }); if (selZone === id) { selZone = null; if (pop === 'zone') pop = null; } if (shared(mp.id)) Sala.send({t:'trig.rm', id:mp.id, zid:id}); mp.updated = Date.now(); keep(mp); toolbar(); paint(); }
+  function inZone(z, x, y){ return x >= z.x && x < z.x + z.w && y >= z.y && y < z.y + z.h; }
+  function zoneAt(mp, m, kind){ for (var i = mp.trig.length - 1; i >= 0; i--) { var z = mp.trig[i]; if ((!kind || z.k === kind) && inZone(z, m[0], m[1])) return z; } return null; }
+  /* Mapas a los que puede llevar un paso: los de la campaña (o los tuyos, sin campaña) */
+  function otherMaps(mp){
+    var r = room(), list = r && shared(mp.id) ? (r.maps || []).map(function(x){ return {id:x.id, name:x.name, hidden:x.hidden}; }) : index().filter(function(x){ return !x.room; }).map(function(x){ return {id:x.id, name:x.name}; });
+    return list.filter(function(x){ return x.id !== mp.id; });
+  }
+  /* El panel de la zona elegida (todo se guarda al cambiar) */
+  function zoneHtml(mp){
+    var z = selZone && zoneById(mp, selZone); if (!z) return '';
+    var T = zoneT(z.k), others = otherMaps(mp), tm = z.to && maps[z.to.map], tz = tm ? tm.trig || [] : [];
+    var h = '<div class="zonepop" style="--zc:' + T[3] + '"><div class="row"><b><svg class="ic"><use href="#' + T[2] + '"/></svg>Zona</b><button class="icon-btn sm" type="button" data-act="mappopx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>'
+      + '<div class="zone-kinds" role="group" aria-label="Qué hace">' + ZK.map(function(x){ return '<button type="button" data-act="mapzk" data-v="' + x[0] + '" aria-pressed="' + (z.k === x[0]) + '" style="--zc:' + x[3] + '" title="' + attr(x[4]) + '"><svg class="ic"><use href="#' + x[2] + '"/></svg>' + x[1].split(' ')[0] + '</button>'; }).join('') + '</div>'
+      + '<p class="note">' + T[4] + '</p>'
+      + '<label class="fl">Nombre<input class="field" id="mapZName" maxlength="50" value="' + attr(z.name || '') + '" placeholder="' + (z.k === 'paso' ? 'Escalera a la torre' : z.k === 'trampa' ? 'Foso con estacas' : z.k === 'texto' ? 'El altar' : 'Los goblins del puente') + '" autocomplete="off"></label>';
+    if (z.k === 'paso') {
+      h += '<div class="two"><label class="fl">Lleva a<select class="field" id="mapZMap"><option value="">Elige un mapa…</option>' + others.map(function(o){ return '<option value="' + attr(o.id) + '"' + (z.to && z.to.map === o.id ? ' selected' : '') + '>' + esc(o.name) + (o.hidden ? ' (oculto)' : '') + '</option>'; }).join('') + '</select></label>'
+        + '<label class="fl">Llega a<select class="field" id="mapZTo"' + (z.to && z.to.map ? '' : ' disabled') + '><option value="">El centro del mapa</option>' + tz.filter(function(q){ return q.k === 'paso'; }).map(function(q){ return '<option value="' + attr(q.id) + '"' + (z.to && z.to.zid === q.id ? ' selected' : '') + '>' + esc(q.name || 'Paso sin nombre') + '</option>'; }).join('') + '</select></label></div>'
+        + (z.to && z.to.map && !tz.some(function(q){ return q.k === 'paso' && q.to && q.to.map === mp.id; }) ? '<button class="btn sm" type="button" data-act="mapzback"><svg class="ic"><use href="#i-stairs"/></svg>Crear la vuelta en ese mapa</button>' : '')
+        + '<label class="toggle"><input type="checkbox" id="mapZLock"' + (z.lock ? ' checked' : '') + '> Bloqueada: los jugadores no pasan</label>'
+        + '<label class="toggle"><input type="checkbox" id="mapZHide"' + (z.hidden ? ' checked' : '') + '> Oculta para los jugadores</label>';
+    } else {
+      if (z.k !== 'encuentro') h += '<label class="fl">' + (z.k === 'trampa' ? 'Qué pasa (para ti)' : 'Lo que se lee') + '<textarea class="field" id="mapZText" rows="3" maxlength="600">' + esc(z.text || '') + '</textarea></label>';
+      if (z.k === 'trampa') h += '<label class="toggle"><input type="checkbox" id="mapZSay"' + (z.say ? ' checked' : '') + '> Decírselo también al jugador</label>';
+      if (z.k === 'texto') h += '<label class="toggle"><input type="checkbox" id="mapZAll"' + (z.all ? ' checked' : '') + '> A todos los del mapa (no solo a quien entra)</label>';
+      h += '<label class="toggle"><input type="checkbox" id="mapZOnce"' + (z.once ? ' checked' : '') + '> Una sola vez</label>' + (z.fired ? '<button class="btn sm" type="button" data-act="mapzrearm">Ya se activó · rearmar</button>' : '');
+    }
+    return h + '<div class="dm-row"><button class="btn sm del" type="button" data-act="mapzdel"><svg class="ic"><use href="#i-trash"/></svg>Quitar la zona</button><span class="muted">' + z.w + ' × ' + z.h + ' casillas</span></div></div>';
+  }
+  /* Herramienta de zonas (Dibujar): arrastrar en vacío crea una; sobre una zona, la mueve; desde su esquina, la agranda */
+  function zcell(mp, m){ return [Math.max(0, Math.min(mp.cols - 1, Math.floor(m[0]))), Math.max(0, Math.min(mp.rows - 1, Math.floor(m[1])))]; }
+  function zoneDown(mp, m, ev){
+    var sz = selZone && zoneById(mp, selZone), tol = (ev.pointerType === 'touch' ? 22 : 12) / V().s;
+    if (sz && Math.hypot(m[0] - (sz.x + sz.w), m[1] - (sz.y + sz.h)) < tol) { zop = {k:'size', z:sz, orig:JSON.parse(JSON.stringify(sz)), m0:m, moved:false}; return; }
+    var hit = zoneAt(mp, m);
+    if (hit) { zop = {k:'move', z:hit, orig:JSON.parse(JSON.stringify(hit)), m0:m, moved:false}; return; }
+    var c = zcell(mp, m); zop = {k:'new', a:c, b:c, m0:m, moved:false};
+  }
+  function zoneMove(mp, m){
+    if (!zop.moved && Math.hypot(m[0] - zop.m0[0], m[1] - zop.m0[1]) * V().s < 6) return; zop.moved = true;
+    if (zop.k === 'new') zop.b = zcell(mp, m);
+    else if (zop.k === 'move') { var o = zop.orig, dx = Math.round(m[0] - zop.m0[0]), dy = Math.round(m[1] - zop.m0[1]); zop.z.x = Math.max(0, Math.min(mp.cols - o.w, o.x + dx)); zop.z.y = Math.max(0, Math.min(mp.rows - o.h, o.y + dy)); }
+    else { var o2 = zop.orig; zop.z.w = Math.max(1, Math.min(mp.cols - o2.x, Math.round(m[0] - o2.x))); zop.z.h = Math.max(1, Math.min(mp.rows - o2.y, Math.round(m[1] - o2.y))); }
+    paint();
+  }
+  function zoneUp(mp){
+    var o = zop; zop = null;
+    if (o.k === 'new') {
+      if (!o.moved) { selZone = null; if (pop === 'zone') pop = null; toolbar(); paint(); return; }
+      var z = {id:newZid(), k:tool.zk, x:Math.min(o.a[0], o.b[0]), y:Math.min(o.a[1], o.b[1]), w:Math.abs(o.a[0] - o.b[0]) + 1, h:Math.abs(o.a[1] - o.b[1]) + 1, name:''};
+      if (z.k !== 'paso') z.once = z.k !== 'texto';
+      zput(mp, z); selZone = z.id; pop = 'zone'; if (window.Sfx) Sfx.play('click'); toolbar(); paint(); return;
+    }
+    if (!o.moved) { selZone = o.z.id; pop = 'zone'; toolbar(); paint(); return; }
+    zput(mp, o.z); selZone = o.z.id;
+  }
+  /* Lo que llega del servidor (o de tu copia) cuando alguien entra a una zona */
+  function trigEvent(m){
+    var mp = maps[m.id], mapName = mp ? mp.name : '';
+    if (m.dm) {
+      var verb = m.k === 'trampa' ? '⚠ ' + m.who + ' activó ' + (m.name || 'una trampa') : m.k === 'texto' ? m.who + ' llegó a ' + (m.name || 'una zona de texto') : '¡' + (m.name || 'Emboscada') + '! Aparecen los enemigos';
+      if (window.Sfx) Sfx.play(m.k === 'trampa' ? 'hit' : m.k === 'encuentro' ? 'turn' : 'page');
+      Sala.toast(verb + (mapName && cur !== m.id ? ' (' + mapName + ')' : '') + (m.k === 'trampa' && m.text ? ': ' + m.text : ''), cur !== m.id ? {act:'mapgoscene', v:m.id, label:'Ver'} : null);
+      return;
+    }
+    if (m.k === 'paso') { askShow({k:'paso', map:m.id, zid:m.zid, title:m.name || 'Una salida', text:m.lock ? 'Está bloqueado: por ahora no se puede pasar.' : 'Lleva a «' + (m.to && m.to.name || 'otro mapa') + '». ¿Pasas?', go:!m.lock, icon:'i-stairs'}); return; }
+    if (m.k === 'encuentro') { if (window.Fx) Fx.announce(m.name || '¡Emboscada!', 'Tiren iniciativa'); else Sala.toast('¡' + (m.name || 'Emboscada') + '!'); return; }
+    if (window.Sfx) Sfx.play(m.k === 'trampa' ? 'hit' : 'page');
+    askShow({k:m.k, title:m.name || (m.k === 'trampa' ? '¡Trampa!' : 'Al entrar…'), text:m.text || '', icon:m.k === 'trampa' ? 'i-trap' : 'i-scroll'});
+  }
+  /* Tarjeta en medio del mapa: pregunta para subir o bajar, o texto que se lee */
+  function askShow(o){ ask = o; askPaint(); }
+  function askPaint(){
+    var el = $('#mapAsk'); if (!el) return; if (!ask) { el.hidden = true; el.innerHTML = ''; return; }
+    var o = ask;
+    el.className = 'map-ask k-' + o.k; el.hidden = false;
+    el.innerHTML = '<div class="ask-card" role="dialog" aria-live="polite"><div class="ask-h"><svg class="ic"><use href="#' + (o.icon || 'i-scroll') + '"/></svg><b>' + esc(o.title) + '</b></div>' + (o.text ? '<p>' + esc(o.text).replace(/\n/g, '<br>') + '</p>' : '')
+      + '<div class="ask-b">' + (o.k === 'paso' && o.go ? '<button class="btn main" type="button" data-act="mapaskgo">' + (o.dm ? 'Llevar a todos' : 'Pasar') + '</button>' + (o.dm ? '<button class="btn" type="button" data-act="mapaskopen">Ver ese mapa</button>' : '') + '<button class="btn" type="button" data-act="mapaskno">Quedarme</button>' : '<button class="btn main" type="button" data-act="mapaskno">' + (o.k === 'paso' ? 'Entendido' : 'Seguir') + '</button>') + '</div></div>';
+    if (window.Fx && Fx.pop) try { Fx.pop(el.firstChild); } catch(e){}
+  }
+  /* Tocar un paso en modo Jugar: el jugador (de cerca) pregunta si pasa; el DM puede llevar a todos */
+  function zoneClick(mp, z){
+    if (master(mp) && shared(mp.id)) { askShow({k:'paso', dm:true, map:mp.id, zid:z.id, title:z.name || 'Paso', text:z.to ? 'Lleva a «' + (z.toName || (maps[z.to.map] || {}).name || 'otro mapa') + '».' : 'Todavía no lleva a ningún mapa (ponlo en Dibujar → Zonas).', go:!!z.to, icon:'i-stairs'}); return; }
+    if (z.lock) { Sala.toast('Está bloqueado.'); if (window.Sfx) Sfx.play('locked'); return; }
+    var t = myTok(mp); if (!t) { Sala.toast('Primero pon tu ficha en el mapa.'); return; }
+    var c = Vision.center(t), dx = Math.max(z.x - c[0], 0, c[0] - (z.x + z.w)), dy = Math.max(z.y - c[1], 0, c[1] - (z.y + z.h));
+    if (Math.max(dx, dy) > 1.5) { Sala.toast('Acércate a ' + (z.name ? '«' + z.name + '»' : 'la salida') + '.'); return; }
+    askShow({k:'paso', map:mp.id, zid:z.id, title:z.name || 'Una salida', text:z.to ? 'Lleva a «' + (z.to.name || z.toName || (maps[z.to.map] || {}).name || 'otro mapa') + '». ¿Pasas?' : 'No lleva a ningún lado todavía.', go:!!z.to, icon:'i-stairs'});
+  }
+  /* Pasar: en la campaña lo hace el servidor; en tu copia se mueven las fichas de un mapa al otro */
+  function travel(mpId, zid, all){
+    var mp = maps[mpId]; if (!mp) return;
+    if (shared(mp.id)) { var msg = {t:'travel', id:mp.id, zid:zid}; if (all) msg.all = true; Sala.send(msg); return; }
+    var z = zoneById(mp, zid); if (!z || !z.to) return;
+    load(z.to.map).then(function(dest){
+      if (!dest) { Sala.toast('Ese mapa ya no está en este aparato.'); return; }
+      var toks = mp.tokens.filter(function(t){ return t.kind === 'pc'; }), az = z.to.zid && zoneById(dest, z.to.zid), ax = az ? az.x + az.w / 2 : dest.cols / 2, ay = az ? az.y + az.h / 2 : dest.rows / 2, used = {};
+      dest.tokens.forEach(function(t){ used[Math.round(t.x) + ',' + Math.round(t.y)] = 1; });
+      toks.forEach(function(t){
+        mp.tokens = mp.tokens.filter(function(x){ return x !== t; }); var s = t.s || 1, bx = Math.round(ax - s / 2), by = Math.round(ay - s / 2), p = null;
+        for (var r = 0; r < 24 && !p; r++) for (var dy = -r; dy <= r && !p; dy++) for (var dx = -r; dx <= r && !p; dx++) { if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; var x = bx + dx, y = by + dy; if (x < 0 || y < 0 || x > dest.cols - s || y > dest.rows - s || used[x + ',' + y]) continue; used[x + ',' + y] = 1; p = [x, y]; }
+        p = p || [Math.max(0, bx), Math.max(0, by)]; t.x = p[0]; t.y = p[1]; dest.tokens.push(t);
+      });
+      exploreLocal(dest); mp.updated = dest.updated = Date.now(); keep(mp); keep(dest); arrive(dest.id, dest.name);
+    });
+  }
+  /* Llegar a otro mapa: se abre (si estás viendo los mapas) */
+  function arrive(id, name){
+    ask = null;
+    var cb = document.getElementById('combat'), open = cb && !cb.hidden;
+    if (open && (visible() || !document.querySelector('#combat .mesa-p:focus-within'))) { if (window.Mesa) Mesa.show('mapas'); openMap(id); Sala.toast('Llegas a «' + (name || 'otro mapa') + '».'); }
+    else Sala.toast('Llegas a «' + (name || 'otro mapa') + '».', {act:'mapgoscene', v:id, label:'Ver mapa'});
+  }
+  /* En tu copia, las zonas se disparan aquí: al mover una ficha del grupo */
+  function zonesLocal(mp, t, ox, oy){
+    if (shared(mp.id) || !mp.trig.length || t.kind !== 'pc') return;
+    var s = t.s || 1, ax = ox + s / 2, ay = oy + s / 2, bx = t.x + s / 2, by = t.y + s / 2, n = Math.min(400, Math.ceil(Math.max(Math.abs(bx - ax), Math.abs(by - ay)) * 2)), hit = {};
+    var before = mp.trig.filter(function(z){ return inZone(z, ax, ay); }).map(function(z){ return z.id; });
+    for (var i = 1; i <= n; i++) { var px = ax + (bx - ax) * i / n, py = ay + (by - ay) * i / n; mp.trig.forEach(function(z){ if (before.indexOf(z.id) < 0 && inZone(z, px, py)) hit[z.id] = z; }); }
+    Object.keys(hit).forEach(function(k){
+      var z = hit[k]; if (z.k === 'paso') { if (inZone(z, bx, by) && z.to) zoneClick(mp, z); return; }
+      if (z.once && z.fired) return; z.fired = true;
+      if (z.k === 'encuentro') mp.tokens.forEach(function(x){ if (x.hidden && x.kind === 'npc') x.hidden = false; });
+      trigEvent({id:mp.id, k:z.k, name:z.name, text:z.text || '', who:t.name});
+    });
+  }
 
   /* ---------- Visión del grupo ---------- */
   function charOf(mp, t){ var r = room(); if (!r || !shared(mp.id) || !t.ref || t.comp) return null; var m = r.members.filter(function(x){ return x.id === t.ref; })[0]; return m && m.role !== 'dm' ? m.char : null; }
@@ -363,8 +513,9 @@ var Mapas = (function(){
     box.innerHTML = '<div class="map-ed vtt"><div class="map-bar" id="mapBar"></div><div class="map-wrap" id="mapWrap"><canvas id="mapCv" aria-label="Mapa: arrastra tu ficha, mantén presionado para señalar; con dos dedos mueves y haces zoom"></canvas><canvas class="map-wx" id="mapWx" aria-hidden="true" hidden></canvas>'
       + '<div class="vtt-init" id="vttInit" hidden></div><div class="map-pal" id="mapPal"></div>'
       + '<div class="map-zoom"><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="1" aria-label="Acercar"><svg class="ic"><use href="#i-plus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapzoom" data-v="-1" aria-label="Alejar"><svg class="ic"><use href="#i-minus"/></svg></button><button class="icon-btn sm" type="button" data-act="mapfit" aria-label="Encuadrar el mapa" title="Encuadrar"><svg class="ic"><use href="#i-fit"/></svg></button></div>'
-      + '<div class="map-pop" id="mapPop" hidden></div><div class="vtt-hud" id="vttHud"></div><div class="map-txt" id="mapTxt" hidden></div><div class="map-tok" id="mapTok" hidden></div><div class="map-selbar" id="mapSel" hidden></div></div></div>';
-    dropGL(); canvas = $('#mapCv', box); bind(); if (window.Gfx && Gfx.wantGL()) startGL(canvas); toolbar(); fit(); frame(maps[cur]); var mt = !master(maps[cur]) && myTok(maps[cur]); if (mt) focus(maps[cur], mt); paint(); tokPanel(); badge();
+      + '<div class="map-pop" id="mapPop" hidden></div><div class="vtt-hud" id="vttHud"></div><div class="map-txt" id="mapTxt" hidden></div><div class="map-tok" id="mapTok" hidden></div><div class="map-selbar" id="mapSel" hidden></div><div class="map-ask" id="mapAsk" hidden></div></div></div>';
+    dropGL(); canvas = $('#mapCv', box); bind(); if (window.Gfx && Gfx.wantGL()) startGL(canvas); toolbar(); fit(); frame(maps[cur]); var mt = !master(maps[cur]) && myTok(maps[cur]); if (mt) focus(maps[cur], mt); paint(); tokPanel(); badge(); askPaint();
+    var r0 = room(); if (r0 && r0.split && isDm() && shared(cur) && r0.fight !== cur) Sala.send({t:'fight.focus', map:cur}); // con el combate separado, el DM ve el de este mapa
   }
   /* No repinta un bloque mientras escribes en él (el estado llega seguido) */
   function put(el, html){ var a = document.activeElement; if (a && el.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && el.innerHTML) return; el.innerHTML = html; }
@@ -394,6 +545,7 @@ var Mapas = (function(){
       + tb('line', 'Línea', 'i-line') + tb('rect', 'Rectángulo', 'i-rect') + tb('text', 'Texto', 'i-text')
       + '<button type="button" class="icon-btn" data-act="mapassets" aria-expanded="' + (pop === 'assets') + '" aria-pressed="' + (tool.k === 'asset') + '" aria-label="Objetos: puertas, escaleras, muebles…" title="Objetos"><svg class="ic"><use href="#i-chest"/></svg></button>'
       + (canAdmin(mp) ? '<button type="button" class="icon-btn wall-btn" data-act="mapwalls" aria-expanded="' + (pop === 'walls') + '" aria-pressed="' + (tool.k === 'wall') + '" aria-label="Paredes y puertas" title="Paredes y puertas" style="--wc:' + WCOL[tool.wt] + '"><svg class="ic"><use href="#' + wallT(tool.wt)[2] + '"/></svg></button>' : '')
+      + (dm ? '<button type="button" class="icon-btn zone-btn" data-act="mapzones" aria-pressed="' + (tool.k === 'zone') + '" aria-label="Zonas: escaleras a otro mapa, trampas, textos y emboscadas" title="Zonas" style="--zc:' + zoneT(tool.zk)[3] + '"><svg class="ic"><use href="#i-zone"/></svg></button>' : '')
       + tb('erase', 'Borrar', 'i-eraser')
       + '<span class="pal-sep"></span><button type="button" class="icon-btn" data-act="maplayers" aria-expanded="' + (pop === 'layers') + '" aria-label="Capas" title="Capas"><svg class="ic"><use href="#i-layers"/></svg></button>'
       + '<button type="button" class="icon-btn" data-act="mapundo" aria-label="Deshacer" title="Deshacer (Ctrl+Z)"' + (MapEd.canUndo(mp) ? '' : ' disabled') + '><svg class="ic"><use href="#i-undo"/></svg></button>'
@@ -462,8 +614,9 @@ var Mapas = (function(){
   function popover(mp, dm, sh, admin){
     var p = $('#mapPop'); if (!p) return;
     if (pop === 'pen' && mode !== 'dibujar') pop = null;
-    if ((pop === 'layers' || pop === 'assets' || pop === 'walls') && mode !== 'dibujar') pop = null;
-    var h = pop === 'set' && admin ? setHtml(mp, dm, sh) : pop === 'layers' ? layersHtml(mp, dm, sh, admin) : pop === 'pen' ? penHtml() : pop === 'add' ? addHtml(mp, dm) : pop === 'assets' && window.Assets ? Assets.pickerHtml(tool.k === 'asset' ? tool.asset : null) : pop === 'walls' && admin ? wallsHtml(mp) : '';
+    if ((pop === 'layers' || pop === 'assets' || pop === 'walls' || pop === 'zone') && mode !== 'dibujar') pop = null;
+    if (pop === 'zone' && !(selZone && zoneById(mp, selZone))) pop = null;
+    var h = pop === 'set' && admin ? setHtml(mp, dm, sh) : pop === 'layers' ? layersHtml(mp, dm, sh, admin) : pop === 'pen' ? penHtml() : pop === 'add' ? addHtml(mp, dm) : pop === 'assets' && window.Assets ? Assets.pickerHtml(tool.k === 'asset' ? tool.asset : null) : pop === 'walls' && admin ? wallsHtml(mp) : pop === 'zone' && dm ? zoneHtml(mp) : pop === 'travel' ? travelHtml(mp) : '';
     p.className = 'map-pop' + (pop ? ' p-' + pop : ''); put(p, h); p.hidden = !h;
   }
   function setHtml(mp, dm, sh){
@@ -493,7 +646,8 @@ var Mapas = (function(){
   function fight(){ var r = room(); return r && ((r.round > 0) || (r.npcs || []).length || r.order.length) ? r : null; }
   function combatants(r){
     var all = {}; r.members.forEach(function(m){ if (m.role !== 'dm') all[m.id] = {id:m.id, pc:true, m:m}; }); (r.npcs || []).forEach(function(n){ all[n.id] = {id:n.id, pc:false, n:n}; });
-    var ord = r.order.map(function(id){ return all[id]; }).filter(Boolean), rest = Object.keys(all).map(function(k){ return all[k]; }).filter(function(x){ return r.order.indexOf(x.id) < 0; });
+    var here = function(x){ if (!r.split) return true; var at = (x.pc ? x.m.at : x.n.at) || r.scene || null; return at === r.fight; };
+    var ord = r.order.map(function(id){ return all[id]; }).filter(Boolean), rest = Object.keys(all).map(function(k){ return all[k]; }).filter(function(x){ return r.order.indexOf(x.id) < 0 && here(x); });
     return ord.concat(rest);
   }
   function cInfo(x, r){
@@ -536,10 +690,12 @@ var Mapas = (function(){
       var tokBtns = (canPut ? (noTp ? '' : '<button class="btn main sm" type="button" data-act="mapputme"><svg class="ic"><use href="#i-token"/></svg>' + (mt ? 'Traer mi ficha' : 'Poner mi ficha') + '</button>') + (mt ? '<button class="icon-btn sm" type="button" data-act="mapfindme" aria-label="Ir a mi ficha" title="Ir a mi ficha"><svg class="ic"><use href="#i-target"/></svg></button>' : '') : '')
         + '<button class="icon-btn sm" type="button" data-act="mapadd" aria-expanded="' + (pop === 'add') + '" aria-label="' + (dm ? 'Agregar ficha' : 'Otra ficha (familiar, montura)') + '" title="' + (dm ? 'Agregar ficha' : 'Otra ficha') + '"><svg class="ic"><use href="#i-plus"/></svg></button>';
       if (r && isDm() && sh) {
-        var missing = f ? combatants(f).filter(function(x){ return !mp.tokens.some(function(t){ return t.ref === x.id && !t.comp; }); }).length : 0;
+        var fsplit = fightsHtml(r), missing = f ? combatants(f).filter(function(x){ return !mp.tokens.some(function(t){ return t.ref === x.id && !t.comp; }); }).length : 0;
         h = '<div class="hud-row dm">' + tokBtns + (!scene ? '<button class="btn sm" type="button" data-act="mapscene" data-id="' + attr(mp.id) + '"><svg class="ic"><use href="#i-screen"/></svg>Mostrar a todos</button>' : '')
+          + (otherMaps(mp).length && mp.tokens.some(function(t){ return t.kind === 'pc'; }) ? '<button class="btn sm" type="button" data-act="maptravelp" aria-expanded="' + (pop === 'travel') + '"><svg class="ic"><use href="#i-group"/></svg>Llevar al grupo</button>' : '')
+          + (f && !r.split && spread(r) ? '<button class="btn sm" type="button" data-act="mapsplit" data-v="1" title="El grupo está en varios mapas: cada mapa con su propio combate"><svg class="ic"><use href="#i-swords"/></svg>Combate por mapa</button>' : '')
           + '<span class="hud-sp"></span><button class="btn sm" type="button" data-act="bestopen"><svg class="ic"><use href="#i-paw"/></svg>Enemigo</button>' + (missing ? '<button class="btn sm" type="button" data-act="mapplaceall"><svg class="ic"><use href="#i-token"/></svg>Poner ' + missing + ' en el mapa</button>' : '')
-          + (f ? (f.round ? '<button class="icon-btn sm" type="button" data-act="salaturn" data-v="prev" aria-label="Turno anterior"><svg class="ic"><use href="#i-back"/></svg></button><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Siguiente</button><button class="icon-btn sm" type="button" data-act="salaend" aria-label="Terminar combate" title="Terminar combate"><svg class="ic"><use href="#i-stop"/></svg></button>' : '<button class="btn main sm" type="button" data-act="salaturn" data-v="start"' + (f.order.length ? '' : ' disabled title="Falta iniciativa"') + '><svg class="ic"><use href="#i-swords"/></svg>Empezar combate</button>') : '') + '</div>';
+          + (f ? (f.round ? '<button class="icon-btn sm" type="button" data-act="salaturn" data-v="prev" aria-label="Turno anterior"><svg class="ic"><use href="#i-back"/></svg></button><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Siguiente</button><button class="icon-btn sm" type="button" data-act="salaend" aria-label="Terminar combate" title="Terminar combate"><svg class="ic"><use href="#i-stop"/></svg></button>' : '<button class="btn main sm" type="button" data-act="salaturn" data-v="start"' + (f.order.length ? '' : ' disabled title="Falta iniciativa"') + '><svg class="ic"><use href="#i-swords"/></svg>Empezar combate</button>') : '') + '</div>' + fsplit;
       } else if (r && sh) {
         var meM = r.members.filter(function(m){ return m.id === r.you; })[0] || {}, c = meM.char || {}, myTurn = f && f.round && f.turnId === r.you, p = c.hpMax ? Math.max(0, Math.min(1, c.hp / c.hpMax)) : null;
         h = '<div class="hud-row pj' + (myTurn ? ' myturn' : '') + '">' + (c.name ? '<span class="hud-me"><b>' + esc(c.name) + '</b><span class="hud-hp"><i style="width:' + Math.round((p || 0) * 100) + '%;background:' + (p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a') + '"></i></span><small>PG ' + (c.hp != null ? c.hp + '/' + c.hpMax : '–') + (c.temp ? ' +' + c.temp : '') + ' · CA ' + (c.ac || '–') + '</small></span>' : '')
@@ -575,6 +731,22 @@ var Mapas = (function(){
     if (shared(mp.id)) { Sala.send({t:'map.light', id:mp.id, light:o}); return; }
     Object.keys(o).forEach(function(k){ mp.light[k] = o[k]; }); exploreLocal(mp); mp.updated = Date.now(); keep(mp); toolbar(); paint();
   }
+  /* El DM lleva al grupo (las fichas de personaje de este mapa) a otro mapa, a una de sus zonas de paso o al centro */
+  function travelHtml(mp){
+    var others = otherMaps(mp), n = mp.tokens.filter(function(t){ return t.kind === 'pc'; }).length;
+    return '<div class="travelpop"><div class="row"><b><svg class="ic"><use href="#i-group"/></svg>Llevar al grupo</b><button class="icon-btn sm" type="button" data-act="mappopx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>'
+      + '<p class="note">' + n + ' ficha' + (n === 1 ? '' : 's') + ' de personaje en este mapa pasan a:</p><div class="travel-list">'
+      + (others.length ? others.map(function(o){ var full = maps[o.id], zs = full ? (full.trig || []).filter(function(z){ return z.k === 'paso'; }) : [];
+        return '<div class="travel-map"><b>' + esc(o.name) + (o.hidden ? ' <small>oculto</small>' : '') + '</b><div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn sm" type="button" data-act="maptravel" data-map="' + attr(o.id) + '">Al centro</button>' + zs.map(function(z){ return '<button class="btn sm" type="button" data-act="maptravel" data-map="' + attr(o.id) + '" data-zid="' + attr(z.id) + '"><svg class="ic"><use href="#i-stairs"/></svg>' + esc(z.name || 'Paso') + '</button>'; }).join('') + '</div></div>'; }).join('') : '<p class="note">No hay otros mapas todavía.</p>')
+      + '</div></div>';
+  }
+  /* Combate separado por mapa: cada mapa con su ronda y su turno; el DM ve el del mapa que tiene abierto */
+  function fightsHtml(r){
+    if (!r || !r.split) return '';
+    return '<div class="hud-row fights">' + (r.fights || []).map(function(f){ return '<button type="button" class="fight-chip' + (f.map === r.fight ? ' on' : '') + '" data-act="mapfight" data-v="' + attr(f.map || '') + '" title="Ir a este combate"><b>' + esc(f.name) + '</b><small>' + (f.round ? 'ronda ' + f.round : 'sin empezar') + ' · ' + f.n + '</small></button>'; }).join('') + '<button class="btn sm" type="button" data-act="mapsplit" data-v="0"><svg class="ic"><use href="#i-swords"/></svg>Unir combates</button></div>';
+  }
+  /* ¿El grupo está en varios mapas? (para ofrecer separar el combate) */
+  function spread(r){ var at = {}; r.members.forEach(function(m){ if (m.role !== 'dm' && m.at) at[m.at] = 1; }); return Object.keys(at).length > 1; }
   /* Dónde está tu ficha: luz brillante, penumbra u oscuridad (con lo que dicen las reglas) */
   function litChip(mp, t){
     if (!t || !window.Vision) return ''; var L = mp.light || {}, il = illumOf(mp); if (il.amb >= 2 && !il.lights.length && (!L.wx || L.wx === 'despejado')) return '';
@@ -605,7 +777,8 @@ var Mapas = (function(){
     if (can) h += '<details class="map-tok-more"' + (cb ? '' : ' open') + '><summary>Ficha en el mapa</summary><div class="map-tok-b"><label>Tamaño<select class="field" data-tokset="s">' + TSIZE.map(function(x){ return '<option value="' + x[0] + '"' + (t.s === x[0] ? ' selected' : '') + '>' + x[1].split(' (')[0] + '</option>'; }).join('') + '</select></label>'
       + tokLightCtl(mp, t)
       + '<div class="swatches" role="group" aria-label="Color">' + TOKCOL.map(function(c){ return '<button type="button" class="sw" data-act="maptokcol" data-v="' + c + '" style="background:' + c + '" aria-pressed="' + (t.color === c) + '" aria-label="Color ' + c + '"></button>'; }).join('') + '</div>'
-      + '<div class="row" style="gap:6px;flex-wrap:wrap">' + (room() ? '<label class="btn sm pickbtn">' + (busyUp ? 'Subiendo…' : t.img ? 'Cambiar retrato' : 'Retrato') + '<input type="file" id="mapTokImg" accept="image/*"></label>' + (t.img ? '<button class="btn sm" type="button" data-act="maptoknoimg">Sin retrato</button>' : '') : '') + (dm && room() ? '<button class="btn sm" type="button" data-act="maptokhide">' + (t.hidden ? 'Mostrar a los jugadores' : 'Ocultar a los jugadores') + '</button>' : '') + '<button class="btn sm" type="button" data-act="maptokdel">Quitar del mapa</button></div></div></details>';
+      + '<div class="row" style="gap:6px;flex-wrap:wrap">' + (room() ? '<label class="btn sm pickbtn">' + (busyUp ? 'Subiendo…' : t.img ? 'Cambiar retrato' : 'Retrato') + '<input type="file" id="mapTokImg" accept="image/*"></label>' + (t.img ? '<button class="btn sm" type="button" data-act="maptoknoimg">Sin retrato</button>' : '') : '') + (dm && room() ? '<button class="btn sm" type="button" data-act="maptokhide">' + (t.hidden ? 'Mostrar a los jugadores' : 'Ocultar a los jugadores') + '</button>' : '')
+      + (dm && room() && shared(mp.id) && otherMaps(mp).length ? '<select class="field tok-travel" data-toktravel="1" aria-label="Llevar a otro mapa"><option value="">Llevar a otro mapa…</option>' + otherMaps(mp).map(function(o){ return '<option value="' + attr(o.id) + '">' + esc(o.name) + '</option>'; }).join('') + '</select>' : '') + '<button class="btn sm" type="button" data-act="maptokdel">Quitar del mapa</button></div></div></details>';
     put(p, h); p.hidden = false;
   }
   /* La luz donde está la ficha y lo que dicen las reglas */
@@ -809,7 +982,7 @@ var Mapas = (function(){
       map:{id:mp.id, cols:mp.cols, rows:mp.rows, grid:mp.grid, layers:mp.layers, strokes:strokes, rev:MapEd.rev(), hid:hid, asset:window.Assets ? Assets.imageFor : null, bgUrl:mp.bg ? (mp.bg.img ? Mesa.imgUrl(mp.bg.img) : mp.bg.data) : null, bgOp:mp.bg ? mp.bg.op : 1},
       walls:{ink:wallInk(mp, dmView, now), key:[mp.id, mp.wrev, dmView ? 1 : 0, linesOn(mp) ? 1 : 0, anim ? now : 0].join('|'), tech:mode === 'dibujar' && canAdmin(mp) ? wallTech(mp, tool.k === 'wall') : null},
       fog:mp.fog && mp.fog.on ? {on:true, dm:dmView, bits:fogBits(mp), key:fogCache[mp.id].n, un:dmView ? 0.5 : 1, mem:0, veil:vs ? veilOf(mp, dmView, vs) : null} : null,
-      light:lightScene(mp, dmView, now),
+      light:lightScene(mp, dmView, now), zones:zonePrims(mp, dmView),
       edit:mode === 'dibujar' ? MapEd.overlay(mp) : null, drawing:drawing, erase:erasing ? mp.strokes.filter(function(k){ return erasing.hits[k.id]; }) : null, fogRect:fogDrag ? {a:fogDrag.a, b:fogDrag.b, v:tool.fogV} : null, pings:[]};
     if (drag && drag.moved) {
       var t = drag.tok, s = t.s || 1, rr = ruler(mp);
@@ -887,6 +1060,30 @@ var Mapas = (function(){
     }
     return out;
   }
+  /* Zonas en el mapa: zone {x, y, w, h, c, a (relleno), o, d (guiones px), lw (px)} · path {pts, c, lw, o} · label {x, y, t, c} */
+  var GLYPH = {paso:[[[-0.9, 0.8], [-0.3, 0.8], [-0.3, 0.2], [0.3, 0.2], [0.3, -0.4], [0.9, -0.4], [0.9, -0.9]]], trampa:[[[-0.9, 0.7], [-0.6, -0.6], [-0.3, 0.7], [0, -0.6], [0.3, 0.7], [0.6, -0.6], [0.9, 0.7]]],
+    texto:[[[-0.8, -0.5], [0.8, -0.5]], [[-0.8, 0], [0.8, 0]], [[-0.8, 0.5], [0.4, 0.5]]], encuentro:[[[0, -0.9], [0, 0.35]], [[0, 0.7], [0, 0.8]], [[-0.8, -0.8], [-0.5, -0.3]], [[0.8, -0.8], [0.5, -0.3]]],
+    lock:[[[-0.5, 0], [0.5, 0], [0.5, 0.8], [-0.5, 0.8], [-0.5, 0]], [[-0.3, 0], [-0.3, -0.4], [0, -0.7], [0.3, -0.4], [0.3, 0]]]};
+  function glyph(out, k, x, y, r, c, o){ (GLYPH[k] || []).forEach(function(line){ out.push({p:'path', pts:line.map(function(q){ return [x + q[0] * r, y + q[1] * r]; }), c:c, lw:2.2, o:o}); }); }
+  function zonePrims(mp, dmView){
+    var ink = [], top = [], edit = mode === 'dibujar' && tool.k === 'zone';
+    (mp.trig || []).forEach(function(z){
+      var T = zoneT(z.k), col = T[3], r = Math.max(0.22, Math.min(0.45, Math.min(z.w, z.h) * 0.3)), cx = z.x + z.w / 2, cy = z.y + z.h / 2;
+      if (dmView) {
+        var sel = edit && z.id === selZone, o = (z.fired ? 0.45 : 1) * (edit ? 1 : 0.7);
+        top.push({p:'zone', x:z.x, y:z.y, w:z.w, h:z.h, c:col, a:sel ? 0.2 : 0.1, o:o, d:z.hidden || z.k !== 'paso' ? 6 : 0, lw:sel ? 3 : 2});
+        glyph(top, z.k, cx, cy, r, col, o); if (z.lock) glyph(top, 'lock', z.x + z.w - 0.3, z.y + 0.35, 0.22, col, o);
+        top.push({p:'label', x:cx, y:z.y + z.h + 0.08, t:(z.name || T[1]) + (z.k === 'paso' && z.toName ? ' » ' + z.toName : '') + (z.fired ? ' ✓' : ''), c:col});
+        if (sel) top.push({p:'dot', x:z.x + z.w, y:z.y + z.h, r:6, c:'#fff8e6'});
+      } else if (z.k === 'paso' && !z.hidden) {
+        ink.push({p:'zone', x:z.x, y:z.y, w:z.w, h:z.h, c:'#e8c26a', a:0.14, o:0.85, d:0, lw:2});
+        glyph(ink, 'paso', cx, cy, r, '#7a5a1c', 1); if (z.lock) glyph(ink, 'lock', z.x + z.w - 0.3, z.y + 0.35, 0.22, '#7a5a1c', 1);
+        if (z.name) ink.push({p:'label', x:cx, y:z.y + z.h + 0.08, t:z.name, c:'#2b1d12'});
+      }
+    });
+    if (zop && zop.k === 'new' && zop.moved) { var a = zop.a, b = zop.b, c0 = zoneT(tool.zk)[3]; top.push({p:'zone', x:Math.min(a[0], b[0]), y:Math.min(a[1], b[1]), w:Math.abs(a[0] - b[0]) + 1, h:Math.abs(a[1] - b[1]) + 1, c:c0, a:0.2, o:1, d:6, lw:2}); }
+    return {ink:ink, top:top};
+  }
   /* Canvas 2D: las mismas figuras */
   function primsOn(c, list, v){
     list.forEach(function(q){
@@ -900,6 +1097,9 @@ var Mapas = (function(){
       }
       else if (q.p === 'dot') { var d = X([q.x, q.y]); c.beginPath(); c.arc(d[0], d[1], q.r, 0, Math.PI * 2); c.fillStyle = q.c; c.fill(); c.strokeStyle = '#2b1d12'; c.lineWidth = 1.5; c.stroke(); }
       else if (q.p === 'lock') { var l = X([q.x, q.y]), z = Math.max(5, v.s * 0.16); c.fillStyle = '#ffd66e'; c.strokeStyle = '#2b1d12'; c.lineWidth = 1.5; c.beginPath(); c.rect(l[0] - z, l[1] - z * 0.2, z * 2, z * 1.5); c.fill(); c.stroke(); c.beginPath(); c.arc(l[0], l[1] - z * 0.2, z * 0.65, Math.PI, 0); c.stroke(); }
+      else if (q.p === 'zone') { var zx = v.x + q.x * v.s, zy = v.y + q.y * v.s, zw = q.w * v.s, zh = q.h * v.s; c.globalAlpha = q.a; c.fillStyle = q.c; c.fillRect(zx, zy, zw, zh); c.globalAlpha = q.o; c.strokeStyle = q.c; c.lineWidth = q.lw || 2; if (q.d) c.setLineDash([q.d, q.d * 0.7]); c.strokeRect(zx, zy, zw, zh); }
+      else if (q.p === 'path') { c.strokeStyle = q.c; c.lineWidth = q.lw || 2; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); q.pts.forEach(function(pt, i){ var X0 = v.x + pt[0] * v.s, Y0 = v.y + pt[1] * v.s; if (i) c.lineTo(X0, Y0); else c.moveTo(X0, Y0); }); c.stroke(); }
+      else if (q.p === 'label') { if (v.s < 14) { c.restore(); return; } var lx = v.x + q.x * v.s, ly = v.y + q.y * v.s; c.font = '600 12px Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'top'; c.lineWidth = 3; c.strokeStyle = 'rgba(243,233,210,.9)'; c.strokeText(q.t, lx, ly); c.fillStyle = q.c; c.fillText(q.t, lx, ly); }
       else if (q.p === 'arrow') { var ta = X(q.a), tb = X(q.b), ang = Math.atan2(tb[1] - ta[1], tb[0] - ta[0]), k = 7; c.strokeStyle = q.c; c.lineWidth = 2.5; c.lineCap = 'round'; c.beginPath(); c.moveTo(ta[0], ta[1]); c.lineTo(tb[0], tb[1]); c.moveTo(tb[0] - k * Math.cos(ang - 0.5), tb[1] - k * Math.sin(ang - 0.5)); c.lineTo(tb[0], tb[1]); c.lineTo(tb[0] - k * Math.cos(ang + 0.5), tb[1] - k * Math.sin(ang + 0.5)); c.stroke(); }
       c.restore();
     });
@@ -918,6 +1118,7 @@ var Mapas = (function(){
     var list = window.MapEd ? MapEd.strokes(mp) : mp.strokes, dmView = master(mp) && !viewAs, vs = visOf(mp), late = [], ls = lightScene(mp, dmView, Date.now());
     mp.layers.forEach(function(l){ if (hid[l.id]) return; list.forEach(function(k){ if (k.l === l.id && (dmView || !hiddenObj(k))) strokeOn(c, k, v); }); });
     primsOn(c, wallInk(mp, dmView, Date.now()), v);
+    var zp = zonePrims(mp, dmView); primsOn(c, zp.ink, v);
     if (ls.tint) { c.save(); c.globalCompositeOperation = 'multiply'; c.globalAlpha = ls.tint.a; c.fillStyle = ls.tint.c; c.fillRect(v.x, v.y, mp.cols * v.s, mp.rows * v.s); c.restore(); }
     if (ls.glow) { c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = ls.glow.a; c.drawImage(ls.glow.cv, v.x, v.y, mp.cols * v.s, mp.rows * v.s); c.restore(); }
     (mp.tokens || []).forEach(function(t){ if (drag && drag.tok.id === t.id) return; if (viewAs && t.hidden) return; if (!tokShown(mp, t, vs, dmView)) return; if (!dmView && (ownT(t) || (vs && t.kind === 'pc'))) late.push(t); else tokOn(c, t, v, mp); });
@@ -969,6 +1170,7 @@ var Mapas = (function(){
       tag(c, rr.text, bx, by - s * v.s * 0.5 - 21, gold);
     }
     if (mode === 'dibujar' && canAdmin(mp)) primsOn(c, wallTech(mp, tool.k === 'wall'), v);
+    if (master(mp) && !viewAs) primsOn(c, zonePrims(mp, true).top, v);
     var wl = wallLabel(); if (wl) tag(c, wl.text, v.x + wl.x * v.s, v.y + wl.y * v.s - 26, '#ffd66e');
     if (mode === 'dibujar' && window.MapEd) editOn(c, MapEd.overlay(mp), v);
     if (fogDrag) { var r = fogDrag; c.save(); c.fillStyle = tool.fogV ? 'rgba(95,184,90,.28)' : 'rgba(10,6,4,.55)'; c.strokeStyle = tool.fogV ? '#5fb85a' : '#ffd66e'; c.lineWidth = 2; var x0 = Math.min(r.a[0], r.b[0]), y0 = Math.min(r.a[1], r.b[1]); c.fillRect(v.x + x0 * v.s, v.y + y0 * v.s, (Math.abs(r.a[0] - r.b[0]) + 1) * v.s, (Math.abs(r.a[1] - r.b[1]) + 1) * v.s); c.strokeRect(v.x + x0 * v.s, v.y + y0 * v.s, (Math.abs(r.a[0] - r.b[0]) + 1) * v.s, (Math.abs(r.a[1] - r.b[1]) + 1) * v.s); c.restore(); }
@@ -1043,7 +1245,7 @@ var Mapas = (function(){
       ptr[ev.pointerId] = local(ev);
       var ids = Object.keys(ptr), mp = maps[cur];
       clearTimeout(press && press.t); press = null;
-      if (ids.length === 2) { drawing = null; erasing = null; drag = null; fogDrag = null; wop = null; if (edOn) { MapEd.cancel(); edOn = false; } var a = ptr[ids[0]], b = ptr[ids[1]]; gesture = {d:Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, cx:(a[0] + b[0]) / 2, cy:(a[1] + b[1]) / 2}; paint(); return; }
+      if (ids.length === 2) { drawing = null; erasing = null; drag = null; fogDrag = null; wop = null; zop = null; if (edOn) { MapEd.cancel(); edOn = false; } var a = ptr[ids[0]], b = ptr[ids[1]]; gesture = {d:Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, cx:(a[0] + b[0]) / 2, cy:(a[1] + b[1]) / 2}; paint(); return; }
       if (ids.length > 2) return;
       var p = local(ev), m = toMap(p[0], p[1]);
       if (ev.button === 1 || ev.button === 2) { gesture = {pan:true, px:p[0], py:p[1]}; return; }
@@ -1052,13 +1254,17 @@ var Mapas = (function(){
         // junto a una puerta, la ficha solo se toma si tocas su círculo (si no, se toca la puerta)
         if (t && dw) { var tc = Vision.center(t); if (Math.hypot(m[0] - tc[0], m[1] - tc[1]) > (t.s || 1) * 0.44) t = null; }
         if (t) { drag = {tok:t, ox:m[0] - t.x, oy:m[1] - t.y, sx:t.x, sy:t.y, x:t.x, y:t.y, moved:false, can:mine(t), px:p[0], py:p[1]}; return; }
-        gesture = {pan:true, px:p[0], py:p[1], tap:true, x0:p[0], y0:p[1], door:dw};
-        if (!dw) press = {t:setTimeout(function(){ if (gesture && gesture.tap) { gesture.tap = false; ping(mp, clampPt(m)); } }, 550)};
+        var zw = !dw && !t && zoneAt(mp, m, 'paso'), vsz = zw && !(master(mp) && !viewAs) && mp.fog && mp.fog.on ? fogBits(mp) : null;
+        if (zw && vsz && !seen(vsz, mp, Math.min(mp.cols - 1, Math.floor(m[0])), Math.min(mp.rows - 1, Math.floor(m[1])))) zw = null; // una escalera aún sin descubrir no se toca
+        if (zw && zw.hidden && !master(mp)) zw = null;
+        gesture = {pan:true, px:p[0], py:p[1], tap:true, x0:p[0], y0:p[1], door:dw, zone:zw};
+        if (!dw && !zw) press = {t:setTimeout(function(){ if (gesture && gesture.tap) { gesture.tap = false; ping(mp, clampPt(m)); } }, 550)};
         return;
       }
       if (mode === 'niebla') { var cell = [Math.max(0, Math.min(mp.cols - 1, Math.floor(m[0]))), Math.max(0, Math.min(mp.rows - 1, Math.floor(m[1])))]; fogDrag = {a:cell, b:cell}; paint(); return; }
       if (tool.k === 'select') { MapEd.down(mp, m[0], m[1], ev); edOn = true; return; }
       if (tool.k === 'wall') { if (canAdmin(mp)) wallDown(mp, m, ev); return; }
+      if (tool.k === 'zone') { if (master(mp)) zoneDown(mp, m, ev); return; }
       if (tool.k === 'asset') { if (MapEd.onHandle(mp, m[0], m[1], ev.pointerType === 'touch')) { MapEd.down(mp, m[0], m[1], ev); edOn = true; } else placeAsset(mp, m); return; }
       if (tool.k === 'pan') { gesture = {pan:true, px:p[0], py:p[1]}; return; }
       if (tool.k === 'text') { var tx = clampPt(snapPt(m, 'text')); askText(tx, p); return; }
@@ -1068,7 +1274,7 @@ var Mapas = (function(){
       paint();
     });
     canvas.addEventListener('pointermove', function(ev){
-      if (!ptr[ev.pointerId]) { if (ev.pointerType === 'mouse' && mode === 'jugar' && maps[cur]) { var hp = local(ev), hv = doorAt(maps[cur], toMap(hp[0], hp[1])); canvas.style.cursor = hv ? 'pointer' : ''; } return; }
+      if (!ptr[ev.pointerId]) { if (ev.pointerType === 'mouse' && mode === 'jugar' && maps[cur]) { var hp = local(ev), hm = toMap(hp[0], hp[1]), hv = doorAt(maps[cur], hm) || zoneAt(maps[cur], hm, 'paso'); canvas.style.cursor = hv ? 'pointer' : ''; } return; }
       var p = local(ev); ptr[ev.pointerId] = p;
       var ids = Object.keys(ptr), mp = maps[cur];
       if (gesture && !gesture.pan && ids.length === 2) { var a = ptr[ids[0]], b = ptr[ids[1]], d = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2, v = V(); v.x += cx - gesture.cx; v.y += cy - gesture.cy; zoomAt(d / gesture.d, cx, cy); gesture.d = d; gesture.cx = cx; gesture.cy = cy; return; }
@@ -1082,6 +1288,7 @@ var Mapas = (function(){
         dragRoute(mp); paint(); return;
       }
       if (wop) { wallMove(mp, m, ev, p); return; }
+      if (zop) { zoneMove(mp, m); return; }
       if (fogDrag) { fogDrag.b = [Math.max(0, Math.min(mp.cols - 1, Math.floor(m[0]))), Math.max(0, Math.min(mp.rows - 1, Math.floor(m[1])))]; paint(); return; }
       if (edOn) { MapEd.move(mp, m[0], m[1], ev); return; }
       if (erasing) { eraseAt(m); return; }
@@ -1093,8 +1300,9 @@ var Mapas = (function(){
     var end = function(ev){
       delete ptr[ev.pointerId]; clearTimeout(press && press.t);
       var mp = maps[cur];
-      if (gesture) { var tap = gesture.tap, door = gesture.door; if (!Object.keys(ptr).length) gesture = null; if (tap && door) { doorClick(mp, door); return; } if (tap && selTok) { selTok = null; tokPanel(); paint(); } return; }
+      if (gesture) { var tap = gesture.tap, door = gesture.door, gz = gesture.zone; if (!Object.keys(ptr).length) gesture = null; if (tap && door) { doorClick(mp, door); return; } if (tap && gz) { zoneClick(mp, gz); return; } if (tap && selTok) { selTok = null; tokPanel(); paint(); } return; }
       if (wop) { wallUp(mp); return; }
+      if (zop) { zoneUp(mp); return; }
       if (drag) {
         var d = drag; drag = null;
         if (d.moved) {
@@ -1306,6 +1514,27 @@ var Mapas = (function(){
     else if (a === 'mapwallroom') { tool.wroom = b.dataset.v === '1'; toolbar(); }
     else if (a === 'mapviewas') { viewAs = false; toolbar(); paint(); }
     else if (a === 'mapsctab') { tool.sc = b.dataset.v; toolbar(); }
+    else if (a === 'mapzones') { MapEd.clear(mp); selWall = null; if (tool.k !== 'zone') { tool.k = 'zone'; Sala.toast('Arrastra sobre el mapa para marcar una zona; toca una para cambiarla.'); } else if (pop === 'zone') pop = null; toolbar(); paint(); }
+    else if (a === 'mapzk') { tool.zk = b.dataset.v; var zk = selZone && zoneById(mp, selZone); if (zk) { var nz = JSON.parse(JSON.stringify(zk)); nz.k = b.dataset.v; if (nz.k !== 'paso') { delete nz.to; delete nz.lock; delete nz.hidden; if (nz.once == null) nz.once = nz.k !== 'texto'; } zput(mp, nz); } }
+    else if (a === 'mapzdel') { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = '¿Quitarla?'; return; } if (selZone) zrm(mp, selZone); }
+    else if (a === 'mapzrearm') { var zr = selZone && zoneById(mp, selZone); if (zr) { var nr = JSON.parse(JSON.stringify(zr)); delete nr.fired; zput(mp, nr); } }
+    else if (a === 'mapzback') {
+      var zb = selZone && zoneById(mp, selZone); if (!zb || !zb.to) return;
+      load(zb.to.map).then(function(dest){
+        if (!dest) { Sala.toast('Abre ese mapa una vez para poder enlazarlo.'); return; }
+        var back = {id:newZid(), k:'paso', x:Math.max(0, Math.floor(dest.cols / 2) - 1), y:Math.max(0, Math.floor(dest.rows / 2) - 1), w:Math.min(2, dest.cols), h:Math.min(2, dest.rows), name:'Vuelta a ' + mp.name, to:{map:mp.id, zid:zb.id}};
+        if (!dest.trig) dest.trig = []; zput(dest, back);
+        var nb = JSON.parse(JSON.stringify(zb)); nb.to.zid = back.id; zput(mp, nb);
+        Sala.toast('Listo: en «' + dest.name + '» hay un paso de vuelta en el centro; muévelo a su lugar.');
+      });
+    }
+    else if (a === 'mapaskno') { ask = null; askPaint(); }
+    else if (a === 'mapaskgo') { var o = ask; ask = null; askPaint(); if (o && o.k === 'paso') travel(o.map, o.zid, !!o.dm); }
+    else if (a === 'mapaskopen') { var o2 = ask; ask = null; askPaint(); var zz = o2 && maps[o2.map] && zoneById(maps[o2.map], o2.zid); if (zz && zz.to) openMap(zz.to.map); }
+    else if (a === 'maptravelp') { pop = pop === 'travel' ? null : 'travel'; toolbar(); }
+    else if (a === 'maptravel') { var tm = {map:b.dataset.map}; if (b.dataset.zid) tm.zid = b.dataset.zid; Sala.send({t:'travel', id:mp.id, all:true, to:tm}); pop = null; toolbar(); }
+    else if (a === 'mapsplit') Sala.send({t:'fight.split', value:b.dataset.v === '1'});
+    else if (a === 'mapfight') { if (b.dataset.v && b.dataset.v !== cur) openMap(b.dataset.v); else Sala.send({t:'fight.focus', map:b.dataset.v}); }
     else if (a === 'maptime') lightDo(mp, {time:b.dataset.v});
     else if (a === 'mapwx') lightDo(mp, {wx:b.dataset.v});
     else if (a === 'mapwxsnd') { Sala.send({t:'amb.set', amb:{k:b.dataset.v, v:0.8}}); Sala.toast('Suena: ' + b.textContent.trim().toLowerCase() + '.'); }
@@ -1399,6 +1628,16 @@ var Mapas = (function(){
     else if (t.dataset && t.dataset.toklt) { var tk3 = mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (tk3 && t.value !== 'otra') tokSet(mp, tk3, {lt:t.value ? Vision.preset(t.value) : null}); }
     else if (t.dataset && t.dataset.toksn) { var tk4 = mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (tk4) { var sn = Object.assign({}, tk4.sn || {}); if (t.value === '') delete sn[t.dataset.toksn]; else sn[t.dataset.toksn] = +t.value; tokSet(mp, tk4, {sn:Object.keys(sn).length ? sn : null}); } }
     else if (t.id === 'mapAmb') lightDo(mp, {amb:t.value});
+    else if (t.dataset && t.dataset.toktravel && t.value) { var tk5 = mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (tk5) { Sala.send({t:'travel', id:mp.id, tid:tk5.id, to:{map:t.value}}); selTok = null; tokPanel(); } }
+    else if (/^mapZ/.test(t.id)) {
+      var z0 = selZone && zoneById(mp, selZone); if (!z0) return; var nz = JSON.parse(JSON.stringify(z0));
+      if (t.id === 'mapZName') nz.name = t.value.trim().slice(0, 50);
+      else if (t.id === 'mapZMap') { if (t.value) { nz.to = {map:t.value}; load(t.value).then(function(){ toolbar(); }); } else delete nz.to; }
+      else if (t.id === 'mapZTo') { if (nz.to) { if (t.value) nz.to.zid = t.value; else delete nz.to.zid; } }
+      else if (t.id === 'mapZText') nz.text = t.value.slice(0, 600);
+      else { var key = {mapZLock:'lock', mapZHide:'hidden', mapZSay:'say', mapZAll:'all', mapZOnce:'once'}[t.id]; if (key) { if (t.checked) nz[key] = true; else delete nz[key]; } }
+      zput(mp, nz);
+    }
     else if (t.dataset && t.dataset.tokset) { var tk2 = mp.tokens.filter(function(x){ return x.id === selTok; })[0]; if (tk2) tokSet(mp, tk2, {s:+t.value}); }
     else if (t.dataset && t.dataset.maplname && t.value.trim()) setMeta(mp, {layers:mp.layers.map(function(l){ return l.id === t.dataset.maplname ? Object.assign({}, l, {name:t.value.trim()}) : l; })});
     else if (t.dataset && t.dataset.maplsecret) setMeta(mp, {layers:mp.layers.map(function(l){ if (l.id !== t.dataset.maplsecret) return l; var o = {id:l.id, name:l.name}; if (t.checked) o.dm = true; return o; })});
@@ -1431,5 +1670,5 @@ var Mapas = (function(){
   window.addEventListener('resize', function(){ if (cur && canvas && visible()) { fit(); paint(); } });
 
   return {refreshPop:function(){ if (cur) toolbar(); }, render:render, png:png, open:openMap, _maps:function(){ return maps; }, _open:openMap, _tool:tool, _mode:function(v){ if (v) { mode = v; toolbar(); } return mode; }, _sel:function(){ return selTok; },
-    _view:function(){ return V(); }, _wall:function(){ return selWall; }, _shown:function(tid){ var mp = maps[cur], t = mp && mp.tokens.filter(function(x){ return x.id === tid; })[0]; if (!t) return null; var dv = master(mp) && !viewAs; return tokShown(mp, t, visOf(mp), dv); }, _vis:function(id){ var mp = maps[id || cur]; return mp ? visOf(mp) : null; }, _viewAs:function(v){ if (v != null) { viewAs = !!v; if (cur) { toolbar(); paint(); } } return viewAs; }};
+    _view:function(){ return V(); }, _cur:function(){ return cur; }, _wall:function(){ return selWall; }, _shown:function(tid){ var mp = maps[cur], t = mp && mp.tokens.filter(function(x){ return x.id === tid; })[0]; if (!t) return null; var dv = master(mp) && !viewAs; return tokShown(mp, t, visOf(mp), dv); }, _vis:function(id){ var mp = maps[id || cur]; return mp ? visOf(mp) : null; }, _viewAs:function(v){ if (v != null) { viewAs = !!v; if (cur) { toolbar(); paint(); } } return viewAs; }};
 })();
