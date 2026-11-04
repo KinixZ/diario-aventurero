@@ -151,3 +151,6 @@
 .enc-ed .dm-row{display:flex;justify-content:flex-end}
 .enc-ed .btn.del{color:var(--bad)}
 @media (prefers-reduced-motion:reduce){ .enc-card{animation:none} }
+
+/* La pestaña Encuentros es solo del DM (el botón lleva hidden para los jugadores) */
+#mesaTabs button[hidden]{display:none!important}

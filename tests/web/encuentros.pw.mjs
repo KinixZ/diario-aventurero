@@ -59,7 +59,7 @@ await dm.evaluate((id) => Sala.send({ t: 'scene.set', id }), ids.camino); await 
 const pj = await open('PJ');
 await pj.evaluate((c) => Sala.join(c), code);
 await pj.waitForFunction(() => Sala.status() === 'on' && Sala.room() && Sala.room().scene, null, { timeout: 8000 });
-ok('el jugador no tiene la pestaña Encuentros', await pj.evaluate(() => document.querySelector('#mesaTabs [data-v="encuentros"]').hidden));
+ok('el jugador no tiene la pestaña Encuentros', await pj.evaluate(() => { const b = document.querySelector('#mesaTabs [data-v="encuentros"]'); return b.hidden && getComputedStyle(b).display === 'none'; }));
 ok('el jugador no ve el mapa en preparación', await pj.evaluate(() => Sala.room().maps.length === 1));
 await pj.evaluate(() => document.querySelector('[data-act="mapsopen"]').click());
 await pj.waitForFunction(() => document.querySelector('#mapCv'), null, { timeout: 8000 }); await pj.waitForTimeout(800);
