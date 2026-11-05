@@ -110,7 +110,7 @@ Las salvaciones contra la muerte se tiran en el servidor (`death`) y la hoja lle
 
 Desde el mapa se hace todo sin salir de él. Tocar tu ficha (en una campaña) abre el abanico de `vtt.js` en lugar del panel de la ficha (que queda en «Ficha»); arrastrarla la mueve como siempre. Lo que elige el abanico pasa por las mismas piezas que el resto: `Acciones.quick` arma la acción con la hoja o con el Manual y abre `Mapas.aim` (con «Tirar y publicar» ahí mismo), `Acciones.use` gasta en tu hoja lo del acceso rápido y lo cuenta al grupo con una tarjeta, y Moverse usa `mv.set` y la altura de la ficha. La hoja dentro del mapa no es una copia: es la página del libro movida a otro contenedor, así que se usa, edita, mueve y equipa igual (las funciones del diario buscan sus elementos por id); al cerrarla, al cambiar de pestaña, al volver a la lista o al salir de la campaña, vuelve a su lugar.
 
-La pantalla prefiere el horizontal: en un teléfono acostado la cabecera y las pestañas se encogen, el HUD va de lado y la hoja ocupa un costado; en vertical, la hoja sube desde abajo. El abanico se ajusta al tamaño del mapa (una elipse con botones más chicos si es bajo) y siempre cabe; las filas del HUD del DM se deslizan en el teléfono.
+La pantalla prefiere el horizontal: en un teléfono acostado la cabecera y las pestañas se encogen, el HUD va de lado (en combate, la barra de tu turno va abajo, a lo ancho; ver «La base de la interfaz») y la hoja ocupa un costado; en vertical, la hoja sube desde abajo. El abanico se ajusta al tamaño del mapa (una elipse con botones más chicos si es bajo) y siempre cabe; las filas del HUD del DM se deslizan en el teléfono.
 
 ## La base de la interfaz
 
