@@ -508,7 +508,7 @@ var Mapas = (function(){
   /* Polígonos de lo que ve ahora el grupo (se recalculan solo si algo cambió) */
   function visOf(mp){
     if (!mp.vis || !mp.vis.on || !window.Vision) return null;
-    var il = illumOf(mp), range = Vision.effRange(mp), key = mp.wrev + '|' + mp.walls.length + '|' + range + '|' + mp.cols + 'x' + mp.rows + '|' + il.key, toks = [];
+    var il = illumOf(mp), range = Vision.effRange(mp), key = mp.wrev + '|' + mp.walls.length + '|' + range + '|' + mp.cols + 'x' + mp.rows + '|' + il.key + '|' + (Vision.extraKey ? Vision.extraKey(mp) : ''), toks = [];
     mp.tokens.forEach(function(t){ var ch = charOf(mp, t); if (!Vision.isViewer(t, ch)) return; var R = Vision.reachOf(t, ch), sn = Vision.sensesOf(t, ch); toks.push({t:t, R:R, sn:sn}); key += '|' + t.id + ':' + t.x + ',' + t.y + ',' + (t.s || 1) + ',' + R + ',' + sn.dv + ',' + sn.bs; });
     var c = visCache[mp.id]; if (c && c.key === key) return c;
     var ix = Vision.sightOf(mp);
@@ -1146,6 +1146,9 @@ var Mapas = (function(){
     var n = (r.npcs || []).filter(function(x){ return x.id === t.ref; })[0];
     if (n) { if (n.hp != null && n.hpMax) { o.pct = n.hp / n.hpMax; o.down = n.hp <= 0; o.sub = (isDm() ? 'PG ' + n.hp + '/' + n.hpMax : 'Enemigo') + (n.hidden ? ' · oculto' : ''); } else if (n.pct != null) { o.pct = n.pct / 100; o.down = n.pct <= 0; } if (n.state) { o.state = n.state; o.sub = 'Se ve ' + n.state; o.down = n.state === 'caído'; } }
     o.turn = r.turnId === t.ref && r.round > 0;
+    // identidad: el color de su clase y el brillo de su estado de clase (Furia, Forma salvaje…) o la concentración
+    if (m && m.char && !t.comp) { o.acc = m.char.idc || null; o.conc = !!m.char.conc; if (m.char.on && m.char.on.length && window.Identidad) o.glow = Identidad.stColor(m.char.on[0]); }
+    if (n && n.conc) o.conc = true;
     return o;
   }
 
@@ -1315,7 +1318,7 @@ var Mapas = (function(){
   }
   function tokScene(t, v, late){
     var info = tokInfo(t);
-    return {id:t.id, x:t.x, y:t.y, s:t.s || 1, color:t.color || '#8c2626', img:tokImg(t) ? Mesa.imgUrl(tokImg(t)) : null, ini:ini(info.name), name:info.name, pct:info.pct, turn:info.turn, down:info.down, hidden:!!t.hidden, sel:selTok === t.id, late:late, label:v.s >= 40 || selTok === t.id || info.turn, z:t.z || 0};
+    return {id:t.id, x:t.x, y:t.y, s:t.s || 1, color:t.color || '#8c2626', img:tokImg(t) ? Mesa.imgUrl(tokImg(t)) : null, ini:ini(info.name), name:info.name, pct:info.pct, turn:info.turn, down:info.down, hidden:!!t.hidden, sel:selTok === t.id, late:late, label:v.s >= 40 || selTok === t.id || info.turn, z:t.z || 0, acc:info.acc || null, glow:info.glow || null, conc:!!info.conc};
   }
   /* La regla de la ficha que arrastras: en recto o rodeando paredes; si no hay camino, avisa */
   function ruler(mp){
@@ -1493,12 +1496,15 @@ var Mapas = (function(){
     c.save(); if (t.hidden) c.globalAlpha = 0.5; if (ghost) c.globalAlpha = 0.85;
     // volando: la sombra queda en el suelo y la ficha sube un poco, con su altura
     if (t.z) { c.save(); c.globalAlpha *= 0.4; c.fillStyle = '#000'; c.beginPath(); c.ellipse(cx, cy + rad * 0.2, rad * 0.85, rad * 0.42, 0, 0, Math.PI * 2); c.fill(); c.restore(); cy -= liftOf(t, v.s); }
+    if (info.glow) { c.save(); c.shadowColor = info.glow; c.shadowBlur = Math.max(6, v.s * 0.35); c.beginPath(); c.arc(cx, cy, rad + Math.max(2, v.s * 0.08), 0, Math.PI * 2); c.strokeStyle = info.glow; c.lineWidth = Math.max(2, v.s * 0.07); c.stroke(); c.restore(); }
     if (info.turn) { c.beginPath(); c.arc(cx, cy, rad + Math.max(3, v.s * 0.12), 0, Math.PI * 2); c.fillStyle = 'rgba(255,214,110,.55)'; c.fill(); }
     c.beginPath(); c.arc(cx, cy, rad, 0, Math.PI * 2); c.fillStyle = t.color || '#8c2626'; c.fill();
     var tid = tokImg(t), im = tid && tokImage(tid);
     if (im) { c.save(); c.beginPath(); c.arc(cx, cy, rad - 1.5, 0, Math.PI * 2); c.clip(); var k = Math.max(rad * 2 / im.naturalWidth, rad * 2 / im.naturalHeight); c.drawImage(im, cx - im.naturalWidth * k / 2, cy - im.naturalHeight * k / 2, im.naturalWidth * k, im.naturalHeight * k); c.restore(); }
     else { c.fillStyle = '#fff'; c.font = '700 ' + Math.max(8, rad * 0.8) + 'px Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ini(info.name), cx, cy + 1); }
     c.lineWidth = Math.max(1.5, v.s * (ghost === 'bad' ? 0.1 : 0.06)); c.strokeStyle = ghost === 'bad' ? '#ff4b3a' : selTok === t.id ? '#ffd66e' : 'rgba(20,12,8,.85)'; if (t.hidden) c.setLineDash([4, 3]); c.stroke(); c.setLineDash([]);
+    if (info.acc && v.s >= 10) { c.beginPath(); c.arc(cx, cy, rad - Math.max(1.5, v.s * 0.05), 0, Math.PI * 2); c.strokeStyle = info.acc; c.lineWidth = Math.max(1.5, v.s * 0.05); c.stroke(); }
+    if (info.conc && v.s >= 14) { c.save(); c.setLineDash([v.s * 0.12, v.s * 0.08]); c.beginPath(); c.arc(cx, cy, rad + Math.max(5, v.s * 0.16), 0, Math.PI * 2); c.strokeStyle = 'rgba(255,214,110,.85)'; c.lineWidth = Math.max(1, v.s * 0.035); c.stroke(); c.restore(); }
     if (info.pct != null && v.s >= 10) { var p = Math.max(0, Math.min(1, info.pct)); c.beginPath(); c.arc(cx, cy, rad + c.lineWidth, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); c.strokeStyle = p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a'; c.lineWidth = Math.max(2, v.s * 0.08); c.stroke(); }
     if (info.down) { c.strokeStyle = '#d24a3a'; c.lineWidth = Math.max(2, rad * 0.18); c.beginPath(); c.moveTo(cx - rad * 0.6, cy - rad * 0.6); c.lineTo(cx + rad * 0.6, cy + rad * 0.6); c.moveTo(cx + rad * 0.6, cy - rad * 0.6); c.lineTo(cx - rad * 0.6, cy + rad * 0.6); c.stroke(); }
     if (t.z) { var zt = '↑' + mtr(t.z) + ' m', zf = Math.max(9, Math.min(13, v.s * 0.3)); c.font = '700 ' + zf + 'px Georgia, serif'; var zw = c.measureText(zt).width + 8; c.fillStyle = 'rgba(18,13,11,.85)'; c.fillRect(cx + rad * 0.5, cy - rad - zf * 0.4, zw, zf + 4); c.fillStyle = '#bfe3ff'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(zt, cx + rad * 0.5 + 4, cy - rad + 2 + zf * 0.1); }

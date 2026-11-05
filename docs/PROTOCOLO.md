@@ -173,7 +173,7 @@ Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `t
 | `trig` | `id`, `k`, `zid`, `name`, `text?`, `who?`, `to?`, `lock?`, `dm?` | | Alguien entró a una zona. Al jugador que pisa un paso le pregunta si pasa; el texto, a quien entra (o a todos los del mapa); la trampa, al DM (y al jugador si `say`); la emboscada, a los del mapa. Al DM le llega todo con `dm: true` y `who`. |
 | `goto` | `map`, `name` | | Tu ficha pasó a ese mapa: el diario lo abre. |
 | `map.play` | `id`, `state`, `frozen`, `turnOnly`, `tac` | | Cambió el estado del mapa o sus reglas de movimiento (`tac: {mov, oa, flank}`). |
-| `fx` | `id`, `put`, `del` | | Zonas de conjuro nuevas, cambiadas o quitadas: `{id, name, by, ck, conc, on, terrain, obscure, move, dtype, sh? (forma) \| tok + r (sigue a esa ficha), act?: {save, dmg, heal}}`. Las de enemigos ocultos, solo al DM. |
+| `fx` | `id`, `put`, `del` | | Zonas de conjuro nuevas, cambiadas o quitadas: `{id, name, by, ck, conc, on, terrain, obscure, move, dtype, sh? (forma) \| tok + r (sigue a esa ficha), act?: {save, dmg, heal}}`. Las de enemigos ocultos, solo al DM. Con `obscure`, la zona tapa la vista como una pared (visión de las fichas y niebla). |
 | `mv` | `id`, `tid`, `u`, `max`, `dash`, `dis` | | Cuánto movimiento lleva gastado esa ficha en su ronda y cuánto tiene (en casillas), al dueño y al DM. |
 | `oa` | `map`, `by`, `byName`, `target`, `targetName`, `tok` | | Alguien salió del alcance de tu enemigo (o del tuyo): puede hacerle un ataque de oportunidad. |
 | `combat` | `map`, `name`, `enc?` | | Hay combate en ese mapa (o sin mapa): quien está ahí se acomoda y tira iniciativa; quien no, se puede unir (`enc.join`). |
@@ -193,10 +193,10 @@ Elementos: `{id, l, k, c, w, pts, v?}` con `k` = `pen` \| `line` \| `rect` \| `t
 ```json
 { "name": "Lyra", "cls": "Paladin 9 / Warlock 2", "lvl": 11, "ac": 21, "hp": 78, "hpMax": 103, "temp": 0, "speed": 30,
   "initMod": 0, "conc": "Bless", "conds": ["prone"], "comps": [{ "name": "Homunculus Servant", "ac": 13, "hp": 10, "hpMax": 10 }],
-  "img": null, "tok": null, "form": null, "dv": 60, "bs": 0, "exh": 0, "ds": { "s": 1, "f": 0 }, "reach": 1 }
+  "img": null, "tok": null, "form": null, "dv": 60, "bs": 0, "exh": 0, "ds": { "s": 1, "f": 0 }, "reach": 1, "idc": "#6e0f12", "on": ["aura"] }
 ```
 
-`exh`: nivel de cansancio (reglas 2024: −2 a las tiradas d20 y −1,5 m de velocidad por nivel). `ds`: salvaciones contra la muerte (éxitos, fallos, `stable`, `dead`). `reach`: alcance cuerpo a cuerpo en casillas (con un arma de alcance, 2). Cuando el jugador deja de concentrarse en su hoja (`conc` pasa a nada), sus zonas y los estados de su conjuro se acaban.
+`exh`: nivel de cansancio (reglas 2024: −2 a las tiradas d20 y −1,5 m de velocidad por nivel). `ds`: salvaciones contra la muerte (éxitos, fallos, `stable`, `dead`). `reach`: alcance cuerpo a cuerpo en casillas (con un arma de alcance, 2). `idc`: el color de su subclase (`#rrggbb`, para el aro de su ficha en el mapa). `on`: los estados de clase que tiene encendidos (`rage`, `wild`, `bladesong`, `aura`…; hasta 6), que dan un halo a su ficha. Cuando el jugador deja de concentrarse en su hoja (`conc` pasa a nada), sus zonas y los estados de su conjuro se acaban.
 
 ## Guardado
 

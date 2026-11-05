@@ -152,6 +152,7 @@
       renderChars(); if (S.tab === 'bestias' && window.Cronica) Cronica.render(); save(); return;
     }
     $('#notes').disabled = false; $('#notes').value = rt(C).notes || '';
+    if (window.Identidad) Identidad.apply();
     renderPersonaje(C); renderConjuros(C); renderRasgos(C); renderEquip(); renderCoins(C); renderChars();
     if (S.tab === 'bestias' && window.Cronica) Cronica.render();
     if (!$('#combat').hidden) renderCombat();
@@ -184,7 +185,7 @@
   }
   function mcBanner(){ return D.mcReqs && D.mcReqs.length ? '<div class="banner warn"><p>Multiclase sin el requisito de 13: ' + esc(D.mcReqs.join(' · ')) + '. Si tu DM lo permite, no pasa nada.</p></div>' : ''; }
   function renderPersonaje(C){
-    var h = pendingBanner() + mcBanner() + portraitCard(C);
+    var h = pendingBanner() + mcBanner() + portraitCard(C) + (window.Identidad ? Identidad.card() : '');
     h += '<div class="abil">' + R.ABS.map(function(k){ return '<div class="ab"><small>' + R.AB[k].toUpperCase() + '</small><div class="medal">' + sgn(D.mod[k]) + '</div><span class="score">' + D.abil[k] + '</span></div>'; }).join('') + '</div>';
     h += '<div class="stats"><div class="stat" title="' + attr(D.acNote) + '"><div class="shield"><svg width="44" height="50" viewBox="0 0 44 50" aria-hidden="true"><path d="M22 2 L41 9 Q41 33 22 48 Q3 33 3 9 Z"/></svg><span>' + D.ac + '</span></div><span class="label">clase de armadura</span></div>'
       + '<div class="stat"><span class="big">' + sgn(D.init) + '</span><span class="label">iniciativa</span></div><div class="stat"><span class="big">' + D.speed + '</span><span class="label">velocidad</span></div></div>';
@@ -510,6 +511,9 @@
       cost = featCost(f); var x = featRes(f);
       if (x && x.max) { if ((r.res[x.key] || 0) >= x.max) return; r.res[x.key] = (r.res[x.key] || 0) + 1; }
       msg = 'Usaste ' + f.name + '.' + (f.hb && hbLine(f.hb) ? ' ' + hbLine(f.hb).replace(/<[^>]+>/g, '') : '');
+      // los rasgos con su momento: Furia y Forma salvaje quedan activas; Canalizar divinidad, Oleada de acción… destellan
+      if (/^rage$/i.test(f.name) || /^wild shape$/i.test(f.name)) { var k0 = /^rage$/i.test(f.name) ? 'rage' : 'wild'; r.on = r.on || []; if (r.on.indexOf(k0) < 0) r.on.push(k0); }
+      if (window.Identidad) Identidad.flash('use', Render5e.Tname(f.name));
     } else if (t === 'it') {
       var it = itemById(v); if (!it) return; cost = itemCost(it);
       msg = it.use || 'Usaste ' + it.n + '.';
@@ -1295,11 +1299,11 @@
       var e = x.e, json = JSON.stringify(e.entries || []), heal = (e.miscTags || []).indexOf('HL') >= 0, dice = spellDice(e, e.level);
       // la definición de efecto (área, zona, estados, concentración); los que no tienen tirada también van, como asistidos
       var H = window.Hechizos ? Hechizos.def(e) : null, key = 'sp:' + e.name + '|' + e.source;
-      if (!(e.spellAttack && e.spellAttack.length) && !(e.savingThrow && e.savingThrow.length) && !dice) { if (H) out.push({key:key, group:'Otros conjuros', title:e.name, lv:e.level || 0, dmg:[], text:'', def:H}); return; }
+      if (!(e.spellAttack && e.spellAttack.length) && !(e.savingThrow && e.savingThrow.length) && !dice) { if (H) out.push({key:key, group:'Otros conjuros', title:Render5e.Tname(e.name), lv:e.level || 0, dmg:[], text:'', def:H}); return; }
       var mod = K && heal && /spellcasting ability modifier/i.test(json) ? D.mod[K.ability] : 0;
       var dm = dice ? [{dice:dmgExpr(dice, mod), type:heal ? '' : DMG_EN[(e.damageInflict || [])[0]] || ''}] : [];
       if (H && H.dmg && H.dmg.length > 1 && dice) H.dmg.slice(1).forEach(function(d){ dm.push({dice:d.dice, type:d.type}); });
-      out.push({key:key, group:'Conjuros', title:e.name, lv:e.level || 0,
+      out.push({key:key, group:'Conjuros', title:Render5e.Tname(e.name), lv:e.level || 0,
         atk:e.spellAttack && e.spellAttack.length && K ? {bonus:K.atk} : null,
         save:e.savingThrow && e.savingThrow.length && K ? {ab:SAVE_EN[e.savingThrow[0]] || 'dex', dc:K.dc, half:/half as much damage|half damage/i.test(json)} : null,
         dmg:dm, heal:heal, text:'', def:H, melee:H && H.atk === 'melee'});
@@ -1335,6 +1339,7 @@
     if (r.exh) chips.push('<span class="vt-chip exh" title="Reglas 2024: −2 a las tiradas d20 y −1,5 m de velocidad por nivel">Cansancio ' + r.exh + ' <small>−' + 2 * r.exh + ' al d20</small></span>');
     if (chips.length) h += '<div class="vt-chips">' + chips.join('') + '</div>';
     if (r.hp <= 0 && D.hp.max > 1) h += deathHtml(r);
+    if (window.Identidad) h += Identidad.toggles(D);
     return h;
   }
   function deathHtml(r){
@@ -1368,7 +1373,7 @@
     return C && D && D.ok;
   }
   function renderCombat(){
-    var C = cur();
+    var C = cur(); if (window.Identidad) Identidad.apply();
     if (!combatHead()) { $('#cTurno').innerHTML = noCharHtml(); $('#cRec').innerHTML = ''; $('#cOrden').innerHTML = '<div id="actBox"></div><div id="salaBox"></div>'; if (window.Sala) Sala.mount($('#salaBox')); if (window.Acciones) Acciones.render(); return; }
     var r = rt(C);
     /* Mi turno */
@@ -2248,7 +2253,7 @@
       case 'pool': r.res[b.dataset.key] = Math.min((D.resources.filter(function(x){ return x.key === b.dataset.key; })[0] || {pool:0}).pool, (r.res[b.dataset.key] || 0) + (+b.dataset.v)); save(); renderCombat(); break;
       case 'pip': var max = +b.dataset.max, i = +b.dataset.i, k = b.dataset.key, used0 = k === 'pact' ? r.pactUsed || 0 : k.indexOf('slot:') === 0 ? r.slotsUsed[+k.slice(5)] || 0 : r.res[k.slice(4)] || 0, avail = max - used0, next = i < avail ? i : i + 1; setUsed(k, max - next); save(); render(false); break;
       case 'short': r.pactUsed = 0; ['channel divinity','second wind','focus points','ki points','superiority dice','wild shape'].forEach(function(kk){ if (r.res[kk]) r.res[kk] = kk === 'channel divinity' || kk === 'second wind' || kk === 'wild shape' ? Math.max(0, r.res[kk] - 1) : 0; }); D.resources.forEach(function(x){ if (x.hb && x.rest === 'short') delete r.res[x.key]; }); save(); render(false); break;
-      case 'long': var keepRes = {}; D.resources.forEach(function(x){ if (x.rest === 'none' && r.res[x.key]) keepRes[x.key] = r.res[x.key]; }); r.hp = D.hp.max; r.temp = 0; r.slotsUsed = []; r.pactUsed = 0; r.res = keepRes; r.conc = null; r.econ = {a:false,b:false,r:false,m:false}; r.round = 1; r.death = null;
+      case 'long': var keepRes = {}; D.resources.forEach(function(x){ if (x.rest === 'none' && r.res[x.key]) keepRes[x.key] = r.res[x.key]; }); r.hp = D.hp.max; r.temp = 0; r.slotsUsed = []; r.pactUsed = 0; r.res = keepRes; r.conc = null; r.econ = {a:false,b:false,r:false,m:false}; r.round = 1; r.death = null; r.on = [];
         // reglas 2024: el descanso largo quita un nivel de cansancio
         if (r.exh) { r.exh--; if (!r.exh) r.conds = (r.conds || []).filter(function(k){ return k !== 'exhaustion'; }); }
         save(); render(false); break;

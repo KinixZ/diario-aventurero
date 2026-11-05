@@ -45,7 +45,7 @@ var Sala = (function(){
     var C = X.cur(), D = X.D(); if (!C || !D || !D.ok) return null;
     var r = X.rt(C), P = window.Retratos ? Retratos.forSummary(C) : {};
     return {img: P.img || null, tok: P.tok || null, form: P.form || null, name: C.name || 'Sin nombre', cls: D.clsLabel, lvl: D.level, ac: D.ac, hp: r.hp, hpMax: D.hp.max, temp: r.temp || 0, initMod: D.init, speed: parseFloat(String(D.speed).replace(',', '.')) || 9, conc: r.conc ? String(r.conc).split('|')[0] : null, conds: (r.conds || []).slice(), comps: X.compSummaries ? X.compSummaries() : [], dv: D.senses ? D.senses.dv : D.darkvision || 0, bs: D.senses ? D.senses.bs : 0,
-      exh: r.exh || 0, ds: r.death || null, reach: (D.attacks || []).reduce(function(m, a){ return Math.max(m, a.reach || 1); }, 1)};
+      exh: r.exh || 0, ds: r.death || null, idc: window.Identidad ? Identidad.summary().idc || null : null, on: window.Identidad ? Identidad.summary().on || [] : [], reach: (D.attacks || []).reduce(function(m, a){ return Math.max(m, a.reach || 1); }, 1)};
   }
 
   /* ---------- Conexión ---------- */
