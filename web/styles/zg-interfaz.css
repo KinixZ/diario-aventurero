@@ -1,0 +1,186 @@
+/* ==================== CLARIDAD DE LA INTERFAZ (módulo 12) ====================
+   Una sola base para todo el libro y la mesa:
+   · Letras con un papel cada una: Cinzel para títulos, secciones y números grandes; EB Garamond para el texto, los
+     botones y las ayudas (en cursiva). La letra manuscrita queda solo para lo escrito a mano (notas y portada).
+   · Seis tamaños: título 22, sección 13 (mayúsculas), texto 17, botón 16, ayuda 14, dato grande 30.
+   · Tres clases de botón: secundario (.btn), principal (.btn.main, uno por pantalla) y discreto (.btn.quiet);
+     peligro (.btn.del / .btn.danger). Todos con los colores del estilo, así que en la mesa oscura cambian solos.
+   · Un solo control para elegir entre opciones (.seg) y una fila de ajuste igual en todas partes. */
+:root{ --t-title:22px; --t-sec:13px; --t-text:17px; --t-btn:16px; --t-help:14px; --t-big:30px; --r-ctl:8px; }
+
+/* ---------- Botones ---------- */
+.btn{font-family:var(--body);font-weight:600;font-size:var(--t-btn);letter-spacing:0;text-transform:none;border-radius:var(--r-ctl);
+  background:var(--parch-3);border:1px solid var(--rule);color:var(--ink);box-shadow:0 1px 0 color-mix(in srgb, var(--ink) 12%, transparent);text-shadow:none;
+  min-height:44px;line-height:1.15;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn.sm{font-size:15px;letter-spacing:0;min-height:36px;padding:4px 12px}
+.btn.main,.btn.dmg{background:var(--oath);border-color:color-mix(in srgb, var(--oath) 70%, #000);color:var(--on-accent);text-shadow:none;box-shadow:0 1px 0 rgba(0,0,0,.25)}
+.btn.main:hover:not(:disabled),.btn.dmg:hover:not(:disabled){box-shadow:0 0 0 3px color-mix(in srgb, var(--oath) 28%, transparent)}
+.btn.quiet{background:transparent;border-color:transparent;box-shadow:none;color:var(--ink-2)}
+.btn.del,.btn.danger{background:transparent;border-color:var(--bad);color:var(--bad);box-shadow:none}
+.btn.heal{background:var(--ok);border-color:color-mix(in srgb, var(--ok) 70%, #000);color:#fff;text-shadow:none}
+.btn:disabled{filter:none;opacity:.5}
+.icon-btn{border-radius:var(--r-ctl);background:var(--parch-3);border:1px solid var(--rule);box-shadow:none}
+
+/* En la mesa (fondo oscuro) el principal es oro: se distingue del rojo de los enemigos y del daño */
+.combat .btn.main,.vtt-hud .btn.main,.map-pop .btn.main,.vtt-fan .fan-i.main{background:var(--gold-hi);border-color:var(--gold);color:#1b120d}
+.combat .btn.main:hover:not(:disabled){box-shadow:0 0 0 3px color-mix(in srgb, var(--gold-hi) 30%, transparent)}
+.combat .btn.del,.combat .btn.danger{color:#f2a59c;border-color:color-mix(in srgb, var(--bad) 80%, #fff 0%)}
+
+/* ---------- Letras ---------- */
+.label{font-family:var(--display);font-weight:600;font-size:var(--t-sec);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.note,.hand,.banner p,.swipe-hint,.trbar .trtag,.sala-state,.mesa-title-ro,.comp-h b{font-family:var(--body);font-style:italic;font-weight:400;font-size:var(--t-help);line-height:1.35}
+.empty-state b{font-family:var(--body);font-style:italic;font-weight:600;font-size:18px}
+.mesa-title-ro{font-style:normal;font-family:var(--display);font-weight:600;font-size:18px}
+.comp-h b{font-style:normal;font-weight:600;font-size:17px}
+.muted{font-size:inherit}
+small.muted,.note small{font-size:var(--t-help)}
+
+/* ---------- Elegir entre opciones: un solo control ---------- */
+.seg{display:flex;flex-wrap:wrap;gap:3px;padding:3px;border-radius:10px;background:var(--parch-2);border:1px solid var(--rule)}
+.seg button{flex:1 1 auto;min-height:38px;height:auto;padding:4px 12px;border-radius:7px;border:1px solid transparent;background:transparent;color:var(--ink);
+  font-family:var(--body);font-weight:600;font-size:15px;letter-spacing:0;text-transform:none;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.seg button[aria-pressed="true"],.seg button[aria-selected="true"]{background:var(--oath);border-color:color-mix(in srgb, var(--oath) 70%, #000);color:var(--on-accent)}
+.combat .seg button[aria-pressed="true"],.vtt-hud .seg button[aria-pressed="true"],.vtt-hud .seg button[aria-selected="true"]{background:var(--parch-3);border-color:var(--gold-hi);color:var(--on-dark)}
+.seg.sm button{min-height:34px;font-size:14px;padding:3px 10px}
+
+/* ---------- Ajustes: portada por categorías y filas iguales ---------- */
+#settingsSheet .scroll{gap:18px!important}
+#settingsSheet section[data-cat]{display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:12px;background:var(--parch-3);border:1px solid var(--rule)}
+#settingsSheet section[data-cat] > .label:first-child,#settingsSheet section[data-cat] > .row:first-child .label{margin-bottom:2px}
+#settingsSheet section[data-cat] > p:not(.note):not(.status){margin:0;font-size:15px;color:var(--ink-2)}
+#settingsSheet .toggle{justify-content:space-between;flex-direction:row-reverse;gap:14px;font-size:var(--t-btn);font-weight:600;min-height:44px;padding:4px 0}
+#settingsSheet .toggle small{display:block;font-weight:400;font-style:italic;font-size:var(--t-help);color:var(--ink-2)}
+#settingsSheet .picks{display:flex;flex-wrap:wrap;gap:8px}
+#settingsSheet code{font-size:14px}
+#settingsSheet.at-home section[data-cat]{display:none}
+#settingsSheet section[data-cat][hidden]{display:none}
+.set-home{display:flex;flex-direction:column;border-radius:12px;background:var(--parch-3);border:1px solid var(--rule);overflow:hidden}
+.set-home[hidden]{display:none}
+.set-cat{display:flex;align-items:center;gap:14px;min-height:62px;padding:8px 14px;border:0;border-bottom:1px solid var(--rule-2);background:transparent;color:var(--ink);text-align:left;width:100%}
+.set-cat:last-child{border-bottom:0}
+.set-cat > .ic{width:24px;height:24px;flex:none;color:var(--oath)}
+.set-cat > span{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+.set-cat b{font-size:var(--t-btn);font-weight:600}
+.set-cat small{font-size:var(--t-help);font-style:italic;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.set-cat .chev{width:18px;height:18px;flex:none;color:var(--ink-2);transform:rotate(-90deg)}
+.set-cat:hover{background:color-mix(in srgb, var(--parch-2) 60%, transparent)}
+.set-cat.adv > .ic{color:var(--ink-2)}
+.set-home + .set-home{border-style:dashed}
+.set-who{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:var(--parch-3);border:1px solid var(--rule)}
+.set-who .av{width:46px;height:46px;flex:none;border-radius:50%;background:var(--id-a, var(--oath));border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;color:var(--on-accent);font-family:var(--display);font-weight:600;font-size:19px}
+.set-who > span{flex:1;display:flex;flex-direction:column}
+.set-who b{font-size:17px}
+.set-who small{font-size:var(--t-help);font-style:italic;color:var(--ink-2)}
+#settingsSheet .sheet-h .set-back{margin-right:4px}
+
+/* ---------- El mapa a pantalla completa ---------- */
+/* Con un mapa abierto en la campaña, la barra de la campaña y las pestañas se recogen: queda el mapa */
+.combat[data-tab="mapas"].map-full > .combat-h,.combat[data-tab="mapas"].map-full > .mesa-tabs{display:none!important}
+.tool-b .lb,#mapBar .btn .lb{display:inline}
+@media (max-width:900px){ .st-seg .st-help{display:none} }
+
+/* ---------- El turno del jugador en el mapa: vida, lo que te queda y verbos con nombre ---------- */
+.hud-row.pj.verbs{display:flex;align-items:center;gap:12px;flex-wrap:nowrap}
+.pj-me{display:flex;flex-direction:column;gap:5px;min-width:170px;flex:0 1 230px}
+.pj-me .nm{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.pj-me .nm b{font-family:var(--display);font-weight:600;font-size:17px;color:var(--on-dark)}
+.pj-me .nm small{font-size:var(--t-help);color:var(--on-dark-2)}
+.pj-me .hp{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}
+.pj-me .hp i{display:block;height:100%;border-radius:3px}
+.pj-econ{display:flex;gap:4px;flex-wrap:wrap}
+.pj-econ button{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 8px;border-radius:14px;border:1px solid rgba(255,255,255,.16);background:transparent;color:var(--on-dark);font-family:var(--body);font-size:13px;font-weight:600}
+.pj-econ button i{width:11px;height:11px;flex:none;display:inline-block}
+.pj-econ .e-a i{border-radius:50%;background:#5f9b55}
+.pj-econ .e-b i{background:#d08a3a;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.pj-econ .e-r i{background:#a98ad8;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.pj-econ button[aria-pressed="true"]{opacity:.45;text-decoration:line-through}
+.pj-econ button[aria-pressed="true"] i{filter:grayscale(1)}
+.pj-verbs{display:flex;gap:7px;margin-left:auto;align-items:stretch}
+.pj-verb{width:76px;min-height:72px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:4px 2px;border-radius:10px;border:1px solid var(--rule);background:var(--parch-3);color:var(--on-dark);font-family:var(--body);font-size:15px;font-weight:600;line-height:1.1}
+.pj-verb .ic{width:24px;height:24px}
+.pj-verb small{font-size:12px;font-weight:500;color:#9fc4e8}
+.pj-verb[aria-pressed="true"]{border:2px solid var(--gold-hi);background:color-mix(in srgb, var(--gold-hi) 12%, var(--parch-3))}
+.pj-verb:disabled{opacity:.4}
+.pj-verb.end{width:90px;background:transparent;color:var(--on-dark-2)}
+.pj-verb.end.mine{border-color:var(--gold);color:var(--gold-hi)}
+.pj-sep{width:1px;align-self:center;height:60px;background:var(--rule)}
+.pj-hint{margin:0;padding:6px 14px;border-radius:18px;background:rgba(20,12,10,.9);border:1px solid var(--rule);color:var(--on-dark);font-size:15px;align-self:center}
+.hud-row.pj.mvopts{justify-content:flex-start}
+@media (max-width:560px){
+  .hud-row.pj.verbs{flex-wrap:wrap;gap:8px}
+  .pj-me{flex:1 1 100%;min-width:0}
+  .pj-verbs{margin-left:0;width:100%;justify-content:space-between}
+  .pj-verb{flex:1 1 0;width:auto;min-width:0;min-height:62px;font-size:14px}
+  .pj-verb.end{flex:1.2 1 0;width:auto}
+  .pj-sep{display:none}
+}
+@media (orientation:landscape) and (max-height:500px){
+  .pj-verb{min-height:60px;width:70px;font-size:14px}
+  .pj-verb .ic{width:21px;height:21px}
+  .pj-me{min-width:150px}
+}
+
+/* ---------- El DM: grupos con nombre (Turno · Mesa · Reglas) ---------- */
+.hud-grp{display:flex;flex-direction:column;gap:5px;padding:0 14px;border-left:1px solid var(--rule)}
+.hud-grp:first-child{padding-left:0;border-left:0}
+.hud-grp > .gl{font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--on-dark-2)}
+.hud-grp > .gb{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.hud-row.dm.grouped{align-items:flex-start;flex-wrap:wrap;row-gap:10px}
+.hud-row.dm .btn .lb{display:inline!important}
+.vtt-hud .hud-row.dm .btn{padding:4px 12px;min-width:0}
+.rule-chip{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:17px;border:1px solid var(--rule);background:transparent;color:var(--on-dark-2);font-family:var(--body);font-size:14px;font-weight:600}
+.rule-chip[aria-pressed="true"]{border-color:var(--gold);background:color-mix(in srgb, var(--gold) 22%, transparent);color:var(--on-dark)}
+.rule-chip[aria-pressed="true"]::before{content:'✓'}
+.st-seg{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.st-seg .seg{flex:0 1 auto}
+.st-seg .seg button{min-width:110px}
+.st-seg .seg button[data-v="combat"][aria-pressed="true"]{background:color-mix(in srgb, var(--bad) 45%, var(--parch-3));border-color:var(--bad);color:#fff}
+.st-seg .st-help{font-size:var(--t-help);font-style:italic;color:var(--on-dark-2)}
+@media (max-width:560px){
+  .hud-grp{padding:0;border-left:0;flex:1 1 100%}
+  .st-seg .seg button{min-width:0}
+}
+
+/* ---------- Tarjetas de resultado: lo importante en grande ---------- */
+.ac-verdict{display:flex;align-items:flex-end;gap:12px;margin:4px 0 2px}
+.ac-verdict .vd{flex:1;font-family:var(--display);font-weight:700;font-size:26px;line-height:1}
+.ac-verdict .vd.hit{color:var(--gold-hi)}
+.ac-verdict .vd.miss{color:var(--on-dark-2)}
+.ac-verdict .vd.crit{color:#ffd66b}
+.ac-verdict .tot{display:flex;flex-direction:column;align-items:flex-end;line-height:1.05}
+.ac-verdict .tot b{font-family:var(--display);font-weight:600;font-size:var(--t-big)}
+.ac-verdict .tot small{font-size:13px;color:var(--on-dark-2)}
+.ac-dmgbig{display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:10px;background:var(--parch-3);border:1px solid var(--rule);margin:6px 0}
+.ac-dmgbig b{font-family:var(--display);font-weight:600;font-size:var(--t-big);color:#f2b8bb;line-height:1}
+.ac-dmgbig.heal b{color:#a5d696}
+.ac-dmgbig span{display:flex;flex-direction:column;font-size:15px;font-weight:600}
+.ac-dmgbig small{font-size:13px;font-weight:400;color:var(--on-dark-2)}
+.ac-left{margin:6px 0 0;font-size:14px;color:var(--on-dark-2)}
+.ac-left b{color:var(--on-dark)}
+
+/* La barra de tu turno siempre cabe: en el teléfono acostado va abajo, a lo ancho, y el mapa queda arriba */
+.hud-row.pj.tools{gap:6px;flex-wrap:wrap}
+.hud-row.pj.tools .hud-mv{flex:0 1 auto}
+.vtt-hud .hud-row .lb{display:inline}
+@media (max-width:560px){ .hud-row.pj.tools .mv-bar{display:none} }
+@media (orientation:landscape) and (max-height:520px){
+  .vtt-hud:has(.hud-row.pj.verbs){left:6px;right:6px;top:auto;bottom:4px;width:auto;max-height:none;overflow:visible;flex-direction:column-reverse;justify-content:flex-start;padding:5px 8px;gap:4px}
+  #mapWrap:has(.hud-row.pj.verbs) .vtt-init{right:8px}
+  .hud-row.pj.verbs{flex-wrap:nowrap;gap:10px}
+  .hud-row.pj.verbs .pj-me{flex:0 1 250px;min-width:0}
+  .pj-econ{flex-wrap:nowrap}
+  .pj-econ button{height:26px;padding:0 7px;font-size:12px}
+  .hud-row.pj.tools{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .hud-row.pj.tools > *{flex:none}
+  .hud-row.pj.tools .hud-sp{flex:1 0 4px}
+  .hud-row.pj.tools .mv-bar{display:none}
+  .hud-row.pj.tools .btn{min-height:32px;height:32px;padding:0 10px;font-size:14px}
+}
+@media (orientation:landscape) and (max-height:520px){
+  #mapWrap:has(.hud-row.pj.verbs) .vi-chip{width:46px;padding:2px 1px}
+  #mapWrap:has(.hud-row.pj.verbs) .vi-av{width:28px;height:28px}
+  #mapWrap:has(.hud-row.pj.verbs) .map-zoom{right:8px;left:auto}
+}
+/* El estado del mapa siempre con su nombre (también en el teléfono) */
+#mapBar .map-st > span{display:inline!important}
+.hud-grp > .gl.hud-st{display:block;background:none;border:0;padding:0;border-radius:0;min-height:0;font-size:12px}

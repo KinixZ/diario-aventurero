@@ -26,6 +26,16 @@ var VTT = (function(){
     open({mp:mp, tok:t, x:px, y:py, actor:mineTok ? 'me' : t.ref, panel:o && o.panel});
     return true;
   }
+  /* Un verbo de la barra de tu turno (Atacar, Conjuros, Usar, Moverse): el abanico se abre en tu ficha, ya en ese nivel */
+  function verb(label, mp, t){
+    var r = room(); if (!r || !wrap || !t) return false;
+    var v = window.Mapas && Mapas._view ? Mapas._view() : {x:0, y:0, s:40}, s = t.s || 1;
+    open({mp:mp, tok:t, x:v.x + (t.x + s / 2) * v.s, y:v.y + (t.y + s / 2) * v.s, actor:'me'});
+    var it = stack[0].items.filter(function(x){ return x.label === label; })[0];
+    if (!it) { close(); if (window.Sala && Sala.toast) Sala.toast(label === 'Atacar' ? 'No tienes armas equipadas en tu hoja.' : label === 'Conjuros' ? 'No tienes conjuros preparados.' : 'No tienes nada para usar en el acceso rápido.'); return false; }
+    if (it.kids) { stack.push({title:it.label, items:it.kids}); draw(); } else { close(); if (it.run) it.run(); }
+    return true;
+  }
   function open(c){ ctx = c; stack = [root()]; draw(); if (window.Sfx) Sfx.play('page'); }
   function close(){ ctx = null; stack = []; var f = wrap && wrap.querySelector('.vtt-fan'); if (f) f.remove(); var bk = wrap && wrap.querySelector('.vtt-fan-bk'); if (bk) bk.remove(); }
   function isOpen(){ return !!ctx; }
@@ -122,7 +132,8 @@ var VTT = (function(){
     else if (a === 'mapsheet' && room() && !isDm()) { ev.stopPropagation(); sheet('personaje'); }
     else if (a === 'endcombat' || (a === 'mesatab' && b.dataset.v !== 'mapas') || a === 'mapback') closeSheet();
   }, true);
-  document.addEventListener('keydown', function(ev){ if (ev.key === 'Escape' && ctx) close(); });
+  // Esc cierra el abanico, y solo el abanico (no la campaña)
+  document.addEventListener('keydown', function(ev){ if (ev.key === 'Escape' && ctx) { close(); ev.stopPropagation(); ev.preventDefault(); } }, true);
   if (window.Sala) Sala.on('left', function(){ close(); closeSheet(); });
-  return {attach:attach, tap:tap, open:open, close:close, isOpen:isOpen, sheet:sheet, closeSheet:closeSheet, restore:restore, _tab:function(){ return tab; }};
+  return {attach:attach, tap:tap, verb:verb, open:open, close:close, isOpen:isOpen, sheet:sheet, closeSheet:closeSheet, restore:restore, _tab:function(){ return tab; }};
 })();

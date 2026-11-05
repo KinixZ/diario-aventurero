@@ -572,9 +572,14 @@ var Mapas = (function(){
   /* ---------- Lista de mapas ---------- */
   function dmId(){ var r = room(); var d = r && r.members.filter(function(m){ return m.role === 'dm'; })[0]; return d ? d.id : null; }
   function who(id){ var r = room(); var m = r && r.members.filter(function(x){ return x.id === id; })[0]; return m ? (m.role === 'dm' ? 'el DM' : m.char ? m.char.name : m.name) : ''; }
+  /* Con un mapa abierto la campaña deja el mapa a pantalla completa (la barra y las pestañas se recogen; vuelven con «atrás») */
+  function fullUI(){ var c = document.getElementById('combat'); if (c) c.classList.toggle('map-full', !!(cur && maps[cur] && document.getElementById('mapCv'))); }
+  /* Lo que significa el estado del mapa ahora, en una línea (para el DM) */
+  function stHelp(mp, st){ return st === 'prep' ? 'Solo tú lo ves' : st === 'explore' ? (mp.frozen ? 'Nadie se mueve' : 'Cada quien mueve su ficha') : !started(mp) ? 'Se acomodan y tiran iniciativa' : mp.turnOnly !== false ? 'Cada quien se mueve en su turno' : 'Se mueven libres'; }
   function render(){
     if (window.VTT) { VTT.close(); VTT.restore(); }
     var box = document.getElementById('mesaMaps'); if (!box) return;
+    if (!cur) { var cc = document.getElementById('combat'); if (cc) cc.classList.remove('map-full'); }
     if (cur) { if (!$('#mapCv', box)) editor(box); else { toolbar(); fit(); paint(); } return; }
     var r = room(), ix = index(), inRoom = r ? (r.maps || []) : [], ids = {}, dm = isDm(), did = dmId();
     // si el DM tiene un mapa en pantalla y acabas de abrir la pestaña, ábrelo
@@ -646,16 +651,17 @@ var Mapas = (function(){
     if (encEd) mode = 'jugar';
     // el estado lo cambia el DM; los jugadores lo ven. Dibujar y Escena son herramientas que se abren encima
     var st = stateOf(mp), dmc = sh && isDm(), ee = encEd && encData();
-    var tb = function(v, label, ic){ return '<button type="button" class="icon-btn sm tool-b" data-act="mapmode" data-v="' + v + '" aria-pressed="' + (mode === v) + '" aria-label="' + attr(label) + '" title="' + attr(label) + '"><svg class="ic"><use href="#' + ic + '"/></svg></button>'; };
+    var tb = function(v, label, ic, short){ return '<button type="button" class="btn sm tool-b" data-act="mapmode" data-v="' + v + '" aria-pressed="' + (mode === v) + '" title="' + attr(label) + '"><svg class="ic"><use href="#' + ic + '"/></svg><span class="lb">' + short + '</span></button>'; };
     var stH = ee ? '<span class="map-st st-enc"><svg class="ic"><use href="#i-scroll"/></svg><span>' + esc(ee.name) + '</span></span>'
-      : dmc ? '<div class="seg map-state" role="group" aria-label="Estado del mapa">' + STATES.map(function(x){ return '<button type="button" class="st-' + x[0] + '" data-act="mapstate" data-v="' + x[0] + '" aria-pressed="' + (st === x[0]) + '" title="' + attr(x[1] + ': ' + x[3]) + '"><svg class="ic"><use href="#' + x[2] + '"/></svg><span>' + x[1] + '</span></button>'; }).join('') + '</div>'
+      : dmc ? '<div class="st-seg"><div class="seg map-state" role="group" aria-label="Estado del mapa">' + STATES.map(function(x){ return '<button type="button" class="st-' + x[0] + '" data-act="mapstate" data-v="' + x[0] + '" aria-pressed="' + (st === x[0]) + '" title="' + attr(x[1] + ': ' + x[3]) + '"><svg class="ic"><use href="#' + x[2] + '"/></svg><span>' + x[1] + '</span></button>'; }).join('') + '</div><span class="st-help">' + esc(stHelp(mp, st)) + '</span></div>'
       : sh ? '<span class="map-st st-' + st + '" title="' + attr(stateT(st)[3]) + '"><svg class="ic"><use href="#' + stateT(st)[2] + '"/></svg><span>' + (st === 'combat' ? (started(mp) ? 'Combate' : 'Despliegue') : stateT(st)[1]) + '</span></span>' : '';
     put(bar, '<button class="icon-btn sm" type="button" data-act="mapback" aria-label="Volver a los mapas" title="Mapas"><svg class="ic"><use href="#i-back"/></svg></button>'
       + (admin && !ee ? '<input class="field map-name" id="mapName" value="' + attr(mp.name) + '" aria-label="Nombre del mapa">' : '<b class="map-name ro">' + esc(mp.name) + '</b>')
       + '<span class="map-where">' + (scene ? '<i class="tag new">en pantalla</i>' : '') + (mp.frozen && sh ? '<i class="tag frozen">quietos</i>' : '') + (sh ? '' : '<i class="tag">solo tu copia</i>') + (viewAs && dm ? '<button type="button" class="tag vis-as" data-act="mapviewas" title="Dejar de ver como jugador">como jugador ×</button>' : '') + '</span>'
       + stH
-      + (ee ? '<button class="btn main sm" type="button" data-act="mapencdone">Listo</button>' : '<div class="map-tbx" role="group" aria-label="Herramientas">' + tb('dibujar', 'Dibujar: lápiz, objetos, paredes y zonas', 'i-pencil') + (dm ? tb('niebla', 'Escena: niebla, luz y clima', 'i-fog') : '') + '</div>'
-      + (admin ? '<button class="icon-btn sm" type="button" data-act="mapset" aria-expanded="' + (pop === 'set') + '" aria-label="Ajustes del mapa" title="Ajustes del mapa"><svg class="ic"><use href="#i-gear"/></svg></button>' : '')));
+      + (ee ? '<button class="btn main sm" type="button" data-act="mapencdone">Listo</button>' : '<div class="map-tbx" role="group" aria-label="Herramientas">' + tb('dibujar', 'Dibujar: lápiz, objetos, paredes y zonas', 'i-pencil', 'Dibujar') + (dm ? tb('niebla', 'Escena: niebla, luz y clima', 'i-fog', 'Escena') : '') + '</div>'
+      + (admin ? '<button class="btn sm" type="button" data-act="mapset" aria-expanded="' + (pop === 'set') + '" title="Ajustes del mapa: tamaño, cuadrícula, fondo"><svg class="ic"><use href="#i-gear"/></svg><span class="lb">Mapa</span></button>' : '')));
+    fullUI();
     palette(mp, dm, sh); popover(mp, dm, sh, admin); hud(mp, dm, sh, scene); initStrip(mp); wxSync(mp);
     var sb = $('#mapSel'); if (sb) { var bh = mode === 'dibujar' && !pop ? (tool.k === 'wall' ? wallBar(mp) : MapEd.barHtml(mp)) : ''; put(sb, bh); sb.hidden = !bh; }
   }
@@ -804,21 +810,22 @@ var Mapas = (function(){
     return '<p class="tok-dist"><svg class="ic"><use href="#i-ruler"/></svg><span>A <b>' + mtr(d) + ' m</b> de ti' + (d <= 1 ? ' · a tu alcance' : '') + (cv ? ' · <b>' + esc(Tactica.coverName(cv)) + '</b>' : '') + '</span></p>';
   }
   /* El movimiento del jugador en su ronda: lo que le queda, Correr, Retirarse y levantarse */
-  function mvHud(mp, t){
+  function mvHud(mp, t, inline){
     if (!t || !limited(mp, t)) return ''; var L = mvLeft(mp, t); if (!L) return '';
     var ch = charOf(mp, t) || {}, prone = (ch.conds || []).indexOf('prone') >= 0, pct = L.max ? Math.round(L.left / L.max * 100) : 0;
-    return '<div class="hud-row pj mv"><span class="hud-mv" title="Movimiento en esta ronda"><svg class="ic"><use href="#i-boot"/></svg><span class="mv-bar"><i style="width:' + pct + '%"></i></span><b>' + mtr(L.left) + ' m</b><small>de ' + mtr(L.max) + ' m</small></span>'
+    return (inline ? '' : '<div class="hud-row pj mv">') + '<span class="hud-mv" title="Movimiento en esta ronda"><svg class="ic"><use href="#i-boot"/></svg><span class="mv-bar"><i style="width:' + pct + '%"></i></span><b>' + mtr(L.left) + ' m</b><small>de ' + mtr(L.max) + ' m</small></span>'
       + '<button class="btn sm" type="button" data-act="mapmv" data-v="dash" aria-pressed="' + L.dash + '" title="Carrera: tu acción para moverte el doble"><svg class="ic"><use href="#i-run"/></svg>Correr</button>'
       + '<button class="btn sm" type="button" data-act="mapmv" data-v="dis" aria-pressed="' + L.dis + '" title="Retirarse: tu acción para no provocar ataques de oportunidad"><svg class="ic"><use href="#i-retreat"/></svg>Retirarse</button>'
-      + (prone ? '<button class="btn sm" type="button" data-act="mapmv" data-v="stand" title="Levantarte cuesta la mitad de tu velocidad">Levantarme</button>' : '') + '</div>';
+      + (prone ? '<button class="btn sm" type="button" data-act="mapmv" data-v="stand" title="Levantarte cuesta la mitad de tu velocidad">Levantarme</button>' : '') + (inline ? '' : '</div>');
   }
   /* Las reglas del combate en este mapa (el DM): movimiento limitado, ataques de oportunidad y flanqueo */
   function tacBtns(mp){
-    var T = tacOf(mp);
-    return '<button class="icon-btn sm" type="button" data-act="maptac" data-v="mov" aria-pressed="' + T.mov + '" aria-label="Movimiento limitado por la velocidad" title="' + (T.mov ? 'Cada personaje gasta su velocidad' : 'Movimiento libre') + '"><svg class="ic"><use href="#i-boot"/></svg></button>'
-      + '<button class="icon-btn sm" type="button" data-act="maptac" data-v="oa" aria-pressed="' + T.oa + '" aria-label="Avisar ataques de oportunidad" title="' + (T.oa ? 'Avisa los ataques de oportunidad' : 'Sin avisos de ataques de oportunidad') + '"><svg class="ic"><use href="#i-retreat"/></svg></button>'
-      + '<button class="icon-btn sm" type="button" data-act="maptac" data-v="flank" aria-pressed="' + T.flank + '" aria-label="Flanqueo (regla opcional)" title="' + (T.flank ? 'Flanqueo: ventaja al rodear a un enemigo' : 'Sin flanqueo') + '"><svg class="ic"><use href="#i-group"/></svg></button>';
+    var T = tacOf(mp), chip = function(v, on, label, help){ return '<button class="rule-chip" type="button" data-act="maptac" data-v="' + v + '" aria-pressed="' + on + '" title="' + attr(help) + '">' + label + '</button>'; };
+    return chip('mov', T.mov, 'Velocidad limitada', T.mov ? 'Cada personaje gasta su velocidad' : 'Movimiento libre')
+      + chip('oa', T.oa, 'Ataques de oportunidad', T.oa ? 'Avisa los ataques de oportunidad' : 'Sin avisos de ataques de oportunidad')
+      + chip('flank', T.flank, 'Flanqueo', T.flank ? 'Flanqueo: ventaja al rodear a un enemigo' : 'Sin flanqueo (regla opcional)');
   }
+
   /* Zonas de conjuro: tocar una (si es tuya o eres el DM) la elige para moverla o quitarla */
   function fxAt(mp, m){ if (!window.Tactica || !mp.fx || !mp.fx.length) return null; var x = Math.floor(m[0]), y = Math.floor(m[1]); for (var i = mp.fx.length - 1; i >= 0; i--) { var z = mp.fx[i]; if (Tactica.zoneCells(mp, z).some(function(c){ return c[0] === x && c[1] === y; })) return z; } return null; }
   function fxMine(z){ return isDm() || z.by === me(); }
@@ -960,10 +967,10 @@ var Mapas = (function(){
       var canPut = !(isDm() && sh) && (!!(window.Sala && Sala.summary && Sala.summary()) || !sh);
       // con la visión, en pleno combate o congelados, tu ficha camina: no se trae (en el despliegue, sí: a tu zona)
       var noTp = mt && sh && !dep && ((mp.vis && mp.vis.on) || st === 'combat' || mp.frozen);
-      var tokBtns = (canPut ? (noTp ? '' : '<button class="btn main sm" type="button" data-act="mapputme"><svg class="ic"><use href="#' + (dep && zs.length ? 'i-flag' : 'i-token') + '"/></svg>' + (mt ? (dep && zs.length ? 'A mi zona' : 'Traer mi ficha') : 'Poner mi ficha') + '</button>') + (mt ? '<button class="icon-btn sm" type="button" data-act="mapfindme" aria-label="Ir a mi ficha" title="Ir a mi ficha"><svg class="ic"><use href="#i-target"/></svg></button>' : '') : '')
-        + '<button class="icon-btn sm" type="button" data-act="mapadd" aria-expanded="' + (pop === 'add') + '" aria-label="' + (dm ? 'Agregar ficha' : 'Otra ficha (familiar, montura)') + '" title="' + (dm ? 'Agregar ficha' : 'Otra ficha') + '"><svg class="ic"><use href="#i-plus"/></svg></button>';
+      var tokBtns = (canPut ? (noTp ? '' : '<button class="btn main sm" type="button" data-act="mapputme"><svg class="ic"><use href="#' + (dep && zs.length ? 'i-flag' : 'i-token') + '"/></svg>' + (mt ? (dep && zs.length ? 'A mi zona' : 'Traer mi ficha') : 'Poner mi ficha') + '</button>') + (mt ? '<button class="btn sm" type="button" data-act="mapfindme" title="Centrar el mapa en tu ficha"><svg class="ic"><use href="#i-target"/></svg>Mi ficha</button>' : '') : '')
+        + '<button class="btn sm" type="button" data-act="mapadd" aria-expanded="' + (pop === 'add') + '" title="' + (dm ? 'Agregar ficha' : 'Otra ficha (familiar, montura)') + '"><svg class="ic"><use href="#i-plus"/></svg>' + (dm ? 'Ficha' : 'Otra ficha') + '</button>';
       if (r && isDm() && sh) h = dmHud(mp, r, f, st, dep, scene, tokBtns);
-      else if (r && sh) h = pjHud(mp, r, f, st, dep, zs, mt, tokBtns) + mvHud(mp, mt);
+      else if (r && sh) { h = pjHud(mp, r, f, st, dep, zs, mt, tokBtns); if (h.indexOf('pj tools') < 0) h += mvHud(mp, mt); }
       else h = '<div class="hud-row">' + tokBtns + '</div>';
       h = fxHud(mp) + h;
     }
@@ -975,7 +982,7 @@ var Mapas = (function(){
     var encN = (r.encs || []).filter(function(e){ return e.map === mp.id; }).length, run = (r.runs || []).filter(function(x){ return x.map === mp.id; })[0];
     var encB = '<button class="btn sm" type="button" data-act="mapencs" aria-expanded="' + (pop === 'encs') + '" title="Encuentros de este mapa"><svg class="ic"><use href="#i-scroll"/></svg><span class="lb">Encuentros</span>' + (encN ? ' <i class="hud-n">' + encN + '</i>' : '') + '</button>';
     var bestB = '<button class="btn sm" type="button" data-act="bestopen" title="Agregar un enemigo del bestiario"><svg class="ic"><use href="#i-paw"/></svg><span class="lb">Enemigo</span></button>';
-    var frz = '<button class="icon-btn sm frz" type="button" data-act="mapfreeze" aria-pressed="' + !!mp.frozen + '" aria-label="' + (mp.frozen ? 'Dejar que se muevan' : 'Congelar: nadie se mueve') + '" title="' + (mp.frozen ? 'Congelados: toca para que se muevan' : 'Congelar el movimiento') + '"><svg class="ic"><use href="#i-snow"/></svg></button>';
+    var frz = '<button class="btn sm frz" type="button" data-act="mapfreeze" aria-pressed="' + !!mp.frozen + '" title="' + (mp.frozen ? 'Congelados: toca para que se muevan' : 'Congelar el movimiento de los jugadores') + '"><svg class="ic"><use href="#i-snow"/></svg><span class="lb">' + (mp.frozen ? 'Descongelar' : 'Congelar') + '</span></button>';
     if (st === 'prep') return '<div class="hud-row dm st-prep"><span class="hud-st"><svg class="ic"><use href="#i-prep"/></svg><span><b>Preparación</b> · solo tú lo ves</span></span><span class="hud-sp"></span>' + tokBtns + bestB + encB
       + '<button class="btn main sm" type="button" data-act="mapstate" data-v="explore"><svg class="ic"><use href="#i-compass"/></svg>Mostrar y explorar</button></div>';
     var fsplit = fightsHtml(r), missing = f ? combatants(f).filter(function(x){ return !mp.tokens.some(function(t){ return t.ref === x.id && !t.comp; }); }).length : 0, inFight = st === 'combat' || !!(f && f.round);
@@ -988,20 +995,40 @@ var Mapas = (function(){
     var noInit = (r.npcs || []).filter(function(n){ return n.init == null && here(n); }).length;
     var pcs = r.members.filter(function(m){ return m.role !== 'dm' && mp.tokens.some(function(t){ return t.kind === 'pc' && !t.comp && t.ref === m.id; }); }), ready = pcs.filter(function(m){ return m.init != null; }).length;
     var waves = run ? run.waves.map(function(w){ return '<button class="btn sm wave" type="button" data-act="mapwave" data-v="' + w.n + '" title="' + attr(w.round ? 'Llega sola al empezar la ronda ' + w.round + '; tócala para que llegue ya' : 'Tócala para que llegue') + '"><svg class="ic"><use href="#i-wave"/></svg><span class="lb">' + esc(w.name || 'Oleada ' + w.n) + '</span><small>' + w.count + (w.round ? ' · r' + w.round : '') + '</small></button>'; }).join('') : '';
-    var ctl = f && f.round ? '<button class="icon-btn sm" type="button" data-act="salaturn" data-v="prev" aria-label="Turno anterior"><svg class="ic"><use href="#i-back"/></svg></button><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Siguiente</button><button class="icon-btn sm" type="button" data-act="salaend" aria-label="Terminar combate" title="Terminar combate"><svg class="ic"><use href="#i-stop"/></svg></button>'
+    var ctl = f && f.round ? '<button class="btn sm" type="button" data-act="salaturn" data-v="prev"><svg class="ic"><use href="#i-back"/></svg>Anterior</button><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next">Siguiente turno<svg class="ic"><use href="#i-next"/></svg></button><button class="btn sm del" type="button" data-act="salaend">Terminar combate</button>'
       : '<button class="btn main sm" type="button" data-act="salaturn" data-v="start"' + (f && f.order.length ? '' : ' disabled title="Falta iniciativa"') + '><svg class="ic"><use href="#i-swords"/></svg>Empezar combate</button>';
-    var lead = dep ? '<span class="hud-st dep"><svg class="ic"><use href="#i-flag"/></svg><span><b>Despliegue</b> · ' + (pcs.length ? ready + ' de ' + pcs.length + ' con iniciativa' : 'esperando al grupo') + '</span></span>'
-      : '<span class="hud-st"><svg class="ic"><use href="#i-swords"/></svg><span><b>Ronda ' + (f ? f.round : 0) + '</b>' + (f && f.turnId ? ' · ' + esc(nameIn(r, f.turnId)) : '') + '</span></span>';
-    var row2 = '<div class="hud-row dm fight">' + lead + '<span class="hud-sp"></span>' + (noInit ? '<button class="btn sm" type="button" data-act="mapnpcinit" title="Tira 1d20 + su modificador a cada enemigo sin iniciativa (los iguales comparten tirada)"><svg class="ic"><use href="#i-d20"/></svg><span class="lb">Iniciativa de enemigos</span><small>' + noInit + '</small></button>' : '') + waves
-      + tacBtns(mp) + '<button class="icon-btn sm" type="button" data-act="mapturnonly" aria-pressed="' + (mp.turnOnly !== false) + '" aria-label="' + (mp.turnOnly !== false ? 'Cada quien se mueve en su turno (toca para dejarlos libres)' : 'Se mueven libres (toca para que sea en su turno)') + '" title="' + (mp.turnOnly !== false ? 'Se mueve quien tiene el turno' : 'Se mueven libres') + '"><svg class="ic"><use href="#i-turn"/></svg></button>' + ctl + '</div>';
-    return row2 + row + fsplit;
+    var lead = dep ? 'Despliegue · ' + (pcs.length ? ready + ' de ' + pcs.length + ' con iniciativa' : 'esperando al grupo') : 'Turno · ronda ' + (f ? f.round : 0) + (f && f.turnId ? ' · ' + esc(nameIn(r, f.turnId)) : '');
+    var initB = noInit ? '<button class="btn sm" type="button" data-act="mapnpcinit" title="Tira 1d20 + su modificador a cada enemigo sin iniciativa (los iguales comparten tirada)"><svg class="ic"><use href="#i-d20"/></svg><span class="lb">Iniciativa de enemigos</span><small>' + noInit + '</small></button>' : '';
+    var mesa = tokBtns + (!scene ? '<button class="btn sm" type="button" data-act="mapscene" data-id="' + attr(mp.id) + '" title="Mostrar a todos"><svg class="ic"><use href="#i-screen"/></svg><span class="lb">Mostrar a todos</span></button>' : '')
+      + bestB + (missing ? '<button class="btn sm" type="button" data-act="mapplaceall" title="Poner en el mapa a ' + missing + ' del combate sin ficha"><svg class="ic"><use href="#i-token"/></svg><span class="lb">Poner ' + missing + ' en el mapa</span></button>' : '') + encB + waves + frz
+      + (f && !r.split && spread(r) ? '<button class="btn sm" type="button" data-act="mapsplit" data-v="1" title="El grupo está en varios mapas: cada mapa con su propio combate"><svg class="ic"><use href="#i-swords"/></svg><span class="lb">Combate por mapa</span></button>' : '');
+    var grp = function(label, inner, cls){ return '<div class="hud-grp"><span class="gl' + (cls ? ' ' + cls : '') + '">' + label + '</span><div class="gb">' + inner + '</div></div>'; };
+    return '<div class="hud-row dm grouped fight">' + grp(lead, ctl + initB, dep ? 'hud-st dep' : '') + grp('Mesa', mesa) + grp('Reglas de este mapa', tacBtns(mp)
+      + '<button class="rule-chip" type="button" data-act="mapturnonly" aria-pressed="' + (mp.turnOnly !== false) + '" title="' + (mp.turnOnly !== false ? 'Se mueve quien tiene el turno (toca para dejarlos libres)' : 'Se mueven libres (toca para que sea en su turno)') + '">Cada quien en su turno</button>') + '</div>' + fsplit;
   }
   function nameIn(r, id){ var m = r.members.filter(function(x){ return x.id === id; })[0]; if (m) return m.char ? m.char.name : m.name; var n = (r.npcs || []).filter(function(x){ return x.id === id; })[0]; return n ? n.name : ''; }
   function pjHud(mp, r, f, st, dep, zs, mt, tokBtns){
     var meM = r.members.filter(function(m){ return m.id === r.you; })[0] || {}, c = meM.char || {}, myTurn = f && f.round && f.turnId === r.you, p = c.hpMax ? Math.max(0, Math.min(1, c.hp / c.hpMax)) : null;
-    var h = '<div class="hud-row pj' + (myTurn ? ' myturn' : '') + '">' + (c.name ? '<span class="hud-me"><b>' + esc(c.name) + '</b><span class="hud-hp"><i style="width:' + Math.round((p || 0) * 100) + '%;background:' + (p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a') + '"></i></span><small>PG ' + (c.hp != null ? c.hp + '/' + c.hpMax : '–') + (c.temp ? ' +' + c.temp : '') + ' · CA ' + (c.ac || '–') + '</small></span>' : '')
-      + (myTurn ? '<span class="hud-turn">¡Tu turno!</span><button class="btn main sm hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Terminar turno</button>' : '')
-      + litChip(mp, mt) + '<span class="hud-sp"></span>' + (f && f.round && window.Acciones ? '<button class="btn sm" type="button" data-act="actopen" title="Publicar tu acción: se tiran los dados y lo ve el grupo"><svg class="ic"><use href="#i-d20"/></svg>Acción</button>' : '') + tokBtns + '<button class="icon-btn sm" type="button" data-act="mapsheet" aria-label="Mi hoja de combate" title="Mi hoja de combate"><svg class="ic"><use href="#i-swords"/></svg></button></div>';
+    var fighting = !!(st === 'combat' && f && f.round && mt && !dep), col = p > 0.66 ? '#5fb85a' : p > 0.33 ? '#e0b43a' : '#d24a3a';
+    // tú: nombre, vida, CA y, en combate, lo que te queda del turno (se toca al usarlo; atacar con un arma gasta la acción)
+    var E = fighting && window.Diario && Diario.econ ? Diario.econ() : null;
+    var econ = E ? '<span class="pj-econ" role="group" aria-label="Lo que te queda en el turno">' + [['a','Acción'],['b','Adicional'],['r','Reacción']].map(function(x){ return '<button type="button" class="e-' + x[0] + '" data-act="mapecon" data-k="' + x[0] + '" aria-pressed="' + !!E[x[0]] + '" title="' + (E[x[0]] ? 'Ya la usaste: toca para recuperarla' : 'Tócala cuando la uses') + '"><i aria-hidden="true"></i>' + x[1] + '</button>'; }).join('') + '</span>' : '';
+    var meH = c.name ? '<div class="pj-me hud-me"><span class="nm"><b>' + esc(c.name) + '</b><small>PG ' + (c.hp != null ? c.hp + '/' + c.hpMax : '–') + (c.temp ? ' +' + c.temp : '') + ' · CA ' + (c.ac || '–') + '</small>' + (myTurn ? '<span class="hud-turn">¡Tu turno!</span>' : '') + '</span><span class="hp"><i style="width:' + Math.round((p || 0) * 100) + '%;background:' + col + '"></i></span>' + econ + '</div>' : '';
+    var sheetB = '<button class="btn sm" type="button" data-act="mapsheet" title="Tu hoja al lado del mapa"><svg class="ic"><use href="#i-book"/></svg>Mi hoja</button>';
+    var h;
+    if (fighting) {
+      // en combate, los verbos con nombre: abren el abanico en tu ficha ya en su nivel
+      var L = mvLeft(mp, mt), verb = function(v, label, ic, sub){ return '<button class="pj-verb" type="button" data-act="mapverb" data-v="' + v + '"><svg class="ic"><use href="#' + ic + '"/></svg>' + label + (sub ? '<small>' + sub + '</small>' : '') + '</button>'; };
+      var who = f.turnId ? String(nameIn(r, f.turnId) || '').split(' ')[0] : '';
+      h = '<div class="hud-row pj verbs' + (myTurn ? ' myturn' : '') + '">' + meH + '<div class="pj-verbs">'
+        + verb('Moverse', 'Moverse', 'i-boot', L ? mtr(L.left) + ' m' : '') + verb('Atacar', 'Atacar', 'i-sword') + verb('Conjuros', 'Conjuro', 'i-wand') + verb('Usar', 'Usar', 'i-flask') + '<span class="pj-sep" aria-hidden="true"></span>'
+        + (myTurn ? '<button class="pj-verb end mine hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Terminar turno</button>'
+          : '<button class="pj-verb end" type="button" disabled><svg class="ic"><use href="#i-turn"/></svg>' + (who ? 'Turno de ' + esc(who) : 'Esperando') + '</button>') + '</div></div>'
+        + '<div class="hud-row pj tools mv">' + mvHud(mp, mt, true) + litChip(mp, mt) + '<span class="hud-sp"></span>' + (window.Acciones ? '<button class="btn sm quiet" type="button" data-act="actopen" title="Escribe lo que haces: el grupo lo ve y se tiran los dados">Otra acción</button>' : '') + sheetB + '</div>';
+    } else {
+      h = '<div class="hud-row pj' + (myTurn ? ' myturn' : '') + '">' + meH + litChip(mp, mt) + '<span class="hud-sp"></span>'
+        + (f && f.round && window.Acciones ? '<button class="btn sm" type="button" data-act="actopen" title="Publicar tu acción: se tiran los dados y lo ve el grupo"><svg class="ic"><use href="#i-d20"/></svg>Acción</button>' : '') + tokBtns + sheetB + '</div>';
+    }
     // lo que pide el estado: acomodarse, tirar iniciativa, esperar el turno o unirse al combate de otro mapa
     var bits = '';
     if (mp.frozen) bits += '<span class="hud-st frozen"><svg class="ic"><use href="#i-snow"/></svg><span>El DM detuvo el movimiento</span></span>';
@@ -1163,9 +1190,18 @@ var Mapas = (function(){
     if (canvas.dataset.engine === 'gl') { if (gl) gl.resize(w, hh, Gfx.resolution()); return; }
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(hh * dpr);
   }
-  function frame(mp){ if (!canvas || !mp) return; var w = canvas.clientWidth || 360, h = canvas.clientHeight || 400, s = Math.max(4, Math.min(80, Math.min((w - 20) / mp.cols, (h - 20) / mp.rows))); views[mp.id] = {s:s, x:(w - mp.cols * s) / 2, y:(h - mp.rows * s) / 2}; }
+  /* Lo que tapan la cinta de iniciativa (arriba) y la barra de tu turno (abajo, o al lado): el mapa se encuadra en lo que queda libre */
+  function insets(){
+    var o = {t:0, b:0, r:0}; if (!canvas || !canvas.getBoundingClientRect || !room() || !cur || !shared(cur)) return o; var cr = canvas.getBoundingClientRect(); if (!cr.height) return o;
+    var ini = document.getElementById('vttInit'), hu = document.getElementById('vttHud');
+    if (ini && !ini.hidden) { var a = ini.getBoundingClientRect(); if (a.height && a.top < cr.top + cr.height / 2) o.t = Math.max(0, a.bottom - cr.top); }
+    if (hu && !hu.hidden) { var c = hu.getBoundingClientRect(); if (c.height) { if (c.width > cr.width * 0.6) o.b = Math.max(0, cr.bottom - c.top); else o.r = Math.max(0, cr.right - c.left); } }
+    if (cr.height - o.t - o.b < 140) { o.t = 0; o.b = 0; }
+    return o;
+  }
+  function frame(mp){ if (!canvas || !mp) return; var I = insets(), w = (canvas.clientWidth || 360) - I.r, h = (canvas.clientHeight || 400) - I.t - I.b, s = Math.max(4, Math.min(80, Math.min((w - 20) / mp.cols, (h - 20) / mp.rows))); views[mp.id] = {s:s, x:(w - mp.cols * s) / 2, y:I.t + (h - mp.rows * s) / 2}; }
   /* Acerca y centra la vista en una ficha (para encontrar la tuya en el teléfono) */
-  function focus(mp, t){ var v = V(), w = canvas.clientWidth || 360, h = canvas.clientHeight || 400, s = Math.max(v.s, 30), z = t.s || 1; v.s = s; v.x = w / 2 - (t.x + z / 2) * s; v.y = h / 2 - (t.y + z / 2) * s; }
+  function focus(mp, t){ var v = V(), I = insets(), w = (canvas.clientWidth || 360) - I.r, h = (canvas.clientHeight || 400) - I.t - I.b, s = Math.max(v.s, 30), z = t.s || 1; v.s = s; v.x = w / 2 - (t.x + z / 2) * s; v.y = I.t + h / 2 - (t.y + z / 2) * s; }
   function zoomAt(f, cx, cy){ var v = V(), ns = Math.max(3, Math.min(160, v.s * f)); v.x = cx - (cx - v.x) * ns / v.s; v.y = cy - (cy - v.y) * ns / v.s; v.s = ns; paint(); }
   function toMap(px, py){ var v = V(); return [(px - v.x) / v.s, (py - v.y) / v.s]; }
 
@@ -1847,6 +1883,8 @@ var Mapas = (function(){
   document.addEventListener('click', function(ev){
     var b = ev.target.closest && ev.target.closest('[data-act]'); if (!b || b.dataset.act.indexOf('map') !== 0) return;
     var a = b.dataset.act, mp = cur && maps[cur];
+    if (a === 'mapverb') { var vt = mp && myTok(mp); if (window.VTT && vt) VTT.verb(b.dataset.v, mp, vt); return; }
+    if (a === 'mapecon') { if (window.Diario && Diario.econSet) Diario.econSet(b.dataset.k); toolbar(); return; }
     if (a === 'mapnew') { newOpen = b.dataset.v || (room() && isDm() ? 'dm' : 'pj'); newImg = b.dataset.src === 'img' ? {cols:30} : null; render(); var f0 = $('form[data-form="mapnew"] [name=name]'); if (f0) try { f0.focus(); } catch(e){} }
     else if (a === 'mapnewx') { newOpen = false; newImg = null; render(); }
     else if (a === 'mapsrc') { newImg = b.dataset.v === 'img' ? (newImg || {cols:30}) : null; render(); }

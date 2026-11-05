@@ -234,6 +234,8 @@ var Acciones = (function(){
     if (!Sala.send({t:'act.post', act:act})) return;
     // un conjuro con espacio: se gasta en tu hoja (y queda la concentración si la pide)
     if (!dm && comp.spell && comp.lv) Diario.cast(comp.spell.ref, comp.lv);
+    // un ataque con arma de tu hoja gasta tu acción (se ve en la barra de tu turno); la reacción, fuera de tu turno
+    if (!dm && !comp.comp && act.atk && comp.key && /^w/.test(comp.key) && window.Diario && Diario.econSet) Diario.econSet(r.turnId === r.you ? 'a' : 'r', true);
     else if (!dm && comp.spell && comp.spell.lv === 0) Diario.cast(comp.spell.ref);
     comp = null; render.force = true; render(); if (window.Sfx) Sfx.play('dice');
   }
@@ -250,14 +252,19 @@ var Acciones = (function(){
   function dmgLine(k){
     if (!k.dmg) return '';
     if (k.dmg.some(function(d){ return d.hidden; })) return '<p class="ac-dmg hid"><b>' + (k.heal ? 'Curación' : 'Daño') + '</b> ' + esc(k.dmg.map(function(d){ return d.dice; }).join(' + ')) + ' · <i>oculto</i></p>';
-    return '<p class="ac-dmg' + (k.heal ? ' heal' : '') + '"><b class="ac-n">' + k.amt + '</b> ' + (k.heal ? 'PG de curación' : 'de daño') + ' <small>' + k.dmg.map(function(d){ return esc(d.dice) + (d.type ? ' ' + esc(d.type) : '') + ' <i>[' + d.rolls.map(function(v){ return Math.abs(v); }).join(', ') + ']</i>'; }).join(' + ') + '</small></p>';
+    var ty = k.dmg.map(function(d){ return d.type; }).filter(Boolean).filter(function(t, i, a){ return a.indexOf(t) === i; }).join(' y ');
+    return '<div class="ac-dmgbig ac-dmg' + (k.heal ? ' heal' : '') + '"><b class="ac-n">' + k.amt + '</b><span>' + (k.heal ? 'PG de curación' : 'de daño' + (ty ? ' ' + esc(ty) : '')) + '<small>' + k.dmg.map(function(d){ return esc(d.dice) + ' [' + d.rolls.map(function(v){ return Math.abs(v); }).join(', ') + ']'; }).join(' + ') + '</small></span></div>';
   }
   function cardHtml(k, r){
     var dm = isDm(), a = k.actor, mineCard = k.by === r.you, x = a.kind === 'npc' ? who(r, a.id) : a.kind === 'pc' ? who(r, a.id) : null;
     var face = a.kind === 'dm' ? '<span class="cs-pic dm ic"><svg class="ic"><use href="#i-crown"/></svg></span>' : a.kind === 'fx' ? '<span class="cs-pic fx ic"><svg class="ic"><use href="#i-cube"/></svg></span>' : a.kind === 'sys' ? '<span class="cs-pic sys ic"><svg class="ic"><use href="#i-' + (k.concChk ? 'star' : 'turn') + '"/></svg></span>' : x && !a.of ? pic(x) : '<span class="cs-pic ini' + (a.kind === 'pc' ? ' pc' : '') + '">' + esc(ini(a.name)) + '</span>';
     var h = '<article class="ac-card ' + a.kind + (k.atk && k.atk.crit ? ' crit' : '') + '" data-id="' + attr(k.id) + '"><header>' + face + '<span class="ac-who"><b>' + esc(a.name) + '</b>' + (a.of ? '<small>de ' + esc(a.of) + '</small>' : '') + '<span>' + esc(k.title) + '</span></span><small class="ac-r">' + (k.round ? 'ronda ' + k.round : '') + '</small>'
       + (dm || mineCard ? '<button class="icon-btn sm ac-x" type="button" data-act="actdel" data-id="' + attr(k.id) + '" aria-label="Quitar esta acción"><svg class="ic"><use href="#i-x"/></svg></button>' : '') + '</header>';
-    if (k.atk) h += '<p class="ac-atk"><svg class="ic"><use href="#i-d20"/></svg><b class="ac-n">' + k.atk.total + '</b> para impactar <small>' + (k.atk.k ? '[' + k.atk.dice.join(', ') + '] ' + (k.atk.k === 'adv' ? 'con ventaja' : 'con desventaja') + ' · ' : '') + k.atk.nat + ' ' + sgn(k.atk.bonus).replace(/^([+−])/, '$1 ') + '</small>' + (k.atk.crit ? '<i class="ac-badge crit">¡Crítico!</i>' : k.atk.fumble ? '<i class="ac-badge fumble">Pifia</i>' : '') + '</p>';
+    if (k.atk) {
+      // lo importante en grande: si impacta (con un solo objetivo), el total y de dónde salió
+      var one = k.targets && k.targets.length === 1 ? k.targets[0] : null, vd = k.atk.crit ? ['crit', '¡Crítico!'] : k.atk.fumble ? ['miss', 'Pifia'] : one ? (one.hit ? ['hit', 'Impacta'] : ['miss', 'Falla']) : ['hit', 'Ataque'];
+      h += '<div class="ac-verdict ac-atk"><span class="vd ' + vd[0] + '">' + vd[1] + '</span><span class="tot"><b class="ac-n">' + k.atk.total + '</b><small>' + (k.atk.k ? (k.atk.k === 'adv' ? 'con ventaja ' : 'con desventaja ') + '[' + k.atk.dice.join(', ') + '] · ' : '') + k.atk.nat + ' en el d20 ' + sgn(k.atk.bonus).replace(/^([+−])/, '$1 ') + '</small></span></div>';
+    }
     if (k.save) h += '<p class="ac-save"><svg class="ic"><use href="#i-shield"/></svg>Salvación de <b>' + AB[k.save.ab] + '</b> CD <b>' + k.save.dc + '</b>' + (k.save.half ? ' <small>(mitad si la supera)</small>' : '') + '</p>';
     if (k.death) h += '<p class="ac-death ' + (k.death.res === 'revive' || k.death.res === 'éxito' ? 'ok' : 'ko') + '"><svg class="ic"><use href="#i-skull"/></svg><b class="ac-n">' + k.death.nat + '</b> ' + esc(k.death.res === 'revive' ? '¡20! Recupera 1 PG' : k.death.res === 'dos fallos' ? '1: cuenta como dos fallos' : k.death.res === 'éxito' ? 'éxito' : 'fallo') + '</p>';
     h += dmgLine(k);

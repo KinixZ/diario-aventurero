@@ -130,7 +130,8 @@ for (const [w, h, name] of [[390, 844, 'vertical'], [844, 390, 'horizontal']]) {
   ok(name + ': la hoja ' + (name === 'vertical' ? 'sube desde abajo' : 'va de lado'), name === 'vertical' ? geo.sw >= geo.ww - 2 && geo.bottom : geo.sw < geo.ww * 0.7);
   if (out) await pj.screenshot({ path: out + '-' + name + '-hoja.png' });
   await act(pj, 'vsheetx'); await pj.waitForTimeout(200);
-  if (name === 'horizontal') ok('horizontal: el HUD va de lado y deja el mapa libre', await pj.evaluate(() => { const hd = document.getElementById('vttHud').getBoundingClientRect(), wr = document.getElementById('mapWrap').getBoundingClientRect(); return hd.width < wr.width * 0.6; }));
+  // en combate, la barra de tu turno va abajo, a lo ancho, y deja libre más de la mitad del mapa
+  if (name === 'horizontal') ok('horizontal: la barra del turno va abajo y deja el mapa libre', await pj.evaluate(() => { const hd = document.getElementById('vttHud').getBoundingClientRect(), wr = document.getElementById('mapWrap').getBoundingClientRect(); return hd.bottom >= wr.bottom - 12 && hd.height < wr.height * 0.5; }));
 }
 await dm.setViewportSize({ width: 390, height: 844 }); await dm.waitForTimeout(500); await dm.evaluate((mid) => Mapas.open(mid), MID); await dm.waitForTimeout(800);
 ok('el DM en el teléfono: el HUD no se sale de la pantalla', await dm.evaluate(() => { const hd = document.getElementById('vttHud').getBoundingClientRect(); return hd.right <= window.innerWidth + 1 && hd.left >= -1; }));

@@ -180,7 +180,7 @@
     <div class="sheet" id="settingsSheet" hidden role="dialog" aria-labelledby="setTitle">
       <div class="sheet-h"><h2 id="setTitle">Ajustes del diario</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar ajustes"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="scroll" style="display:flex;flex-direction:column;gap:22px">
-        <section>
+        <section data-cat="personajes">
           <div class="row"><span class="label">personajes</span><button class="btn main sm" type="button" data-act="newchar">Nuevo personaje</button></div>
           <div class="chars" id="charList"></div>
           <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">
@@ -190,7 +190,7 @@
           <p class="note" id="charMsg" style="margin:6px 0 0">Para pasarlos a otro dispositivo o a la web del grupo: exporta aquí e importa allá.</p>
           <textarea class="field" id="charText" rows="4" hidden aria-label="Personajes como texto" style="margin-top:8px;width:100%;font-family:monospace;font-size:12px"></textarea>
         </section>
-        <section>
+        <section data-cat="idioma">
           <span class="label">traducción al español</span>
           <p style="margin:6px 0 0;font-size:15px">Los textos de 5etools vienen en inglés. El diario puede traducirlos y guardar cada traducción en este dispositivo para no repetirla.</p>
           <div class="seg" id="trModes" style="margin-top:8px"></div>
@@ -205,55 +205,55 @@
             <label class="toggle"><input type="checkbox" id="trdOn" checked> Mostrar los textos traducidos (desmarca para ver el original en inglés)</label>
           </div>
         </section>
-        <section>
+        <section data-cat="avanzado">
           <span class="label">servidor de campañas</span>
           <p style="margin:6px 0 0;font-size:15px">Dirección del servidor donde viven las campañas. Si abriste el diario desde el servidor del proyecto no hace falta escribir nada.</p>
           <input class="field" id="salaUrl" type="url" inputmode="url" autocomplete="off" aria-label="Dirección del servidor de campañas" style="margin-top:8px">
           <p class="note" id="salaStatus" style="margin:6px 0 0"></p>
         </section>
-        <section>
+        <section data-cat="apariencia">
           <span class="label">estilo del diario</span>
           <div class="skins" id="skins"></div>
           <label class="toggle" style="margin-top:10px"><input type="checkbox" id="hudBg3"> Iconos estilo Baldur's Gate 3 <small class="muted">(acción en círculo verde, adicional en triángulo naranja, reacción en morado y espacios de conjuro en cuadros azules)</small></label>
         </section>
-        <section>
+        <section data-cat="anim">
           <span class="label">animaciones</span>
           <div id="fxBox"></div>
         </section>
-        <section>
+        <section data-cat="anim">
           <span class="label">sonido</span>
           <div id="sfxBox"></div>
         </section>
-        <section>
+        <section data-cat="apariencia">
           <span class="label">identidad de clase</span>
           <p style="margin:6px 0 0;font-size:15px">Colores, emblema y partículas de tu subclase; el libro reacciona a tu vida, tu CA y tus estados.</p>
           <div id="idBox"></div>
         </section>
-        <section>
+        <section data-cat="combate">
           <span class="label">dados</span>
           <p style="margin:6px 0 0;font-size:15px">Cómo ves tus tiradas en el combate: rodando en 3D, solo el resultado o con tus dados de verdad.</p>
           <div id="diceBox"></div>
         </section>
-        <section>
+        <section data-cat="mapa">
           <span class="label">calidad gráfica</span>
           <p style="margin:6px 0 0;font-size:15px">Qué tanto trabaja tu aparato al dibujar el mapa, las luces y los efectos.</p>
           <div id="gfxBox"></div>
         </section>
-        <section>
+        <section data-cat="avanzado">
           <span class="label">imágenes de monstruos</span>
           <div id="monImgBox"></div>
         </section>
-        <section>
+        <section data-cat="avanzado">
           <span class="label">créditos</span>
           <p class="note" style="margin:6px 0 0">Iconos de conjuros de <b>game-icons.net</b> (Lorc, Delapouite y colaboradores), licencia CC BY 3.0. Fuentes Cinzel, Cinzel Decorative, EB Garamond y Caveat (SIL Open Font License). Los sonidos se generan en tu aparato.</p>
         </section>
-        <section>
+        <section data-cat="biblioteca">
           <span class="label">manual de monstruos</span>
           <p style="margin:6px 0 0;font-size:15px">El archivo <b>bestiario-5e.json</b> con las criaturas de tu 5etools. El DM lo usa para meter enemigos al combate; los jugadores, para leer el Manual en el separador Bestiario. Se crea en la laptop con <code>npm run bestiario</code>.</p>
           <div class="picks"><label class="btn pickbtn">Elegir archivo<input type="file" id="bestFile"></label><button class="btn" type="button" data-act="bestdel" id="bestDel" hidden>Quitar bestiario</button></div>
           <p class="note" id="bestStatus" style="margin:6px 0 0"></p>
         </section>
-        <section>
+        <section data-cat="biblioteca">
           <span class="label">biblioteca de 5etools</span>
           <p style="margin:6px 0 0;font-size:15px">Carga los datos de tu copia de 5etools. Se guardan solo en este dispositivo y funcionan sin internet.</p>
           <div class="picks">
