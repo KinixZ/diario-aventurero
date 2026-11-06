@@ -2198,6 +2198,7 @@
       case 'finditems': G.sec = 'objetos'; G.view = null; G.hist = []; G.q = ''; G.sub = '*'; if (wide()) S.left = 'objetos'; else { G.from = null; S.tab = 'grimorio'; } render(true); renderGrim(); break;
       case 'settings': openSettings(); break;
       case 'closesheet': closeSheets(); break;
+      case 'escpj': if (window.Escenario) importChars(Escenario.pjs()); break;
       case 'skin': S.skin = b.dataset.v; applySkin(); save(); break;
       case 'clearlib': idbDel('lib'); Lib5e.set(Lib5e.empty()); G.view = null; $('#libProgress').textContent = 'Datos quitados de este dispositivo.'; libTable(); render(false); renderGrim(); break;
       case 'newchar': if (!Lib5e.has()) { openSettings(); break; } openCreator(null, true, 'clase'); break;
