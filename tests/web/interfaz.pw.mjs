@@ -35,6 +35,17 @@ const iconOnly = (p) => p.evaluate(() => [...document.querySelectorAll('#vttHud 
 
 // --- Ajustes ---
 const pj = await open('pj', 390, 844, PAL);
+// --- Encabezado del libro (módulo 14): vitales, botones con nombre, recogido al bajar, lomo en horizontal ---
+ok('el encabezado muestra PG y CA', await pj.evaluate(() => { const v = document.getElementById('hVit'); return !v.hidden && /PG/.test(v.textContent) && /CA/.test(v.textContent); }));
+ok('Campaña y Ajustes tienen nombre (aria y texto)', await pj.evaluate(() => [...document.querySelectorAll('.h-pill')].map((b) => b.querySelector('span').textContent).join() === 'Campaña,Ajustes'));
+await pj.evaluate(() => { document.getElementById('scroll').scrollTop = 600; }); await pj.waitForTimeout(250);
+ok('al bajar, el encabezado se recoge', await pj.evaluate(() => document.getElementById('head').classList.contains('fold') && document.getElementById('head').offsetHeight < 80));
+await pj.evaluate(() => { document.getElementById('scroll').scrollTop = 0; }); await pj.waitForTimeout(250);
+ok('al subir, vuelve a abrirse', await pj.evaluate(() => !document.getElementById('head').classList.contains('fold')));
+await pj.setViewportSize({ width: 844, height: 390 }); await pj.waitForTimeout(400);
+ok('en horizontal: lomo a la izquierda, separadores a la derecha y la campaña sigue cerrada', await pj.evaluate(() => { const h = document.getElementById('head').getBoundingClientRect(), s = document.getElementById('scroll').getBoundingClientRect(), r = document.getElementById('ribbons').getBoundingClientRect(); return h.right <= s.left + 2 && h.height > 300 && r.left >= s.right - 2 && getComputedStyle(document.getElementById('combat')).display === 'none'; }));
+await shot(pj, 'libro-horizontal');
+await pj.setViewportSize({ width: 390, height: 844 }); await pj.waitForTimeout(300);
 await pj.evaluate(() => document.querySelector('[data-act="settings"]').click()); await pj.waitForTimeout(500);
 ok('Ajustes abre en la portada con 7 categorías y Avanzado', await pj.evaluate(() => document.querySelectorAll('#setHome .set-cat').length === 8 && [...document.querySelectorAll('#settingsSheet section[data-cat]')].every((s) => s.hidden)));
 ok('cada categoría dice lo que tiene puesto', await pj.evaluate(() => [...document.querySelectorAll('#setHome .set-cat small')].every((s) => s.textContent.trim().length > 3)));

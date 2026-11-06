@@ -12,11 +12,13 @@
       <div class="who">
         <h1 id="hName">Diario del Aventurero</h1>
         <p id="hSub"></p>
+        <p class="h-vit" id="hVit" hidden></p>
       </div>
-      <button class="icon-btn" type="button" data-act="mesa" aria-label="Abrir la mesa de juego" title="Mesa: chat y tablero"><svg class="ic"><use href="#i-chat"/></svg></button>
-      <button class="icon-btn war" type="button" data-act="campanas" aria-label="Campañas: elegir campaña, mapa, combate y chat" title="Campañas"><svg class="ic"><use href="#i-banner"/></svg></button>
-      <button class="icon-btn" type="button" data-act="settings" aria-label="Ajustes del diario" title="Ajustes"><svg class="ic"><use href="#i-gear"/></svg></button>
-      <button class="icon-btn" type="button" data-act="close" aria-label="Cerrar diario" title="Cerrar diario"><svg class="ic"><use href="#i-book"/></svg></button>
+      <div class="h-acts">
+        <button class="h-pill war" type="button" data-act="campanas" aria-label="Campañas: elegir campaña, mapa, combate y chat" title="Campañas"><svg class="ic"><use href="#i-banner"/></svg><span>Campaña</span><i class="h-live" id="hLive" hidden></i></button>
+        <button class="h-pill" type="button" data-act="settings" aria-label="Ajustes del diario" title="Ajustes"><svg class="ic"><use href="#i-gear"/></svg><span>Ajustes</span></button>
+        <button class="icon-btn h-close" type="button" data-act="close" aria-label="Cerrar diario" title="Cerrar diario"><svg class="ic"><use href="#i-book"/></svg><span>Cerrar diario</span></button>
+      </div>
     </header>
     <div class="scroll" id="scroll">
       <div class="folio"><span id="folio">Folio I · Personaje</span></div>
@@ -297,6 +299,7 @@
     <div class="combat-b">
       <div class="c-top">
         <div class="c-vitals" id="cVitals"></div>
+        <div class="c-mine" id="cMine"></div>
         <div class="c-sub" id="cSub" role="tablist" aria-label="Partes del combate"></div>
       </div>
       <div class="c-grid">
