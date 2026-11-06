@@ -21,18 +21,18 @@ const M = () => p.evaluate(() => Object.values(Mapas._maps())[0]);
 ok('una sola capa al crear', (await M()).layers.length === 1);
 const box = await p.locator('#mapCv').boundingBox();
 // coordenadas de pantalla de una casilla
-const scr = async (x, y) => p.evaluate(([x, y]) => { const cv = document.getElementById('mapCv'), r = cv.getBoundingClientRect(); const m = Object.values(Mapas._maps())[0]; const W = cv.clientWidth, H = cv.clientHeight, s = Math.max(4, Math.min(80, Math.min((W - 20) / m.cols, (H - 20) / m.rows))); const ox = (W - m.cols * s) / 2, oy = (H - m.rows * s) / 2; return [r.left + ox + x * s, r.top + oy + y * s, s]; }, [x, y]);
+const scr = async (x, y) => p.evaluate(([x, y]) => { const cv = document.getElementById('mapCv'), r = cv.getBoundingClientRect(), v = Mapas._view(); return [r.left + v.x + x * v.s, r.top + v.y + y * v.s, v.s]; }, [x, y]);
 // objetos
 await act('mapassets'); await p.waitForTimeout(200);
 ok('panel de objetos', await p.evaluate(() => document.querySelectorAll('.as-it').length > 5));
-await act('mapascat', 'muebles'); await act('mapaspick', 'mesa'); let q = await scr(10, 8); await p.mouse.click(q[0], q[1]); await p.waitForTimeout(150);
+await act('mapascat', 'muebles'); await act('mapaspick', 'mesa'); let q = await scr(10.05, 8.1); await p.mouse.click(q[0], q[1]); await p.waitForTimeout(150);
 await p.evaluate(() => document.querySelector('[data-act="mapassets"]').click()); await p.waitForTimeout(100); await act('mapascat', 'luz'); await act('mapaspick', 'fogata'); q = await scr(5.5, 5.5); await p.mouse.click(q[0], q[1]); await p.waitForTimeout(150);
 await p.evaluate(() => document.querySelector('[data-act="mapassets"]').click()); await p.waitForTimeout(100); await p.fill('#asQ', 'barril'); await p.waitForTimeout(100); await act('mapaspick', 'barril');
 for (const [x, y] of [[15.5, 4.5], [16.5, 4.5], [15.5, 5.5]]) { q = await scr(x, y); await p.mouse.click(q[0], q[1]); await p.waitForTimeout(80); }
 let m = await M(); ok('cinco objetos puestos', m.strokes.filter((k) => k.k === 'asset').length === 5);
 ok('la mesa queda centrada en la cuadrícula', JSON.stringify(m.strokes[0].pts) === '[10,8.5]' || JSON.stringify(m.strokes[0].pts) === '[10,8]');
 // texto
-await act('maptool', 'text'); q = await scr(12, 3); await p.mouse.click(q[0], q[1]); await p.waitForTimeout(100); await p.fill('#mapTxt input', 'El Poni Pisador'); await p.press('#mapTxt input', 'Enter'); await p.waitForTimeout(150);
+await act('maptool', 'text'); q = await scr(12.1, 2.6); await p.mouse.click(q[0], q[1]); await p.waitForTimeout(100); await p.fill('#mapTxt input', 'El Poni Pisador'); await p.press('#mapTxt input', 'Enter'); await p.waitForTimeout(150);
 // seleccionar la mesa y moverla
 await act('maptool', 'select');
 const mesa = (await M()).strokes[0]; q = await scr(mesa.pts[0], mesa.pts[1]);

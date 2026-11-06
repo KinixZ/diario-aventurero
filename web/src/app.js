@@ -1254,6 +1254,8 @@
   }
   window.Diario = {cur:cur, D:function(){ return D; }, rt:rt, save:function(){ save(); }, redraw:function(){ renderHead(); if (cur() && D && D.ok) renderPersonaje(cur()); if (!$('#combat').hidden) combatHead(); }, applyToMe:applyToMe, trWrap:function(h, k){ return trWrap(h, k); }, trInit:function(r){ trInit(r); }, openSheet:function(id){ openSheet(id); }, closeSheets:function(){ closeSheets(); },
     addNote:function(text){ var C = cur(); if (!C) return false; var r = rt(C); r.notes = (r.notes ? r.notes.replace(/\s+$/, '') + '\n\n' : '') + text; save(); if ($('#notes')) $('#notes').value = r.notes; return true; },
+    econ:function(){ var C = cur(); if (!C) return null; var e = rt(C).econ || {}; return {a:!!e.a, b:!!e.b, r:!!e.r, m:!!e.m}; },
+    econSet:function(k, v){ var C = cur(); if (!C || 'abrm'.indexOf(k) < 0) return; var r = rt(C); r.econ = r.econ || {a:false,b:false,r:false,m:false}; r.econ[k] = v == null ? !r.econ[k] : !!v; save(); if (!$('#combat').hidden) renderCombat(); },
     newTurn:function(){ var C = cur(); if (!C) return; rt(C).econ = {a:false,b:false,r:false,m:false}; S.cSub = 'turno'; save(); if (!$('#combat').hidden) renderCombat(); },
     combatRefresh:function(){ if (!$('#combat').hidden) combatHead(); },
     chars:function(){ return S.chars.map(function(c){ return {id:c.id, name:c.name || 'Sin nombre', sub:(c.ch && c.ch.cls || '').split('|')[0] + (c.level ? ' · nivel ' + c.level : ''), active:c.id === S.active}; }); },
@@ -2113,7 +2115,7 @@
 
   /* ---------- Hojas ---------- */
   function openSheet(id){ $$('.sheet').forEach(function(s){ s.hidden = s.id !== id; }); var s = $('#' + id); var f = s.querySelector('input,button'); if (f) f.focus({preventScroll:true}); }
-  function openSettings(){ if (window.Sala) Sala.settings(); $('#dirPick').hidden = !wide(); $('#dirPick').parentNode.style.gridTemplateColumns = wide() ? '' : '1fr'; libTable(); renderChars(); trSettings(); if (window.Bestiario) Bestiario.settings(); openSheet('settingsSheet'); }
+  function openSettings(){ if (window.Sala) Sala.settings(); $('#dirPick').hidden = !wide(); $('#dirPick').parentNode.style.gridTemplateColumns = wide() ? '' : '1fr'; libTable(); renderChars(); trSettings(); if (window.Bestiario) Bestiario.settings(); openSheet('settingsSheet'); if (window.Interfaz) Interfaz.home(); }
   function closeSheets(){ $$('.sheet').forEach(function(s){ s.hidden = true; }); }
 
   /* ---------- Libro ---------- */
