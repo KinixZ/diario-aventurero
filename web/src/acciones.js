@@ -50,8 +50,30 @@ var Acciones = (function(){
     if (a && b.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.type !== 'checkbox' && b.innerHTML && !render.force) { render.pending = true; return; }
     render.force = false; render.pending = false;
     b.innerHTML = stageHtml(r) + compHtml(r) + feedHtml(r);
+    var cm = document.getElementById('cMine'); if (cm) cm.innerHTML = mineHtml(r);
+  }
+  /* Tu turno, en un solo lugar: lo que te queda, cuatro verbos grandes y un solo «Terminar turno» que dice quién sigue.
+     Fuera de tu turno, lo que te queda (la reacción) y el botón para reaccionar. Vive arriba de la pantalla de combate (#cMine). */
+  function mineHtml(r){
+    if (isDm() || !(r.round > 0) || !r.order.length || r.order.indexOf(r.you) < 0) return '';
+    var me = who(r, r.you); if (!me) return '';
+    var mine = r.turnId === r.you, E = window.Diario && Diario.econ ? Diario.econ() : null, ti = r.order.indexOf(r.turnId), next = null, cur = who(r, r.turnId);
+    for (var k = 1; k <= r.order.length && !next; k++) { var nx = who(r, r.order[(ti + k) % r.order.length]); if (nx && !nx.down) next = nx; }
+    var src = window.Diario && Diario.actions ? Diario.actions() : [], w = src.filter(function(a){ return /^w:/.test(a.key); })[0], sp = src.filter(function(a){ return /^sp:/.test(a.key); });
+    var econ = E ? '<div class="cm-econ" role="group" aria-label="Lo que te queda en el turno">' + [['a','Acción'],['b','Adicional'],['r','Reacción'],['m','Movimiento']].map(function(x){ return '<button type="button" class="e-' + x[0] + '" data-act="econ" data-k="' + x[0] + '" aria-pressed="' + !!E[x[0]] + '" title="' + (E[x[0]] ? 'Ya la usaste: toca para recuperarla' : 'Tócala cuando la uses') + '"><i aria-hidden="true"></i>' + x[1] + '</button>'; }).join('') + '</div>' : '';
+    if (me.down) return '<section class="cs-mine down"><p class="cm-h"><b>Estás a 0 PG</b></p>' + (mine ? '<button class="btn main cm-end" type="button" data-act="actdeath"><svg class="ic"><use href="#i-skull"/></svg>Salvación contra la muerte</button>' : '<p class="note">En tu turno tiras la salvación contra la muerte.</p>') + '</section>';
+    if (!mine) return '<section class="cs-mine wait"><p class="cm-h"><span>Turno de <b>' + esc(cur ? cur.name : '…') + '</b></span>' + (next && next.id === r.you ? '<small>Sigues tú</small>' : '') + '</p>' + econ
+      + '<button class="btn cm-react" type="button" data-act="actopen" data-react="1"><svg class="ic"><use href="#i-shield"/></svg>Reacción u otra acción</button></section>';
+    var verb = function(act, kind, ic, label, sub){ return '<button type="button" class="cm-verb" data-act="' + act + '"' + (kind ? (act === 'csub' ? ' data-v="' : ' data-kind="') + kind + '"' : '') + '><svg class="ic"><use href="#' + ic + '"/></svg><span><b>' + label + '</b><small>' + esc(sub) + '</small></span></button>'; };
+    return '<section class="cs-mine turn"><p class="cm-h"><b>Tu turno</b><small>Ronda ' + r.round + '</small></p>' + econ
+      + '<div class="cm-verbs">' + verb('actopen', 'w', 'i-sword', 'Atacar', w ? w.title + (w.atk ? ' ' + sgn(w.atk.bonus) : '') : 'Sin arma equipada')
+      + verb('actopen', 's', 'i-wand', 'Conjuro', sp.length ? sp.length + ' en tu hoja' : 'Sin conjuros')
+      + verb('csub', 'turno', 'i-flask', 'Usar', 'Objetos y rasgos')
+      + verb('actopen', 'free', 'i-quill', 'Otra acción', 'Esquivar, ayudar…') + '</div>'
+      + '<button class="btn main cm-end hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Terminar turno' + (next ? ' · sigue ' + esc(String(next.name).split(' ')[0]) : '') + '</button></section>';
   }
   /* La cinta de turnos y el turno en grande */
+  function hasMine(){ return !!document.getElementById('cMine') && !isDm(); }
   function stageHtml(r){
     if (!(r.round > 0) || !r.order.length) return '';
     var list = r.order.map(function(id){ return who(r, id); }).filter(Boolean), ti = r.order.indexOf(r.turnId), cur = who(r, r.turnId), dm = isDm(), mine = r.turnId === r.you;
@@ -63,11 +85,11 @@ var Acciones = (function(){
         + '<p class="cs-sub">' + esc(cur.pc ? cur.sub : 'Enemigo') + (cur.ac != null && (cur.pc || dm) ? ' · CA ' + cur.ac : '') + '</p><div class="cs-hpbox">' + hpHtml(cur) + '</div>'
         + (cur.conds.length ? '<div class="cs-conds">' + cur.conds.map(function(k){ return '<span class="chip">' + esc((Sala.COND || {})[k] || k) + '</span>'; }).join('') + '</div>' : '')
         + (next ? '<p class="cs-next">Sigue: <b>' + esc(next.name) + '</b></p>' : '') + '</div>'
-        + '<div class="cs-ctl">' + (dm ? '<button class="icon-btn sm" type="button" data-act="salaturn" data-v="prev" aria-label="Turno anterior"><svg class="ic"><use href="#i-back"/></svg></button>' : '')
+        + '<div class="cs-ctl">' + (dm ? '<button class="btn sm" type="button" data-act="salaturn" data-v="prev"><svg class="ic"><use href="#i-back"/></svg>Anterior</button>' : '')
         + (dm && !cur.pc ? '<button class="btn sm" type="button" data-act="actopen" data-actor="' + attr(cur.id) + '"><svg class="ic"><use href="#i-swords"/></svg>Su acción</button>' : '')
         + (mine && cur.down ? '<button class="btn main sm" type="button" data-act="actdeath"><svg class="ic"><use href="#i-skull"/></svg>Salvación contra la muerte</button>' : '')
-        + (mine && !cur.down ? '<button class="btn sm" type="button" data-act="actopen"><svg class="ic"><use href="#i-swords"/></svg>Mi acción</button>' : '')
-        + (dm || mine ? '<button class="btn main sm" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>' + (mine && !dm ? 'Terminar turno' : 'Siguiente') + '</button>' : '') + '</div></div>';
+        + (mine && !cur.down && !hasMine() ? '<button class="btn sm" type="button" data-act="actopen"><svg class="ic"><use href="#i-swords"/></svg>Mi acción</button>' : '')
+        + (dm || (mine && !hasMine()) ? '<button class="btn main sm" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>' + (mine && !dm ? 'Terminar turno' : 'Siguiente turno' + (next ? ': ' + esc(String(next.name).split(' ')[0]) : '')) + '</button>' : '') + '</div></div>';
     }
     return h + '</section>';
   }
@@ -78,12 +100,15 @@ var Acciones = (function(){
     if (comp.actor && comp.actor !== 'me' && comp.actor !== 'dm') { var x = who(r, comp.actor); return x && x.ref && window.Bestiario && Bestiario.has() ? Bestiario.actionsOf(x.ref) : []; }
     return comp.actor === 'me' && window.Diario && Diario.actions ? Diario.actions() : [];
   }
+  // #actBox puede ir con display:contents (DM en pantalla ancha): entonces no tiene offsetParent propio
+  function shown(){ var b = box(); if (!b) return false; if (b.offsetParent) return true; var p = b.parentElement; return !!(p && p.offsetParent && getComputedStyle(b).display === 'contents'); }
   function open(o){
     var r = room(); if (!r) return; o = o || {};
     // desde el mapa (o desde Mi turno): primero a la escena de combate (salvo desde el abanico, que apunta en el mapa)
-    if (!o.stay && (!box() || !box().offsetParent)) { if ((o.tries = (o.tries || 0) + 1) > 3) return; goCombat(); setTimeout(function(){ open(o); }, 60); return; }
+    if (!o.stay && !shown()) { if ((o.tries = (o.tries || 0) + 1) > 3) return; goCombat(); setTimeout(function(){ open(o); }, 60); return; }
     var dm = isDm(), actor = o.actor || (dm ? (r.turnId && (r.npcs || []).some(function(n){ return n.id === r.turnId; }) ? r.turnId : (r.npcs[0] || {}).id || 'dm') : 'me');
     comp = {actor:actor, comp:'', key:'free', title:'', atkOn:false, bonus:0, k:'n', kSet:false, saveOn:false, ab:'dex', dc:13, half:true, dmg:'', type:'', heal:false, text:'', lv:'', targets:{}, conds:[], repeat:false, conc:false, def:null, area:null, map:null, man:{}};
+    if (!o.key && o.kind && actor === 'me' && (o.kind === 'w' || o.kind === 's')) { var pre = o.kind === 'w' ? /^w:/ : /^sp:/, first = sources(r).filter(function(x){ return pre.test(x.key); })[0]; if (first) o.key = first.key; }
     if (o.key) pick(o.key);
     if (o.target) comp.targets[o.target] = 1;
     if (o.title) { comp.title = o.title; if (o.reaction) comp.text = 'Reacción'; }
@@ -110,6 +135,7 @@ var Acciones = (function(){
     var dm = isDm(), me = r.members.filter(function(m){ return m.id === r.you; })[0] || {};
     if (!comp) {
       if (!r.order.length && !(r.npcs || []).length) return '';
+      if (!dm && hasMine() && r.round > 0 && r.order.indexOf(r.you) >= 0) return '';
       return '<div class="cs-acts"><button class="btn main" type="button" data-act="actopen"><svg class="ic"><use href="#i-swords"/></svg>' + (dm ? 'Acción de un enemigo' : 'Publicar mi acción') + '</button>' + (dm ? '<button class="btn" type="button" data-act="actopen" data-actor="dm"><svg class="ic"><use href="#i-scroll"/></svg>Narrar algo</button>' : '') + '</div>';
     }
     var src = sources(r), groups = {}, order = [];
@@ -327,10 +353,10 @@ var Acciones = (function(){
   document.addEventListener('click', function(ev){
     var b = ev.target.closest && ev.target.closest('[data-act]'); if (!b || b.dataset.act.indexOf('act') !== 0) return;
     var a = b.dataset.act;
-    if (a === 'actopen') open({actor:b.dataset.actor, target:b.dataset.target});
+    if (a === 'actopen') open({actor:b.dataset.actor, target:b.dataset.target, kind:b.dataset.kind, title:b.dataset.react ? '' : undefined});
     else if (a === 'actclose') { comp = null; render.force = true; render(); }
     else if (a === 'actpick') {
-      if (!comp || !box() || !box().offsetParent) { open({key:b.dataset.k}); return; }
+      if (!comp || !shown()) { open({key:b.dataset.k}); return; }
       pick(b.dataset.k); render.force = true; render();
     }
     else if (a === 'actk' && comp) { comp.k = b.dataset.v; comp.kSet = true; render.force = true; render(); }

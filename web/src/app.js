@@ -174,10 +174,30 @@
       $('#hSub').textContent = [D.race && D.race.name, clsTxt].filter(Boolean).join(' · ');
       $('#cvName').textContent = C.name || 'Sin nombre'; $('#cvSub').textContent = D.clsLabel + ' · nivel ' + D.level;
       portraits(C);
+      var r0 = rt(C), hpN = r0.hp == null ? D.hp.max : r0.hp, pc = Math.max(0, Math.min(100, Math.round(hpN / D.hp.max * 100)));
+      var vit = $('#hVit'); vit.hidden = false;
+      vit.innerHTML = '<span class="hv-hp" title="Puntos de golpe"><i style="width:' + pc + '%" class="' + (pc <= 33 ? 'lo' : pc <= 66 ? 'mid' : '') + '"></i></span><b>' + hpN + '</b>/' + D.hp.max + (r0.temp ? ' <em>+' + r0.temp + '</em>' : '') + ' PG<span class="hv-sep">·</span>CA <b>' + D.ac + '</b>';
     } else {
+      $('#hVit').hidden = true;
       $('#hLvl').textContent = '–'; $('#hName').textContent = 'Diario del Aventurero'; $('#hSub').textContent = C ? 'Personaje sin calcular' : 'Sin personaje';
       $('#cvName').textContent = C ? (C.name || 'Sin nombre') : 'Sin personaje'; $('#cvSub').textContent = Lib5e.has() ? '' : 'Carga tu 5etools en Ajustes';
     }
+    headLive();
+  }
+  /* Encabezado recogido: al bajar por las páginas se vuelve una barra fina */
+  var headFold = false;
+  function headScroll(){
+    var sc = $('#scroll'), hd = $('#head'); if (!sc || !hd) return;
+    var y = sc.scrollTop, on = headFold ? y > 24 : y > 64;
+    if (on !== headFold) { headFold = on; hd.classList.toggle('fold', on); }
+  }
+  function headLive(){ var l = $('#hLive'); if (l) l.hidden = !inRoom(); }
+  var headWired = false;
+  function headWire(){
+    if (headWired) return; headWired = true;
+    var sc = $('#scroll'); if (sc) sc.addEventListener('scroll', headScroll, {passive:true});
+    if (window.Sala) ['state','joined','left','live','redraw'].forEach(function(ev){ Sala.on(ev, headLive); });
+    headLive();
   }
   function pendingBanner(){
     if (!D.pending.length) return '';
@@ -1323,7 +1343,7 @@
   /* ==================== COMBATE ==================== */
   /* Arriba, fija: tu vida y tus defensas. Abajo, tres partes: Orden (la sala), Mi turno (acciones y armas) y Recursos.
      En el teléfono se ve una a la vez con pestañas; en la laptop, las tres en columnas. */
-  var CSUB = [['orden','Orden'],['turno','Mi turno'],['rec','Recursos']];
+  var CSUB = [['orden','Mesa'],['turno','Acciones'],['rec','Recursos']];
   function inRoom(){ return window.Sala && Sala.status() === 'on' && !!Sala.room(); }
   function myTurnNow(){ var rm = inRoom() && Sala.room(); return !!rm && rm.turnId === rm.you; }
   function combatSub(){ if (!S.cSub) S.cSub = inRoom() ? 'orden' : 'turno'; return S.cSub; }
@@ -1335,7 +1355,6 @@
       + '<div class="vt-mini"><div><b>' + sgn(D.init) + '</b><small>inic.</small></div><div><b>' + D.speed.replace(' m', '') + '<i> m</i></b><small>vel.</small></div></div></div>';
     if (S.hpOpen) h += '<form class="hp-form vt-form" id="hpForm"><input id="hpIn" class="field" inputmode="numeric" autocomplete="off" placeholder="Lo que sacaste" aria-label="Resultado de tus dados"><button class="btn dmg" type="submit" data-sign="-1">Daño</button><button class="btn heal" type="submit" data-sign="1">Curar</button><button class="btn" type="submit" data-sign="0">Temp.</button></form><p class="err" id="hpErr" hidden>Escribe un número primero.</p><div class="quick vt-quick"><button type="button" class="m" data-act="hp" data-v="-5">−5</button><button type="button" class="m" data-act="hp" data-v="-1">−1</button><button type="button" class="p" data-act="hp" data-v="1">+1</button><button type="button" class="p" data-act="hp" data-v="5">+5</button></div>';
     var chips = [];
-    if (myTurnNow()) chips.push('<span class="vt-turn">Tu turno · ronda ' + Sala.room().round + '</span>');
     if (r.conc) { var cs = R.findSpell(r.conc); chips.push('<span class="vt-chip conc"><svg class="ic"><use href="#i-star"/></svg>' + (cs ? spellLink(cs).replace('class="ref"', 'class="ref" style="color:inherit"') : esc(r.conc)) + ' <small>CD ' + (r.concDc || 10) + ' si te dañan</small><button type="button" data-act="endconc" aria-label="Terminar concentración">×</button></span>'); }
     (r.conds || []).forEach(function(k){ chips.push('<button type="button" class="vt-chip cond" data-act="condoff" data-v="' + attr(k) + '" aria-label="Quitar ' + attr(COND_ES[k] || k) + '">' + esc(COND_ES[k] || k) + ' ×</button>'); });
     if (r.exh) chips.push('<span class="vt-chip exh" title="Reglas 2024: −2 a las tiradas d20 y −1,5 m de velocidad por nivel">Cansancio ' + r.exh + ' <small>−' + 2 * r.exh + ' al d20</small></span>');
@@ -1369,7 +1388,8 @@
     var ir = inRoom(); if (ir && !combatHead.was) S.cSub = 'orden'; combatHead.was = ir;
     var C = cur(), sub = combatSub(), cb = $('#combat'), mine = myTurnNow();
     cb.setAttribute('data-sub', sub); cb.classList.toggle('my-turn', mine);
-    $('#cSub').innerHTML = CSUB.map(function(x){ return '<button type="button" role="tab" data-act="csub" data-v="' + x[0] + '" aria-selected="' + (sub === x[0]) + '">' + x[1] + (x[0] === 'turno' && mine ? '<i class="dot" aria-label="Es tu turno"></i>' : '') + (x[0] === 'orden' && inRoom() ? '<small>' + esc(Sala.room().code) + '</small>' : '') + '</button>'; }).join('');
+    $('#cSub').innerHTML = CSUB.map(function(x){ return '<button type="button" role="tab" data-act="csub" data-v="' + x[0] + '" aria-selected="' + (sub === x[0]) + '">' + x[1] + (x[0] === 'turno' && mine ? '<i class="dot" aria-label="Es tu turno"></i>' : '') + '</button>'; }).join('');
+    var R = inRoom() && window.Sala && Sala.room(); cb.setAttribute('data-fight', R && R.round > 0 ? 'on' : '');
     var typing = document.activeElement && document.activeElement.id === 'hpIn';
     if (!typing) $('#cVitals').innerHTML = C && D && D.ok ? vitalsHtml(C, rt(C)) : '';
     return C && D && D.ok;
@@ -2056,7 +2076,7 @@
       return idbSet('lib', lib).then(function(ok){ prog.textContent = prog.textContent.replace('Guardando en este dispositivo…', ok ? 'Guardado en este dispositivo.' : 'No se pudo guardar; tendrás que cargarlo de nuevo la próxima vez.'); return true; });
     }).then(function(ok){ if (ok) afterLib(); }).catch(function(e){ prog.textContent = 'El teléfono se quedó sin memoria al leerlo (' + (e && e.message || 'error') + '). Cierra otras apps e inténtalo otra vez.'; });
   }
-  function afterLib(){ libReady = true; setTimeout(function(){ if (window.Sala) Sala.resume(); }, 0); if (Lib5e.has() && !S.chars.length) { var s = sampleChar(); S.chars.push(s); S.active = s.id; } libTable(); render(false); renderGrim(); }
+  function afterLib(){ libReady = true; headWire(); setTimeout(function(){ if (window.Sala) Sala.resume(); }, 0); if (Lib5e.has() && !S.chars.length) { var s = sampleChar(); S.chars.push(s); S.active = s.id; } libTable(); render(false); renderGrim(); }
   $('#fileIn').addEventListener('change', function(){ importFiles(this.files, false); this.value = ''; });
   $('#dirIn').addEventListener('change', function(){ importFiles(this.files, true); this.value = ''; });
   $('#fileIn').addEventListener('click', function(){ $('#libProgress').textContent = 'Elige el archivo diario-5e.json…'; });

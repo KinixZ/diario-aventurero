@@ -1,0 +1,170 @@
+/* ==================== COMBATE Y NAVEGACIÓN (módulo 14) ====================
+   · Tu turno en un solo lugar (#cMine): lo que te queda, cuatro verbos grandes y un solo «Terminar turno».
+   · Sin repetir: la escena no vuelve a poner «Mi acción»/«Terminar turno», y en pleno combate el jugador no ve la
+     tarjeta de la sala (la cinta de iniciativa ya dice el orden).
+   · Teléfono en vertical: las secciones de la campaña abajo, al alcance del pulgar.
+   · Teléfono acostado: un riel a la izquierda y el combate en columnas (tú | la mesa).
+   · Laptop del DM: iniciativa | el turno de ahora | lo que pasó. */
+
+/* ---------- Tu turno ---------- */
+.c-mine:empty{display:none}
+.c-mine{padding:10px 12px 0}
+.cs-mine{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:14px;background:var(--parch-2);border:1px solid var(--rule)}
+.cs-mine.turn{border:2px solid var(--gold);box-shadow:0 0 0 3px color-mix(in srgb, var(--gold-hi) 14%, transparent)}
+.cs-mine.down{border:2px solid var(--bad)}
+.cm-h{margin:0;display:flex;align-items:baseline;gap:8px;justify-content:space-between}
+.cm-h b{font-family:var(--display);font-weight:600;font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-hi)}
+.cs-mine.wait .cm-h b{font-family:var(--body);letter-spacing:0;text-transform:none;font-size:16px;color:var(--on-dark)}
+.cm-h small{font-size:13px;color:var(--on-dark-2)}
+.cm-econ{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.cm-econ button{height:40px;display:flex;align-items:center;justify-content:center;gap:5px;border-radius:10px;border:1px solid var(--rule);background:transparent;color:var(--on-dark);font-family:var(--body);font-size:14px;font-weight:600;min-width:0;padding:0 4px}
+.cm-econ button i{width:11px;height:11px;flex:none;display:inline-block}
+.cm-econ .e-a{border-color:#3f6b3a;background:rgba(95,155,85,.14)} .cm-econ .e-a i{border-radius:50%;background:#5f9b55}
+.cm-econ .e-b{border-color:#8a5a2a;background:rgba(208,138,58,.14)} .cm-econ .e-b i{background:#d08a3a;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.cm-econ .e-r{border-color:#5a4a7a;background:rgba(169,138,216,.14)} .cm-econ .e-r i{background:#a98ad8;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.cm-econ .e-m{border-color:#2f5d8a;background:rgba(95,155,232,.14)} .cm-econ .e-m i{background:#6fa8e0;border-radius:2px}
+.cm-econ button[aria-pressed="true"]{opacity:.42;text-decoration:line-through;background:transparent}
+.cm-verbs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cm-verb{min-height:62px;display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:12px;border:1px solid var(--rule);background:var(--parch-3);color:var(--on-dark);text-align:left;font-family:var(--body);min-width:0}
+.cm-verb .ic{width:26px;height:26px;flex:none;color:var(--gold-hi)}
+.cm-verb span{display:flex;flex-direction:column;min-width:0}
+.cm-verb b{font-size:17px;font-weight:600}
+.cm-verb small{font-size:13px;color:var(--on-dark-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cm-verb:hover{border-color:var(--gold)}
+.cm-end{width:100%;min-height:48px;font-size:17px}
+.cm-react{width:100%}
+
+/* ---------- Sin repetir ---------- */
+.combat[data-fight="on"] .c-top{position:static;box-shadow:none}
+.combat[data-fight="on"] .sala-myturn{display:none}
+.combat[data-fight="on"]:not(.dm-mode) #salaBox .sala:not(:has(.sala-initf)){display:none}
+.combat[data-fight="on"]:not(.dm-mode) #salaBox .sala:has(.sala-initf) > :not(.sala-initf):not(.sala-h){display:none}
+
+/* ---------- Teléfono en vertical: las secciones abajo ---------- */
+@media (max-width:899px) and (orientation:portrait){
+  .combat > .mesa-tabs{order:99;border-bottom:0;border-top:1px solid var(--rule);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--hud-top,#2a1714)}
+  .combat > .mesa-tabs button{min-height:56px}
+  .combat > .mesa-tabs button[aria-selected="true"]{box-shadow:inset 0 3px 0 var(--gold-hi)}
+  .combat > .combat-h{padding-top:max(6px,env(safe-area-inset-top,0px));padding-bottom:6px}
+  .combat > .combat-h h2{font-size:17px}
+  .combat .sala-toast{top:auto;bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+}
+
+/* ---------- Teléfono acostado: riel a la izquierda y columnas ---------- */
+@media (orientation:landscape) and (max-height:520px){
+  .combat:not([hidden]):not(.map-full){display:grid;grid-template-columns:70px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+  .app .combat:not(.map-full) > .combat-h{grid-column:1/-1;padding:3px 10px;min-height:0}
+  .combat:not(.map-full) > .combat-h h2{font-size:16px}
+  .combat:not(.map-full) > .combat-h .icon-btn{width:38px;height:38px}
+  .combat:not(.map-full) > .mesa-tabs{grid-row:2;grid-column:1;display:flex;flex-direction:column;overflow-y:auto;border-bottom:0;border-right:1px solid var(--rule)}
+  .combat:not(.map-full) > .mesa-tabs button{flex:0 0 auto;min-width:0;min-height:54px;padding:4px 2px;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;letter-spacing:0}
+  .combat:not(.map-full) > .mesa-tabs button .ic{width:20px;height:20px}
+  .combat:not(.map-full) > .mesa-tabs button[aria-selected="true"]{box-shadow:inset 3px 0 0 var(--gold-hi);background:rgba(217,184,102,.08)}
+  .combat:not(.map-full) > .mesa-p,.combat:not(.map-full) > .combat-b{grid-row:2;grid-column:2;min-height:0}
+  .combat[data-tab="combate"]:not(.map-full) > .combat-b{display:grid;grid-template-columns:minmax(300px,44%) minmax(0,1fr);overflow:hidden;padding:0}
+  .combat[data-tab="combate"] .c-top{overflow-y:auto;border-bottom:0;border-right:2px solid var(--gold);position:static;padding-bottom:10px}
+  .combat[data-tab="combate"] .c-grid{overflow-y:auto;padding:10px 12px 20px;min-height:0}
+  .cm-verbs{gap:6px}
+  .cm-verb{min-height:46px;padding:6px 10px;gap:8px}
+  .cm-verb .ic{width:22px;height:22px}
+  .cm-verb b{font-size:16px}
+  .cm-verb small{display:none}
+  .cm-econ{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+  .cm-econ button{height:32px;font-size:13px}
+  .cm-end{min-height:44px;font-size:16px}
+  .c-mine{padding:8px 10px 0}
+  .cs-mine{gap:8px;padding:10px}
+  /* la escena a la derecha, más compacta: la cinta y el turno en una tarjeta baja */
+  .combat[data-tab="combate"] .cs-big .cs-pic{width:64px;height:64px;font-size:22px}
+  .combat[data-tab="combate"] .cs-turn h2{font-size:20px}
+  .combat .sala-toast{left:calc(50% + 35px)}
+}
+
+/* ---------- Laptop del DM: iniciativa | el turno de ahora | lo que pasó ---------- */
+@media (min-width:1100px){
+  .combat.dm-mode .c-orden{display:grid!important;grid-template-columns:330px minmax(0,1fr) 340px;align-items:start;gap:16px}
+  .combat.dm-mode .c-orden > #salaBox{grid-column:1;grid-row:1 / span 3}
+  .combat.dm-mode .c-orden > #actBox{display:contents}
+  .combat.dm-mode #actBox > .cs-stage,.combat.dm-mode #actBox > .cs-acts,.combat.dm-mode #actBox > .cs-comp{grid-column:2}
+  .combat.dm-mode #actBox > .cs-feed{grid-column:3;grid-row:1 / span 3;max-height:calc(100vh - 140px);overflow-y:auto;position:sticky;top:0}
+  .combat.dm-mode .c-orden::before{display:none}
+}
+
+/* el DM: la lista de la sala en una sola columna y sin los botones de turno repetidos (están en la escena) */
+.combat[data-fight="on"] .sala-dm [data-act="salaturn"]{display:none}
+@media (min-width:1100px){
+  .combat.dm-mode #salaBox .sala-list{display:flex!important;flex-direction:column;gap:8px}
+  .combat.dm-mode #salaBox .sala-row{width:auto;max-width:none}
+}
+
+/* ===== Encabezado del libro (módulo 14) ===== */
+.head{transition:padding .22s ease;z-index:3}
+.h-acts{display:flex;align-items:center;gap:6px;flex:none}
+.h-pill{position:relative;height:40px;display:inline-flex;align-items:center;gap:6px;padding:0 11px;border-radius:var(--r-ctl,6px);border:1px solid var(--gild-lo,var(--rule));background:var(--parch-3);color:var(--ink);font-family:var(--display);font-size:12px;letter-spacing:.05em;cursor:pointer}
+.h-pill .ic{width:18px;height:18px}
+.h-pill.war{background:var(--enamel-grad,var(--oath));color:var(--on-accent);border-color:var(--gild,var(--gold))}
+.h-live{position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 2px var(--parch),0 0 8px var(--ok)}
+.h-close{width:40px;height:40px}
+.h-vit{display:flex;align-items:center;gap:5px;margin-top:4px!important;font-family:var(--display);font-size:11px!important;color:var(--ink-2)}
+.h-vit b{color:var(--ink);font-size:12px}
+.h-vit em{font-style:normal;color:var(--ok)}
+.hv-hp{width:58px;height:6px;border-radius:3px;background:color-mix(in srgb,var(--ink) 15%,transparent);overflow:hidden;flex:none}
+.hv-hp i{display:block;height:100%;background:var(--ok);transition:width .3s}
+.hv-hp i.mid{background:var(--warn)} .hv-hp i.lo{background:var(--bad)}
+.hv-sep{opacity:.5}
+/* Teléfono vertical: las píldoras se quedan en icono para dejar sitio al nombre */
+@media (max-width:519px){
+  .h-pill{width:40px;padding:0;justify-content:center}
+  .h-pill span{display:none}
+  .head{gap:7px;padding:12px 10px 10px}
+  .who h1{font-size:21px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .who p#hSub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+/* Recogido al desplazar: barra fina con medallón, nombre y PG */
+.head.fold{padding-top:6px;padding-bottom:6px}
+.head.fold .lvl{width:36px!important;height:36px!important}
+.head.fold .lvl b{font-size:15px}
+.head.fold .lvl > span:last-child{display:none}
+.head.fold .who h1{font-size:17px!important}
+.head.fold #hSub{display:none}
+.head.fold .h-vit{margin-top:1px!important}
+.head.fold .h-pill,.head.fold .h-close{height:34px}
+.head.fold .h-pill{width:auto} 
+@media (max-width:519px){.head.fold .h-pill,.head.fold .h-close{width:34px}}
+
+/* ===== Libro en horizontal (teléfono tumbado): lomo a la izquierda + separadores a la derecha ===== */
+@media (orientation:landscape) and (max-height:520px) and (max-width:1099px){
+  .app:not(.camp-wide) .book{flex-direction:row;top:4px;bottom:4px}
+  .app:not(.camp-wide) .page-right{display:grid;grid-template-columns:200px minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+  .app:not(.camp-wide) .head{flex-direction:column;align-items:stretch;justify-content:flex-start;gap:8px;padding:12px 10px;border-bottom:0;border-right:3px double var(--gold);overflow-y:auto;background:color-mix(in srgb,var(--parch-2) 70%,transparent)}
+  .app:not(.camp-wide) .head::after{display:none}
+  .app:not(.camp-wide) .head .lvl{align-self:center;width:64px!important;height:64px!important}
+  .app:not(.camp-wide) .who{text-align:center;flex:none}
+  .app:not(.camp-wide) .who h1{font-size:20px!important;white-space:normal}
+  .app:not(.camp-wide) .h-vit{justify-content:center;flex-wrap:wrap}
+  .app:not(.camp-wide) .h-acts{flex-direction:column;align-items:stretch;margin-top:auto;gap:6px}
+  .app:not(.camp-wide) .h-pill{width:auto;justify-content:flex-start;padding:0 10px}
+  .app:not(.camp-wide) .h-pill span{display:inline}
+  .app:not(.camp-wide) .h-close{width:auto}
+  .app:not(.camp-wide) .head.fold{padding:12px 10px}
+  .app:not(.camp-wide) .head.fold #hSub{display:block}
+  .app:not(.camp-wide) .scroll{grid-column:2}
+  .app:not(.camp-wide) .ribbons{flex-direction:column;display:flex;width:64px;height:auto;gap:3px;padding-right:env(safe-area-inset-right,0px)}
+  .app:not(.camp-wide) .ribbon{flex:1;min-height:0;height:auto!important;width:64px!important;clip-path:polygon(0 0,100% 0,100% 100%,0 100%,10% 50%);padding:0 0 0 6px}
+  .app:not(.camp-wide) .ribbon[aria-pressed="true"]{transform:translateX(-6px)}
+  .app:not(.camp-wide) .ribbon span{font-size:10px}
+}
+.h-vit{white-space:nowrap;overflow:hidden}
+@media (max-width:519px){
+  .hv-hp{width:40px}
+  .h-acts{gap:5px}
+  .h-pill,.h-close{width:38px!important;height:38px}
+  .head .lvl{width:56px;height:56px}
+}
+.h-close span{display:none}
+@media (orientation:landscape) and (max-height:520px) and (max-width:1099px){
+  .app:not(.camp-wide) .h-close{display:flex;gap:6px;justify-content:flex-start;padding:0 10px;font-family:var(--display);font-size:12px;letter-spacing:.05em}
+  .app:not(.camp-wide) .h-close span{display:inline}
+  .app:not(.camp-wide) .ribbon span{font-size:9px;letter-spacing:0}
+}
+@media (max-width:419px){.cm-econ button{font-size:13px;padding-left:4px;padding-right:4px;gap:4px}}
