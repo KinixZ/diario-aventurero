@@ -37,13 +37,35 @@ var Interfaz = (function(){
     return '<div class="set-who"><span class="av">' + esc(String(C.name || '?').charAt(0).toUpperCase()) + '</span><span><b>' + esc(C.name || 'Sin nombre') + '</b><small>' + esc(D && D.ok ? D.clsLabel + ' · nivel ' + C.level : 'nivel ' + (C.level || 1)) + '</small></span><button class="btn sm" type="button" data-act="setcat" data-v="personajes">Cambiar</button></div>';
   }
   /* La portada: tu personaje y las categorías */
+  function ver(){ return (window.DIARIO_CONFIG && DIARIO_CONFIG.version) || 'dev'; }
+  /* ¿Hay una versión nueva en el servidor? Un teléfono deja la app abierta días: al volver a ella se pregunta y se ofrece recargar */
+  var lastCheck = 0;
+  function checkUpdate(){
+    var cfg = window.DIARIO_CONFIG || {};
+    if (cfg.artifact || ver() === 'dev' || !/^https?:$/.test(location.protocol) || Date.now() - lastCheck < 60000) return;
+    lastCheck = Date.now();
+    fetch('health', {cache:'no-store'}).then(function(r){ return r.json(); }).then(function(j){
+      if (!j || !j.version || j.version === ver() || document.getElementById('updBar')) return;
+      document.body.insertAdjacentHTML('beforeend', '<div class="upd-bar" id="updBar" role="status"><span>Nueva versión</span><button class="btn main" type="button" data-act="updnow">Actualizar</button><button class="btn quiet" type="button" data-act="updlater">Luego</button></div>');
+    }).catch(function(){});
+  }
+  function updNow(){
+    var go = function(){ location.reload(); };
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) navigator.serviceWorker.getRegistration().then(function(r){ return r && r.update(); }).then(go, go); else go();
+  }
+  document.addEventListener('click', function(ev){
+    var b = ev.target.closest && ev.target.closest('[data-act="updnow"],[data-act="updlater"]'); if (!b) return;
+    if (b.dataset.act === 'updnow') updNow(); else { var u = document.getElementById('updBar'); if (u) u.remove(); }
+  });
+  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') checkUpdate(); });
+  setTimeout(checkUpdate, 4000); setInterval(checkUpdate, 15 * 60000);
   function home(){
     var sh = sheet(); if (!sh) return; cat = null;
     var sc = sh.querySelector('.scroll'); if (!sc) return;
     var box = sh.querySelector('#setHome');
     if (!box) { sc.insertAdjacentHTML('afterbegin', '<div id="setHome"></div>'); box = sh.querySelector('#setHome'); }
     box.hidden = false;
-    box.innerHTML = whoHtml() + '<nav class="set-home" aria-label="Categorías de ajustes">' + CATS.map(function(c){ return catBtn(c); }).join('') + '</nav><nav class="set-home" aria-label="Avanzado">' + catBtn(ADV, true) + '</nav>';
+    box.innerHTML = whoHtml() + '<nav class="set-home" aria-label="Categorías de ajustes">' + CATS.map(function(c){ return catBtn(c); }).join('') + '</nav><nav class="set-home" aria-label="Avanzado">' + catBtn(ADV, true) + '</nav><p class="set-ver">Versión ' + esc(ver()) + '</p>';
     box.style.display = 'flex'; box.style.flexDirection = 'column'; box.style.gap = '16px';
     sh.querySelectorAll('section[data-cat]').forEach(function(s){ s.hidden = true; });
     title('Ajustes', false); sc.scrollTop = 0;
