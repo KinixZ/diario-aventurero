@@ -72,13 +72,14 @@ ok('en modo inglés salen en inglés', await p.evaluate(() => [...document.query
 await p.evaluate(() => Render5e.spMode('es')); await p.evaluate(() => Diario.renderAll()); await p.waitForTimeout(200);
 // --- Rasgos: Suerte con sus puntos ---
 await tab('rasgos');
+ok('la dote sale en español (Suerte)', await p.evaluate(() => [...document.querySelectorAll('#pRasgos .rg-f summary b')].some((b) => b.textContent === 'Suerte')));
 const lucky = await p.evaluate(() => { const rows = [...document.querySelectorAll('#pRasgos .rg-f')].filter((r) => /Lucky|Suerte|Afortunado/i.test(r.querySelector('summary b')?.textContent || '')); const r = rows[0]; return r ? { pips: r.querySelectorAll('.pip').length, pin: !!r.querySelector('.rg-pin') } : null; });
 ok('Suerte tiene sus puntos (bonificador de competencia = 4) y se puede fijar', lucky && lucky.pips === 4 && lucky.pin);
 ok('Manos sanadoras del aasimar también cuenta su uso', await p.evaluate(() => [...document.querySelectorAll('#pRasgos .rg-f')].some((r) => /Healing Hands|Manos sanadoras/i.test(r.textContent) && r.querySelector('.pip'))));
 // fijarla al acceso rápido
 await p.evaluate(() => { const r = [...document.querySelectorAll('#pRasgos .rg-f')].find((r) => /Lucky|Suerte/i.test(r.querySelector('summary b')?.textContent || '')); r.querySelector('.rg-pin').click(); });
 await p.waitForTimeout(300);
-ok('Suerte entra al acceso rápido', await p.evaluate(() => (Diario.quickList() || []).some((q) => q.key === 'f:Lucky' && q.left === 4)));
+ok('Suerte entra al acceso rápido (con su nombre en español)', await p.evaluate(() => (Diario.quickList() || []).some((q) => q.key === 'f:Lucky' && q.left === 4 && q.label === 'Suerte')));
 // gastar un punto desde el acceso rápido
 await p.evaluate(() => Diario.quickUse('f:Lucky')); await p.waitForTimeout(300);
 ok('usarla gasta un punto (quedan 3)', await p.evaluate(() => (Diario.quickList() || []).some((q) => q.key === 'f:Lucky' && q.left === 3)));
