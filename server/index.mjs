@@ -38,7 +38,7 @@ export async function startServer({ port = Number(process.env.PORT) || 8080, hos
   const http = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
     try {
-      if (url.pathname === '/health') { json(res, 200, { ok: true, campaigns: camps.loaded.size, store: store.kind, durable: store.durable, storeError: storeError || undefined, translate: tr.status().enabled }); return; }
+      if (url.pathname === '/health') { json(res, 200, { ok: true, version: (process.env.RENDER_GIT_COMMIT || '').slice(0, 7) || undefined, campaigns: camps.loaded.size, store: store.kind, durable: store.durable, storeError: storeError || undefined, translate: tr.status().enabled }); return; }
       if (url.pathname === '/api/translate') { await handleTranslate(req, res); return; }
       if (url.pathname === '/api/camp') { await handlePeek(res, url); return; }
       if (url.pathname.startsWith('/api/img')) { await handleImage(req, res, url); return; }
