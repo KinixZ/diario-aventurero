@@ -22,7 +22,7 @@ const check = (name, cond) => { console.log((cond ? 'bien ' : 'MAL  ') + name); 
   const sp = A.filter((a) => a.group === 'Conjuros');
   console.log('conjuros:', sp.map((a) => a.title + ' ' + (a.dmg[0] ? a.dmg[0].dice : '')).join(' · '));
   check('conjuros con tirada', sp.length > 0 && sp.every((a) => a.atk || a.save || a.dmg.length));
-  const cw = sp.find((a) => /Cure Wounds/.test(a.title));
+  const cw = sp.find((a) => /Cure Wounds|Curar heridas/.test(a.title));
   if (cw) check('curar heridas: cura con el modificador de Carisma', cw.heal && /^2d8 \+ \d$/.test(cw.dmg[0].dice));
   check('fuego: el truco crece con el nivel (11: 3d10)', X.spellDice('Fire Bolt|XPHB', 0) === '3d10');
   check('bola de fuego a nivel 5: 10d6', X.spellDice('Fireball|XPHB', 5) === '10d6');

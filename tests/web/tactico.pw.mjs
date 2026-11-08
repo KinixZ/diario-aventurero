@@ -93,9 +93,9 @@ await pj.evaluate(() => document.querySelector('.cs-comp [data-act="actaim"]').c
 ok('en el mapa, la barra de apuntar', await has(pj, '.hud-row.aim') && await has(pj, '[data-act="mapaimgo"]'));
 if (out) await pj.screenshot({ path: out + '-apuntar.png' });
 await act(pj, 'mapaimgo');
-ok('la tarjeta del conjuro llega al DM con su zona', await until(dm, () => Acciones._cards().some((k) => k.title === 'Spirit Guardians' && k.fx)));
+ok('la tarjeta del conjuro llega al DM con su zona', await until(dm, () => Acciones._cards().some((k) => (k.title === 'Spirit Guardians' || k.title === 'Guardianes espirituales') && k.fx)));
 ok('la zona queda en el mapa para los dos', await until(pj, (mid) => (Mapas._maps()[mid].fx || []).length === 1, MID) && await until(dm, (mid) => (Mapas._maps()[mid].fx || []).length === 1, MID));
-ok('la concentración queda en la hoja', await until(pj, () => /Spirit Guardians/.test(Diario.rt(Diario.cur()).conc || '')));
+ok('la concentración queda en la hoja', await until(pj, () => /Spirit Guardians|Guardianes espirituales/.test(Diario.rt(Diario.cur()).conc || '')));
 // el lienzo de efectos se pinta en el siguiente cuadro: se mira varias veces
 let painted = 0;
 for (let i = 0; i < 12 && painted <= 20; i++) { await pj.waitForTimeout(250); painted = await pj.evaluate(() => { const c = document.getElementById('mapFx'); if (window.Efectos) Efectos.sync(); const g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 64) if (d[i] > 0) n++; return n; }); }

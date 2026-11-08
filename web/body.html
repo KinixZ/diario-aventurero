@@ -175,6 +175,10 @@
       <div class="sheet-h"><h2 id="quickTitle">Acceso rápido del combate</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="scroll"><p class="note" style="margin-top:0">Marca lo que quieres tener a mano en «Mi turno». Al usarlo se gasta el espacio, la carga o el objeto, y se marca tu acción.</p><div id="quickList" class="q-picks"></div></div>
     </div>
+    <div class="sheet" id="ctrSheet" hidden role="dialog" aria-labelledby="ctrTitle">
+      <div class="sheet-h"><h2 id="ctrTitle">Usos</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll"><div id="ctrBody"></div></div>
+    </div>
     <div class="sheet" id="bestSheet" hidden role="dialog" aria-labelledby="bestTitle">
       <div class="sheet-h"><h2 id="bestTitle">Bestiario</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="scroll"><div id="bestBody"></div></div>
@@ -191,6 +195,11 @@
           </div>
           <p class="note" id="charMsg" style="margin:6px 0 0">Para pasarlos a otro dispositivo o a la web del grupo: exporta aquí e importa allá.</p>
           <textarea class="field" id="charText" rows="4" hidden aria-label="Personajes como texto" style="margin-top:8px;width:100%;font-family:monospace;font-size:12px"></textarea>
+        </section>
+        <section data-cat="idioma">
+          <span class="label">nombres de los conjuros</span>
+          <p style="margin:6px 0 0;font-size:15px">El diario trae los nombres de los conjuros en español. Si en la mesa los dicen en inglés, puedes verlos así o con los dos.</p>
+          <div class="seg" id="spNameSeg" role="group" aria-label="Nombres de los conjuros" style="margin-top:8px"><button type="button" data-act="spname" data-v="es">Español (y el inglés chico)</button><button type="button" data-act="spname" data-v="only">Solo español</button><button type="button" data-act="spname" data-v="en">En inglés</button></div>
         </section>
         <section data-cat="idioma">
           <span class="label">traducción al español</span>
