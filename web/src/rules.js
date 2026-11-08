@@ -573,6 +573,21 @@ var Rules5e = (function(){
         D.resources.push({key:N(name), label:RES_ES[N(name)] || name, max: typeof v === 'number' ? v : null, text: typeof v === 'number' ? null : String(v), rest: SHORT_REST.test(N(name)) ? 'short' : 'long'});
       });
     }); });
+    /* ---------- Usos limitados leídos del texto (Suerte, rasgos de especie y de subclase, dotes…) ---------- */
+    D.features.forEach(function(f){
+      if (f.hb || !f.e) return; var k = N(f.name);
+      if (D.resources.some(function(x){ return x.key === k; }) || NO_USES.test(k)) return;
+      var u = usesOf(f.e, D); if (u) D.resources.push({key:k, label:RES_ES[k] || f.name, max:u.max, rest:u.rest, auto:true, how:u.how});
+    });
+    /* ---------- Contadores que puso el jugador o ajustes a los automáticos (C.ctr) ---------- */
+    var ctr = C.ctr || {};
+    Object.keys(ctr).forEach(function(k){
+      var o = ctr[k] || {}, ix = -1; D.resources.forEach(function(x, i){ if (x.key === k) ix = i; });
+      if (o.off) { if (ix >= 0) D.resources.splice(ix, 1); return; }
+      var mx = ctrMax(o.max, D); if (!mx) return;
+      var it = {key:k, label:o.label || (ix >= 0 ? D.resources[ix].label : k), max:mx, rest:o.rest || 'long', custom:true, how:ctrHow(o.max)};
+      if (ix >= 0) D.resources[ix] = it; else D.resources.push(it);
+    });
     if (featNames.indexOf('lay on hands') >= 0) D.resources.push({key:'lay on hands', label:'Imponer manos', pool:5 * (D.clsLv.paladin || lvl)});
     if (featNames.indexOf('bardic inspiration') >= 0 && !D.resources.some(function(r){ return /bard/.test(r.key); })) D.resources.push({key:'bardic inspiration', label:'Inspiración bárdica', max:Math.max(1, D.mod.cha)});
     if (featNames.indexOf('celestial revelation') >= 0) D.resources.push({key:'celestial revelation', label:'Revelación celestial', max:1});
@@ -671,6 +686,34 @@ var Rules5e = (function(){
 
 
   /* ---------- Coste de acción a partir del texto (inglés de 5etools) ---------- */
+  /* Usos limitados a partir del texto de un rasgo: «a number of times equal to your Proficiency Bonus», «Luck Points»,
+     «Once you use this feature, you can't do so again until you finish a Long Rest», «equal to your Charisma modifier»… */
+  var NO_USES = /^(spellcasting|pact magic|ability score improvement|epic boon|fighting style|weapon mastery|extra attack|eldritch invocations|metamagic)$/;
+  var NUMW = {once:1, one:1, twice:2, two:2, three:3, 'three times':3, four:4, five:5};
+  var ABW = {strength:'str', dexterity:'dex', constitution:'con', intelligence:'int', wisdom:'wis', charisma:'cha'};
+  function usesOf(e, D){
+    var t = JSON.stringify(e.entries || []).replace(/\{@\w+ ([^}]*)\}/g, function(_, b){ var p = b.split('|'); return p[2] || p[0]; }).replace(/\\"/g, '"').replace(/\s+/g, ' ');
+    if (t.length > 6000) t = t.slice(0, 6000);
+    var rest = /short or long rest/i.test(t) ? 'short' : /long rest|\bdawn\b/i.test(t) ? 'long' : /short rest/i.test(t) ? 'short' : null;
+    var m;
+    if (/luck points? equal to your proficiency bonus/i.test(t)) return {max:D.pb, rest:'long', how:'pb'};
+    if ((m = /you have (\d+|three|two|one) luck points/i.exec(t))) return {max:+m[1] || NUMW[m[1].toLowerCase()], rest:'long', how:'n'};
+    if (!rest) return null;
+    if (/(?:a )?number of times equal to (?:twice )?your proficiency bonus/i.test(t)) return {max:/twice your proficiency/i.test(t) ? 2 * D.pb : D.pb, rest:rest, how:'pb'};
+    if ((m = /(?:number of times|uses?) equal to your (strength|dexterity|constitution|intelligence|wisdom|charisma) modifier/i.exec(t))) return {max:Math.max(1, D.mod[ABW[m[1].toLowerCase()]] || 0), rest:rest, how:'mod:' + ABW[m[1].toLowerCase()]};
+    if (/once (?:you|the \w+|it) uses? this|(?:once|after) you (?:do so|use it)|you can't (?:use (?:it|this)|do so) again until you finish|can't (?:use|cast) (?:it|this|that spell|either spell)(?: again)?(?: in this way)?(?: again)? until you finish|can't do so again until (?:he or she|they|it) finish|once without (?:expending )?a spell slot/i.test(t)) return {max:1, rest:rest, how:'n'};
+    if ((m = /you can (?:use|do) (?:this|it|so)[^.]{0,40}?\b(once|twice|three times)\b/i.exec(t))) return {max:NUMW[m[1].toLowerCase()], rest:rest, how:'n'};
+    return null;
+  }
+  /* max de un contador: número, 'pb' (bonificador de competencia) o 'mod:cha' (mínimo 1) */
+  function ctrMax(v, D){
+    if (typeof v === 'number') return Math.max(0, Math.min(99, Math.round(v)));
+    if (v === 'pb') return D.pb;
+    if (typeof v === 'string' && v.indexOf('mod:') === 0) return Math.max(1, D.mod[v.slice(4)] || 0);
+    if (typeof v === 'string' && /^\d+$/.test(v)) return Math.min(99, +v);
+    return 0;
+  }
+  function ctrHow(v){ return v === 'pb' || (typeof v === 'string' && v.indexOf('mod:') === 0) ? v : 'n'; }
   var SHORT_REST = /^(channel divinity|second wind|focus points|ki points|superiority dice|wild shape|action surge|warlock slots|bardic inspiration)$/;
   function costOf(txt){
     var t = String(txt || '').replace(/\{@\w+ ([^|}]*)[^}]*\}/g, '$1');
@@ -719,5 +762,5 @@ var Rules5e = (function(){
     return {items:out, gold:gold};
   }
 
-  return {costOf:costOf, spellCost:spellCost, hbAbility:hbAbility, mcReq:mcReq, MC_SLOTS:MC_SLOTS, srcName:srcName, srcLabel:srcLabel, spellHasClass:spellHasClass, DT:DT, hbData:hbData, ABS:ABS, AB:AB, ABL:ABL, SK:SK, SKES:SKES, STEPS:STEPS, mod:mod, sgn:sgn, strip:strip, derive:derive, classes:classes, subclassesOf:subclassesOf, featRefs:featRefs, spellsMatching:spellsMatching, filterLabel:filterLabel, spellGrants:spellGrants, findSpell:findSpell, featPrereq:featPrereq, startingItems:startingItems, abilitySpec:abilitySpec, altLabel:altLabel, edition:edition, byRef:byRef, subclassLevel:subclassLevel, eqItems:eqItems};
+  return {usesOf:usesOf, ctrMax:ctrMax, costOf:costOf, spellCost:spellCost, hbAbility:hbAbility, mcReq:mcReq, MC_SLOTS:MC_SLOTS, srcName:srcName, srcLabel:srcLabel, spellHasClass:spellHasClass, DT:DT, hbData:hbData, ABS:ABS, AB:AB, ABL:ABL, SK:SK, SKES:SKES, STEPS:STEPS, mod:mod, sgn:sgn, strip:strip, derive:derive, classes:classes, subclassesOf:subclassesOf, featRefs:featRefs, spellsMatching:spellsMatching, filterLabel:filterLabel, spellGrants:spellGrants, findSpell:findSpell, featPrereq:featPrereq, startingItems:startingItems, abilitySpec:abilitySpec, altLabel:altLabel, edition:edition, byRef:byRef, subclassLevel:subclassLevel, eqItems:eqItems};
 })();

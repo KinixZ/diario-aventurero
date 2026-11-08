@@ -1,0 +1,20 @@
+/* ===== Módulo 16: filtros de conjuros, nombres en español, contar usos ===== */
+.viewseg .sp-fbtn{margin-left:auto;flex:none}
+.viewseg .sp-fbtn.on{background:var(--oath);color:var(--on-accent);border-color:var(--gild,var(--gold))}
+.viewseg{flex-wrap:wrap;row-gap:8px}
+.viewseg .spq{flex:1 1 160px;min-width:0}
+.sp-filters{display:flex;flex-direction:column;gap:12px;padding:12px 14px;margin:10px 0}
+.sp-fg .label{display:block;margin-bottom:6px}
+.sp-chips{display:flex;flex-wrap:wrap;gap:6px}
+.sp-chip{min-height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--rule);background:var(--parch-3,transparent);color:var(--ink);font-family:var(--body,inherit);font-size:var(--t-help,14px);cursor:pointer}
+.sp-chip[aria-pressed="true"]{background:var(--oath);color:var(--on-accent);border-color:var(--gild,var(--gold));font-weight:600}
+.sp-count{margin:6px 2px 10px;font-size:var(--t-help,14px);color:var(--ink-2);font-style:italic}
+.linkbtn{background:none;border:0;padding:0;color:var(--oath);font:inherit;font-style:normal;text-decoration:underline;cursor:pointer}
+.sp-en{display:block;font-family:var(--body,inherit);font-size:12px;font-style:italic;font-weight:400;color:var(--ink-3,var(--ink-2));letter-spacing:0;text-transform:none;opacity:.85;margin-top:1px}
+.ctr-form{display:flex;flex-direction:column;gap:14px}
+.ctr-form .fld{display:flex;flex-direction:column;gap:6px}
+.ctr-form .fld > span{font-family:var(--display);font-size:var(--t-sec,13px);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.ctr-form .seg{display:flex;flex-wrap:wrap;gap:6px}
+.ctr-form .seg button{min-height:38px;padding:0 12px;border-radius:999px;border:1px solid var(--rule);background:transparent;color:var(--ink);font:inherit;cursor:pointer}
+.ctr-form .seg button[aria-pressed="true"]{background:var(--oath);color:var(--on-accent);border-color:var(--gild,var(--gold))}
+.rg-how{align-self:center;font-style:italic}

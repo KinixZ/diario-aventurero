@@ -72,10 +72,10 @@ if (out) await pj.screenshot({ path: out + '-abanico.png' });
 await fan(pj, '^Conjuros'); await pj.waitForTimeout(150);
 ok('los conjuros por nivel, con sus espacios', (await fanLabels(pj)).some((x) => /Nivel 3/.test(x)) && await pj.evaluate(() => /espacios/.test(document.querySelector('.vtt-fan').textContent)));
 await fan(pj, 'Nivel 3'); await pj.waitForTimeout(150);
-await fan(pj, 'Spirit Guardians'); await pj.waitForTimeout(900);
+await fan(pj, 'Spirit Guardians|Guardianes espi'); await pj.waitForTimeout(900);
 ok('un conjuro de área apunta en el mapa', await has(pj, '.hud-row.aim') && await pj.evaluate(() => Mapas.aiming()));
 await act(pj, 'mapaimgo');
-ok('y se publica desde el mapa (con su zona)', await until(dm, () => Acciones._cards().some((k) => /Spirit Guardians/.test(k.title) && k.fx)));
+ok('y se publica desde el mapa (con su zona)', await until(dm, () => Acciones._cards().some((k) => /Spirit Guardians|Guardianes espirituales/.test(k.title) && k.fx)));
 // atacar: elegir al goblin tocándolo
 await tapTok(pj, 6, 6); await fan(pj, '^Atacar'); await pj.waitForTimeout(150); await fan(pj, 'Maza'); await pj.waitForTimeout(900);
 ok('atacar: elige el objetivo en el mapa', await has(pj, '.hud-row.aim'));

@@ -86,7 +86,8 @@
   var mq = window.matchMedia('(min-width: 900px)');
   function wide(){ return mq.matches; }
   function sgn(n){ return R.sgn(n); }
-  function spellLink(e){ return '<a class="ref" data-ref="spell|' + attr(e.name) + '|' + attr(e.source) + '">' + nm(e.name) + '</a>'; }
+  function spNm(n){ return esc(Render5e.spName(n)); }
+  function spellLink(e, en){ var o = en ? Render5e.spEn(e.name) : ''; return '<a class="ref" data-ref="spell|' + attr(e.name) + '|' + attr(e.source) + '">' + spNm(e.name) + '</a>' + (o ? '<small class="sp-en" lang="en">' + esc(o) + '</small>' : ''); }
   function nm(n){ return esc(Render5e.Tname(n)); }
 
   /* ---------- Estilos ---------- */
@@ -243,7 +244,7 @@
     return '<span class="chip">' + esc(t) + '</span><span class="chip">' + esc(rg) + '</span>' + (/Concentración/.test(du) ? '<span class="tag conc">C</span>' : '') + (e.meta && e.meta.ritual ? '<span class="tag cls">R</span>' : '');
   }
   function spellCard(e, tag, tagCls){
-    return '<div class="card light spell gi-card">' + (window.Iconos ? Iconos.spellTile(e) : '') + '<div class="gi-body"><div class="row" style="align-items:baseline"><h3>' + spellLink(e) + '</h3><span class="tag ' + (tagCls || 'cls') + '">' + esc(tag) + '</span></div><div class="chips">' + spellChips(e) + '</div></div></div>';
+    return '<div class="card light spell gi-card">' + (window.Iconos ? Iconos.spellTile(e) : '') + '<div class="gi-body"><div class="row" style="align-items:baseline"><h3>' + spellLink(e, true) + '</h3><span class="tag ' + (tagCls || 'cls') + '">' + esc(tag) + '</span></div><div class="chips">' + spellChips(e) + '</div></div></div>';
   }
   function allSpells(){
     var out = [], seen = {};
@@ -276,19 +277,56 @@
     h += casterTrios();
     h += slotsCard(r);
     h += fullToggle();
-    var total = sp.length;
+    var total = sp.length, F = spFilt();
     h += '<div class="viewseg" role="group" aria-label="Vista de conjuros"><button type="button" data-act="spview" data-v="cards" aria-pressed="' + (S.spView !== 'table') + '">Tarjetas</button><button type="button" data-act="spview" data-v="table" aria-pressed="' + (S.spView === 'table') + '">Tabla</button>'
-      + (total > 24 ? '<input class="field spq" id="spQ" type="search" placeholder="Buscar entre ' + total + '" aria-label="Buscar conjuro" autocomplete="off" value="' + attr(spQ) + '">' : '') + '</div>';
-    if (total > 24 && spQ.trim()) { var qq = N(spQ.trim()); sp = sp.filter(function(x){ return N(x.e.name).indexOf(qq) >= 0; }); }
+      + '<input class="field spq" id="spQ" type="search" placeholder="Buscar entre ' + total + '" aria-label="Buscar conjuro (en español o en inglés)" autocomplete="off" value="' + attr(spQ) + '">'
+      + '<button type="button" class="btn sm sp-fbtn' + (spFN(F) ? ' on' : '') + '" data-act="spfopen" aria-expanded="' + !!S.spFOpen + '">Filtros' + (spFN(F) ? ' · ' + spFN(F) : '') + '</button></div>';
+    if (S.spFOpen) h += spFiltHtml(sp, F);
+    sp = sp.filter(function(x){ return spPass(x.e, F); });
+    if (spQ.trim()) { var qq = N(spQ.trim()); sp = sp.filter(function(x){ return N(x.e.name).indexOf(qq) >= 0 || N(Render5e.Tname(x.e.name)).indexOf(qq) >= 0; }); }
+    if (spFN(F) || spQ.trim()) h += '<p class="sp-count">' + sp.length + ' de ' + total + ' conjuros' + (spFN(F) ? ' · <button type="button" class="linkbtn" data-act="spfclear">Quitar filtros</button>' : '') + '</p>';
     if (S.spView === 'table') { h += spellRowsHtml(sp, {origin:true, act:'spsort', sort:S.spSort || {k:'lv', dir:1}}); h += prepBanners(); $('#pConjuros').innerHTML = h; return; }
     var byLv = {}; sp.forEach(function(x){ (byLv[x.e.level] = byLv[x.e.level] || []).push(x); });
     h += '<div class="spell-grid">' + Object.keys(byLv).sort(function(a, b){ return a - b; }).map(function(lv){
       return '<div class="lvl-sep" style="grid-column:1/-1">— ' + (+lv === 0 ? 'trucos' : 'nivel ' + lv) + ' —</div>' + byLv[lv].sort(function(a, b){ return a.e.name.localeCompare(b.e.name); }).map(function(x){ return spellCard(x.e, x.tag, x.cls); }).join('');
     }).join('') + '</div>';
-    if (!sp.length && spQ) h += '<p class="empty-state">Ningún conjuro se llama así.</p>';
+    if (!sp.length && (spQ || spFN(F))) h += '<p class="empty-state">Ningún conjuro cumple con eso.</p>';
     h += prepBanners();
     $('#pConjuros').innerHTML = h;
     var qi = $('#spQ'); if (qi && spFocus) { qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
+  }
+  /* ---------- Filtros de la página de conjuros (S.spF): dentro de un grupo vale cualquiera; entre grupos, todos ---------- */
+  var SPF_T = [['a','Acción'],['b','Adicional'],['r','Reacción'],['long','Más tiempo']];
+  var SPF_P = [['conc','Concentración'],['rit','Ritual'],['dmg','Hace daño'],['heal','Cura'],['save','Salvación'],['atk','Tirada de ataque'],['free','Puedo lanzarlo ya']];
+  function spFilt(){ var F = S.spF || {}; return {lv:F.lv || [], t:F.t || [], sc:F.sc || [], p:F.p || []}; }
+  function spFN(F){ return F.lv.length + F.t.length + F.sc.length + F.p.length; }
+  function spProp(e, k){
+    if (k === 'conc') return (e.duration || []).some(function(d){ return d.concentration; });
+    if (k === 'rit') return !!(e.meta && e.meta.ritual);
+    if (k === 'dmg') return !!(e.damageInflict && e.damageInflict.length);
+    if (k === 'heal') return (e.miscTags || []).indexOf('HL') >= 0 || /regains? (?:a number of )?(?:\{@\w+ )?hit points/i.test(JSON.stringify(e.entries || []));
+    if (k === 'save') return !!(e.savingThrow && e.savingThrow.length);
+    if (k === 'atk') return !!(e.spellAttack && e.spellAttack.length);
+    if (k === 'free') { if (!e.level) return true; var r = rt(cur()); if (D.slots.some(function(n, i){ return n > 0 && i + 1 >= e.level && (r.slotsUsed[i] || 0) < n; })) return true; return !!(D.pact && D.pact.level >= e.level && (r.pactUsed || 0) < D.pact.count); }
+    return false;
+  }
+  function spPass(e, F){
+    if (F.lv.length && F.lv.indexOf(String(e.level)) < 0) return false;
+    if (F.t.length && F.t.indexOf(R.spellCost(e) || 'long') < 0) return false;
+    if (F.sc.length && F.sc.indexOf(e.school) < 0) return false;
+    if (F.p.length && !F.p.some(function(k){ return spProp(e, k); })) return false;
+    return true;
+  }
+  function spFiltHtml(sp, F){
+    var lvs = {}, scs = {}; sp.forEach(function(x){ lvs[x.e.level] = 1; scs[x.e.school] = 1; });
+    var chip = function(g, v, l){ return '<button type="button" class="sp-chip" data-act="spf" data-g="' + g + '" data-v="' + attr(v) + '" aria-pressed="' + (F[g].indexOf(v) >= 0) + '">' + esc(l) + '</button>'; };
+    var grp = function(t, body){ return '<div class="sp-fg"><span class="label">' + t + '</span><div class="sp-chips">' + body + '</div></div>'; };
+    return '<div class="card sp-filters" role="group" aria-label="Filtros de conjuros">'
+      + grp('Nivel', Object.keys(lvs).sort(function(a, b){ return a - b; }).map(function(l){ return chip('lv', String(l), +l ? 'Nv ' + l : 'Trucos'); }).join(''))
+      + grp('Tiempo de lanzamiento', SPF_T.map(function(t){ return chip('t', t[0], t[1]); }).join(''))
+      + grp('Escuela', Object.keys(scs).sort().map(function(k){ return chip('sc', k, (Render5e.SCHOOL && Render5e.SCHOOL[k]) || k); }).join(''))
+      + grp('Qué hace', SPF_P.map(function(t){ return chip('p', t[0], t[1]); }).join(''))
+      + '</div>';
   }
   var spFocus = false;
   document.addEventListener('input', function(ev){ if (ev.target.id === 'spQ') { spQ = ev.target.value; spFocus = true; renderConjuros(cur()); spFocus = false; } });
@@ -331,7 +369,8 @@
     var line = f.hb ? hbLine(f.hb) : '';
     return '<div class="rg-f' + (cost ? ' act' : x ? ' pinable' : '') + '"><details class="feat-d" data-feat="' + i + '"><summary><span class="rg-t">' + costBadge(cost, true) + '<b>' + nm(f.name) + '</b>' + (f.level ? '<small>nv ' + (D.multi && f.clv ? f.clv : f.level) + '</small>' : '') + '</span>'
       + (line ? '<span class="rg-line">' + line + '</span>' : '') + (txt ? '<span class="rg-s">' + esc(firstSentence(txt)) + '</span>' : '') + '</summary><div class="gtext"></div>'
-      + (f.hb ? '<div class="row rg-hbact"><button class="btn sm" type="button" data-act="abedit" data-id="' + attr(f.hb.id) + '">Editar</button><button class="btn sm" type="button" data-act="abdel" data-id="' + attr(f.hb.id) + '">Borrar</button></div>' : '') + '</details>'
+      + (f.hb ? '<div class="row rg-hbact"><button class="btn sm" type="button" data-act="abedit" data-id="' + attr(f.hb.id) + '">Editar</button><button class="btn sm" type="button" data-act="abdel" data-id="' + attr(f.hb.id) + '">Borrar</button></div>'
+        : x && x.pool ? '' : '<div class="row rg-hbact"><button class="btn sm quiet" type="button" data-act="ctropen" data-n="' + attr(f.name) + '">' + (x ? 'Ajustar usos' : 'Contar usos') + '</button>' + (x && (x.auto || x.custom) ? '<small class="muted rg-how">' + (x.custom ? 'usos puestos por ti' : 'usos leídos del texto') + '</small>' : '') + '</div>') + '</details>'
       + resUse(x, r)
       + (cost || x ? '<button type="button" class="rg-pin" data-act="qtoggle" data-q="' + attr(qk) + '" aria-pressed="' + pinned + '" aria-label="' + (pinned ? 'Quitar del acceso rápido del combate' : 'Poner en el acceso rápido del combate') + '"><svg class="ic"><use href="#i-pin"/></svg></button>' : '')
       + '</div>';
@@ -514,7 +553,7 @@
     var its = items().filter(function(it){ return !it.eq && (it.use || it.k === 'con' || isPotion(it)) && !/ration|torch|raci|antorch/i.test(it.n + ' ' + (it.ref || '')); });
     var h = '';
     if (feats.length) h += '<div class="group-h">Rasgos y habilidades</div>' + feats.map(function(f){ return row(f.hb ? 'hb:' + f.hb.id : 'f:' + f.name, f.name, featCost(f), f.hb ? 'homebrew' : f.from); }).join('');
-    if (sp.length) h += '<div class="group-h">Conjuros</div>' + sp.map(function(x){ return row('sp:' + x.e.name + '|' + x.e.source, x.e.name, R.spellCost(x.e), x.e.level ? 'nivel ' + x.e.level : 'truco'); }).join('');
+    if (sp.length) h += '<div class="group-h">Conjuros</div>' + sp.map(function(x){ return row('sp:' + x.e.name + '|' + x.e.source, Render5e.spName(x.e.name), R.spellCost(x.e), x.e.level ? 'nivel ' + x.e.level : 'truco'); }).join('');
     if (its.length) h += '<div class="group-h">Objetos</div>' + its.map(function(it){ return row('it:' + it.id, it.n + (it.q > 1 ? ' ×' + it.q : ''), itemCost(it), ''); }).join('');
     $('#quickList').innerHTML = h || '<p class="note">Todavía no tienes conjuros, rasgos con acción ni consumibles.</p>';
   }
@@ -525,7 +564,7 @@
       if (lv === 'pact') { if ((r.pactUsed || 0) >= D.pact.count) return; r.pactUsed = (r.pactUsed || 0) + 1; }
       else if (lv) { var i = +lv - 1; if ((r.slotsUsed[i] || 0) >= D.slots[i]) return; r.slotsUsed[i] = (r.slotsUsed[i] || 0) + 1; }
       if ((e.duration || []).some(function(d){ return d.concentration; })) { r.conc = e.name + '|' + e.source; r.concDc = 10; }
-      msg = 'Lanzaste ' + e.name + (lv ? (lv === 'pact' ? ' con tu Pacto' : ' a nivel ' + lv) : '') + '. ' + spellInfo(e);
+      msg = 'Lanzaste ' + Render5e.spName(e.name) + (lv ? (lv === 'pact' ? ' con tu Pacto' : ' a nivel ' + lv) : '') + '. ' + spellInfo(e);
     } else if (t === 'f' || t === 'hb') {
       var f = D.features.filter(function(x){ return t === 'hb' ? x.hb && x.hb.id === v : !x.hb && x.name === v; })[0]; if (!f) return;
       cost = featCost(f); var x = featRes(f);
@@ -550,7 +589,7 @@
     var add = function(k){ if (seen[k]) return; seen[k] = 1; var t = k.slice(0, k.indexOf(':')), v = k.slice(k.indexOf(':') + 1);
       if (t === 'f' || t === 'hb') { var f = D.features.filter(function(x){ return t === 'hb' ? x.hb && x.hb.id === v : !x.hb && x.name === v; })[0]; if (!f) return; var x = featRes(f), left = x && x.max ? x.max - (r.res[x.key] || 0) : null; out.push({key:k, kind:'f', label:f.name, sub:(left != null ? left + ' de ' + x.max : '') + (featCost(f) ? (left != null ? ' · ' : '') + ({a:'acción', b:'adicional', r:'reacción'}[featCost(f)] || '') : ''), cost:featCost(f), left:left}); }
       else if (t === 'it') { var it = itemById(v); if (!it) return; out.push({key:k, kind:'it', label:it.n + (it.q > 1 ? ' ×' + it.q : ''), sub:isPotion(it) ? 'adicional' : 'acción', cost:itemCost(it), icon:it.ic || 'i-flask'}); }
-      else if (t === 'sp') { var e = R.findSpell(v); if (e && !e.level) out.push({key:k, kind:'sp', label:e.name, sub:'truco', cost:R.spellCost(e)}); } };
+      else if (t === 'sp') { var e = R.findSpell(v); if (e && !e.level) out.push({key:k, kind:'sp', label:Render5e.spName(e.name), sub:'truco', cost:R.spellCost(e)}); } };
     quickKeys(r).forEach(add);
     D.features.forEach(function(f){ if (!f.hb && featCost(f) && featRes(f)) add('f:' + f.name); });
     items().forEach(function(it){ if (!it.eq && (it.use || isPotion(it))) add('it:' + it.id); });
@@ -1321,11 +1360,11 @@
       var e = x.e, json = JSON.stringify(e.entries || []), heal = (e.miscTags || []).indexOf('HL') >= 0, dice = spellDice(e, e.level);
       // la definición de efecto (área, zona, estados, concentración); los que no tienen tirada también van, como asistidos
       var H = window.Hechizos ? Hechizos.def(e) : null, key = 'sp:' + e.name + '|' + e.source;
-      if (!(e.spellAttack && e.spellAttack.length) && !(e.savingThrow && e.savingThrow.length) && !dice) { if (H) out.push({key:key, group:'Otros conjuros', title:Render5e.Tname(e.name), lv:e.level || 0, dmg:[], text:'', def:H}); return; }
+      if (!(e.spellAttack && e.spellAttack.length) && !(e.savingThrow && e.savingThrow.length) && !dice) { if (H) out.push({key:key, group:'Otros conjuros', title:Render5e.spName(e.name), lv:e.level || 0, dmg:[], text:'', def:H}); return; }
       var mod = K && heal && /spellcasting ability modifier/i.test(json) ? D.mod[K.ability] : 0;
       var dm = dice ? [{dice:dmgExpr(dice, mod), type:heal ? '' : DMG_EN[(e.damageInflict || [])[0]] || ''}] : [];
       if (H && H.dmg && H.dmg.length > 1 && dice) H.dmg.slice(1).forEach(function(d){ dm.push({dice:d.dice, type:d.type}); });
-      out.push({key:key, group:'Conjuros', title:Render5e.Tname(e.name), lv:e.level || 0,
+      out.push({key:key, group:'Conjuros', title:Render5e.spName(e.name), lv:e.level || 0,
         atk:e.spellAttack && e.spellAttack.length && K ? {bonus:K.atk} : null,
         save:e.savingThrow && e.savingThrow.length && K ? {ab:SAVE_EN[e.savingThrow[0]] || 'dex', dc:K.dc, half:/half as much damage|half damage/i.test(json)} : null,
         dmg:dm, heal:heal, text:'', def:H, melee:H && H.atk === 'melee'});
@@ -1414,7 +1453,7 @@
     var Rc = '<div class="card"><span class="label">recursos de clase</span>' + (res || '<p class="note">Sin recursos con usos limitados.</p>') + '</div>';
     Rc += slotsCard(r);
     var concSp = allSpells().filter(function(x){ return (x.e.duration || []).some(function(d){ return d.concentration; }); });
-    if (!r.conc && concSp.length) Rc += '<div class="card"><label class="label" for="concSel">¿te concentras en un conjuro?</label><select class="field" id="concSel" style="margin-top:6px"><option value="">No me estoy concentrando</option>' + concSp.map(function(x){ return '<option value="' + attr(x.e.name + '|' + x.e.source) + '">' + nm(x.e.name) + '</option>'; }).join('') + '</select></div>';
+    if (!r.conc && concSp.length) Rc += '<div class="card"><label class="label" for="concSel">¿te concentras en un conjuro?</label><select class="field" id="concSel" style="margin-top:6px"><option value="">No me estoy concentrando</option>' + concSp.map(function(x){ return '<option value="' + attr(x.e.name + '|' + x.e.source) + '">' + spNm(x.e.name) + '</option>'; }).join('') + '</select></div>';
     Rc += compSection(true);
     Rc += '<div class="card"><div class="line"><span>Cansancio <small class="muted">−2 al d20 y −1,5 m por nivel</small></span><div class="row"><button class="btn sm" type="button" data-act="exh" data-v="-1" aria-label="Menos cansancio">−</button><span class="num">' + (r.exh || 0) + ' <small class="muted">/ 6</small></span><button class="btn sm" type="button" data-act="exh" data-v="1" aria-label="Más cansancio">+</button></div></div></div>';
     Rc += '<div class="row rest-row"><button class="btn" type="button" data-act="short">Descanso corto</button><button class="btn" type="button" data-act="long">Descanso largo</button></div>';
@@ -1478,7 +1517,7 @@
     rows = rows.map(function(x){ var e = x.e || x, ss = Render5e.spellShort(e); return {e:e, ss:ss, origin:x.tag || '', key:{name:e.name, lv:e.level, time:ss.time, school:ss.school, cr:(ss.conc ? 'C' : '') + (ss.rit ? 'R' : ''), range:ss.range, origin:x.tag || '', src:e.source}}; });
     rows.sort(function(a, b){ var va = a.key[sort.k], vb = b.key[sort.k]; var c = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb)); return (c || a.e.name.localeCompare(b.e.name)) * sort.dir; });
     return '<div class="stable"><table><thead><tr>' + cols.map(function(c){ return '<th scope="col"><button type="button" data-act="' + (opts.act || 'gsort') + '" data-k="' + c[0] + '"' + (sort.k === c[0] ? ' aria-sort="' + (sort.dir > 0 ? 'ascending' : 'descending') + '"' : '') + '>' + c[1] + (sort.k === c[0] ? (sort.dir > 0 ? ' ▲' : ' ▼') : '') + '</button></th>'; }).join('') + '</tr></thead><tbody>'
-      + rows.map(function(r){ var ref = 'spell|' + r.e.name + '|' + r.e.source; return '<tr data-act="gopen" data-ref="' + attr(ref) + '" tabindex="0"><td>' + nm(r.e.name) + '</td><td class="lv">' + (r.e.level || 'T') + '</td><td>' + esc(r.ss.time) + '</td><td>' + esc(r.ss.school) + '</td><td><span class="flags">' + (r.ss.conc ? '<span class="tag conc">C</span>' : '') + (r.ss.rit ? '<span class="tag cls">R</span>' : '') + '</span></td><td>' + esc(r.ss.range) + '</td><td>' + esc(opts.origin ? r.origin : r.e.source) + '</td></tr>'; }).join('')
+      + rows.map(function(r){ var ref = 'spell|' + r.e.name + '|' + r.e.source; return '<tr data-act="gopen" data-ref="' + attr(ref) + '" tabindex="0"><td>' + spNm(r.e.name) + '</td><td class="lv">' + (r.e.level || 'T') + '</td><td>' + esc(r.ss.time) + '</td><td>' + esc(r.ss.school) + '</td><td><span class="flags">' + (r.ss.conc ? '<span class="tag conc">C</span>' : '') + (r.ss.rit ? '<span class="tag cls">R</span>' : '') + '</span></td><td>' + esc(r.ss.range) + '</td><td>' + esc(opts.origin ? r.origin : r.e.source) + '</td></tr>'; }).join('')
       + '</tbody></table></div>';
   }
   function renderGrim(){
@@ -1510,7 +1549,7 @@
     var body;
     if (isSp && G.mode === 'table') body = spellRowsHtml(shown.map(function(r){ return r[1]; }), {sort:G.sort});
     else if (isSp) {
-      var lv = -1; body = '<div class="glist">' + shown.map(function(r){ var e = r[1], h = ''; if (e.level !== lv) { lv = e.level; h += '<div class="group-h" style="margin:12px 0 2px">' + (lv ? 'Nivel ' + lv : 'Trucos') + '</div>'; } var ss = Render5e.spellShort(e); return h + '<button type="button" class="gitem gi-item" data-act="gopen" data-ref="' + attr('spell|' + e.name + '|' + e.source) + '">' + (window.Iconos ? Iconos.spellTile(e, 'sm') : '') + '<b>' + nm(e.name) + '</b><small>' + esc(ss.school.toLowerCase()) + (ss.conc ? ' · C' : '') + (ss.rit ? ' · R' : '') + ' · ' + esc(e.source) + '</small></button>'; }).join('') + '</div>';
+      var lv = -1; body = '<div class="glist">' + shown.map(function(r){ var e = r[1], h = ''; if (e.level !== lv) { lv = e.level; h += '<div class="group-h" style="margin:12px 0 2px">' + (lv ? 'Nivel ' + lv : 'Trucos') + '</div>'; } var ss = Render5e.spellShort(e); return h + '<button type="button" class="gitem gi-item" data-act="gopen" data-ref="' + attr('spell|' + e.name + '|' + e.source) + '">' + (window.Iconos ? Iconos.spellTile(e, 'sm') : '') + '<b>' + spNm(e.name) + '</b><small>' + esc(ss.school.toLowerCase()) + (ss.conc ? ' · C' : '') + (ss.rit ? ' · R' : '') + ' · ' + esc(e.source) + '</small></button>'; }).join('') + '</div>';
     } else body = '<div class="glist">' + shown.map(function(r){ var e = r[1], sub = (r[0] === 'item' || r[0] === 'baseitem') ? Render5e.itemType(e).toLowerCase() + ' · ' : ''; return '<button type="button" class="gitem" data-act="gopen" data-ref="' + attr(r[0] + '|' + e.name + '|' + e.source) + '"><b>' + nm(e.name) + '</b><small>' + esc(sub) + esc(e.source) + '</small></button>'; }).join('') + '</div>';
     grim.innerHTML = (showSecs ? grimSecs() : '<div class="folio"><span>Grimorio · ' + secName + '</span></div>') + fil
       + '<p class="note" style="margin:10px 0 4px">' + total + ' resultados' + (total > cap ? '; se muestran ' + cap + ', afina con los filtros' : '') + '.</p>' + body;
@@ -1528,7 +1567,7 @@
     if (v.type === 'feat') { var cx = featCtx(); if (cx) { var pr = R.featPrereq(e, cx); extra = '<div class="req ' + pr.st + '" style="margin-top:8px"><span class="mark" aria-hidden="true"></span><span><b>' + (pr.st === 'ok' ? 'Cumples' : pr.st === 'dm' ? 'Lo decide el DM' : 'No cumples') + '.</b> ' + esc(pr.text) + '</span></div><p class="note" style="margin-top:6px">Las dotes se toman al subir de nivel, desde el creador.</p>'; } }
     var back = G.hist.length ? 'Volver' : (G.from ? 'Volver a ' + G.from[1] : 'Volver a la lista');
     grim.innerHTML = (showSecs ? grimSecs() : '') + '<button class="gback" type="button" data-act="gback"><svg class="ic" style="width:18px;height:18px"><use href="#i-back"/></svg>'+esc(back)+'</button>'
-      + '<article class="gdetail torn worn"><h2>'+esc(title)+'</h2><div class="muted" style="font-size:14px">'+esc(Rules5e.srcName(e.source))+(e.page ? ', p. '+e.page : '')+'</div>'
+      + '<article class="gdetail torn worn"><h2>'+(v.type === 'spell' ? spNm(title) + (Render5e.spEn(title) ? '<small class="sp-en" lang="en">' + esc(title) + '</small>' : '') : esc(Render5e.Tname(title)))+'</h2><div class="muted" style="font-size:14px">'+esc(Rules5e.srcName(e.source))+(e.page ? ', p. '+e.page : '')+'</div>'
       + (d.meta.length ? '<dl class="gmeta">' + d.meta.map(function(r){ return '<dt>'+esc(r[0])+'</dt><dd>'+r[1]+'</dd>'; }).join('') + '</dl>' : '<div style="height:10px"></div>')
       + '<div class="gtext">' + trWrap(d.body, 'g|' + v.type + '|' + e.name + '|' + e.source) + '</div>' + extra + '<p class="err" id="gerr" hidden></p></article>';
     var sc = grim.closest('.scroll'); if (sc) sc.scrollTop = 0;
@@ -1985,7 +2024,7 @@
       var list = R.spellsMatching(c.filter, c.list, {minLevel:c.minLevel, maxLevel:c.maxLevel});
       (c.extra || []).forEach(function(e){ if (list.indexOf(e) < 0) list.push(e); });
       var have = {}; CD.extraSpells.forEach(function(x){ have[x.e.name + '|' + x.e.source] = 1; });
-      rows = list.map(function(e){ var k = e.name + '|' + e.source; return {v:k, label:e.name, sub:(e.level ? 'Nivel ' + e.level : 'Truco') + ' · ' + e.source, lvl:e.level, taken: !!have[k], detail:{type:'spell', ref:k}}; });
+      rows = list.map(function(e){ var k = e.name + '|' + e.source; return {v:k, label:Render5e.spName(e.name), sub:(e.level ? 'Nivel ' + e.level : 'Truco') + ' · ' + e.source, lvl:e.level, taken: !!have[k], detail:{type:'spell', ref:k}}; });
     } else rows = c.options;
     PK = {c:c, rows:rows, sel: c.kind === 'one' ? c.value : (c.value || []).slice(), q:'', lvl:'*', showOld:false, hideNo:false, open:{}};
     pickerUI();
@@ -2134,8 +2173,35 @@
   document.addEventListener('change', function(ev){ if (ev.target.id === 'charText' && ev.target.value.trim().charAt(0) === '{' && ev.target.dataset.paste) importChars(ev.target.value); });
 
   /* ---------- Hojas ---------- */
+  /* ---------- Contar usos de un rasgo (Suerte, rasgos de especie, dotes…): C.ctr[clave] = {max, rest, label} u {off:true} ---------- */
+  var CTR_AB = {str:'Fuerza', dex:'Destreza', con:'Constitución', int:'Inteligencia', wis:'Sabiduría', cha:'Carisma'};
+  function openCtr(name){
+    var k = N(name), C = cur(), o = (C.ctr || {})[k] || {}, x = D.resources.filter(function(y){ return y.key === k; })[0];
+    var how = o.max != null ? (typeof o.max === 'number' ? 'n' : o.max) : x ? (x.how || 'n') : 'n';
+    var num = typeof o.max === 'number' ? o.max : x && x.max ? x.max : 1, rest = o.rest || (x && x.rest) || 'long';
+    var opt = function(v, l){ return '<option value="' + v + '"' + (how === v ? ' selected' : '') + '>' + l + '</option>'; };
+    $('#ctrTitle').textContent = Render5e.Tname(name);
+    $('#ctrBody').innerHTML = '<p class="note" style="margin-top:0">Cuántas veces puedes usarlo antes de descansar. Al tocar los puntos se gastan; también aparece en el acceso rápido del combate.</p>'
+      + '<form id="ctrForm" data-n="' + attr(name) + '" class="ctr-form"><label class="fld"><span>Usos</span><select class="field" id="ctrHow">' + opt('n', 'Un número fijo') + opt('pb', 'Bonificador de competencia (' + D.pb + ')')
+      + Object.keys(CTR_AB).map(function(a){ return opt('mod:' + a, 'Modificador de ' + CTR_AB[a] + ' (' + Math.max(1, D.mod[a]) + ')'); }).join('') + '</select></label>'
+      + '<label class="fld" id="ctrNumF"' + (how === 'n' ? '' : ' hidden') + '><span>Número</span><input class="field" id="ctrNum" type="number" inputmode="numeric" min="1" max="99" value="' + num + '"></label>'
+      + '<div class="fld"><span>Se recupera</span><div class="seg" role="group" id="ctrRest">' + [['short','Descanso corto'],['long','Descanso largo'],['none','No se recupera']].map(function(v){ return '<button type="button" data-v="' + v[0] + '" aria-pressed="' + (rest === v[0]) + '">' + v[1] + '</button>'; }).join('') + '</div></div>'
+      + '<div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn main" type="submit">Guardar</button>'
+      + (x || o.off ? '<button class="btn del" type="button" data-act="ctroff">Sin contador</button>' : '')
+      + ((C.ctr || {})[k] ? '<button class="btn quiet" type="button" data-act="ctrreset">' + (x && x.custom && !x.auto ? 'Como venía' : 'Como venía') + '</button>' : '') + '</div></form>';
+    openSheet('ctrSheet');
+  }
+  function ctrSet(name, v){ var C = cur(); C.ctr = C.ctr || {}; var k = N(name); if (v == null) delete C.ctr[k]; else C.ctr[k] = v; var r = rt(C); if (v && v.off) delete r.res[k]; save(); render(false); }
+  document.addEventListener('change', function(ev){ if (ev.target.id === 'ctrHow') $('#ctrNumF').hidden = ev.target.value !== 'n'; });
+  document.addEventListener('click', function(ev){ var b = ev.target.closest && ev.target.closest('#ctrRest button'); if (!b) return; $$('#ctrRest button').forEach(function(x){ x.setAttribute('aria-pressed', x === b); }); });
+  document.addEventListener('submit', function(ev){
+    if (ev.target.id !== 'ctrForm') return; ev.preventDefault();
+    var how = $('#ctrHow').value, rb = $('#ctrRest [aria-pressed="true"]'), max = how === 'n' ? Math.max(1, Math.min(99, parseInt($('#ctrNum').value, 10) || 1)) : how;
+    ctrSet(ev.target.dataset.n, {max:max, rest:rb ? rb.dataset.v : 'long'}); closeSheets();
+  });
   function openSheet(id){ $$('.sheet').forEach(function(s){ s.hidden = s.id !== id; }); var s = $('#' + id); var f = s.querySelector('input,button'); if (f) f.focus({preventScroll:true}); }
-  function openSettings(){ if (window.Sala) Sala.settings(); $('#dirPick').hidden = !wide(); $('#dirPick').parentNode.style.gridTemplateColumns = wide() ? '' : '1fr'; libTable(); renderChars(); trSettings(); if (window.Bestiario) Bestiario.settings(); openSheet('settingsSheet'); if (window.Interfaz) Interfaz.home(); }
+  function spNameSeg(){ var m = Render5e.spMode(); $$('#spNameSeg button').forEach(function(x){ x.setAttribute('aria-pressed', x.dataset.v === m); }); }
+  function openSettings(){ spNameSeg(); if (window.Sala) Sala.settings(); $('#dirPick').hidden = !wide(); $('#dirPick').parentNode.style.gridTemplateColumns = wide() ? '' : '1fr'; libTable(); renderChars(); trSettings(); if (window.Bestiario) Bestiario.settings(); openSheet('settingsSheet'); if (window.Interfaz) Interfaz.home(); }
   function closeSheets(){ $$('.sheet').forEach(function(s){ s.hidden = true; }); }
 
   /* ---------- Libro ---------- */
@@ -2253,6 +2319,13 @@
       case 'rgg': S.rgClosed = S.rgClosed || {}; S.rgClosed[b.dataset.k] = !S.rgClosed[b.dataset.k]; save(); renderRasgos(C); break;
       case 'abnew': openAbEdit(null); break;
       case 'abedit': openAbEdit(b.dataset.id); break;
+      case 'ctropen': openCtr(b.dataset.n); break;
+      case 'spname': Render5e.spMode(b.dataset.v); spNameSeg(); render(false); renderGrim(); break;
+      case 'spfopen': S.spFOpen = !S.spFOpen; save(); renderConjuros(cur()); break;
+      case 'spf': var F0 = spFilt(), g0 = b.dataset.g, v0 = b.dataset.v, ix0 = F0[g0].indexOf(v0); if (ix0 >= 0) F0[g0].splice(ix0, 1); else F0[g0].push(v0); S.spF = F0; save(); renderConjuros(cur()); break;
+      case 'spfclear': S.spF = null; save(); renderConjuros(cur()); break;
+      case 'ctroff': ctrSet($('#ctrForm').dataset.n, {off:true}); closeSheets(); break;
+      case 'ctrreset': ctrSet($('#ctrForm').dataset.n, null); closeSheets(); break;
       case 'abdel': if (b.dataset.sure) { C.hbAb = (C.hbAb || []).filter(function(x){ return x.id !== b.dataset.id; }); delete r.res['hb:' + b.dataset.id]; if (r.quick) r.quick = r.quick.filter(function(k){ return k !== 'hb:' + b.dataset.id; }); save(); render(false); } else { b.dataset.sure = 1; b.textContent = '¿Seguro? Toca otra vez'; } break;
       case 'qedit': renderQuickPick(); openSheet('quickSheet'); break;
       case 'qtoggle': var qk = b.dataset.q, ql = quickKeys(r).slice(), qi = ql.indexOf(qk); if (qi >= 0) ql.splice(qi, 1); else ql.push(qk); r.quick = ql; save(); if (!$('#quickSheet').hidden) renderQuickPick(); render(false); break;
@@ -2274,7 +2347,7 @@
       case 'condoff': r.conds = (r.conds || []).filter(function(k){ return k !== b.dataset.v; }); save(); renderCombat(); break;
       case 'pool': r.res[b.dataset.key] = Math.min((D.resources.filter(function(x){ return x.key === b.dataset.key; })[0] || {pool:0}).pool, (r.res[b.dataset.key] || 0) + (+b.dataset.v)); save(); renderCombat(); break;
       case 'pip': var max = +b.dataset.max, i = +b.dataset.i, k = b.dataset.key, used0 = k === 'pact' ? r.pactUsed || 0 : k.indexOf('slot:') === 0 ? r.slotsUsed[+k.slice(5)] || 0 : r.res[k.slice(4)] || 0, avail = max - used0, next = i < avail ? i : i + 1; setUsed(k, max - next); save(); render(false); break;
-      case 'short': r.pactUsed = 0; ['channel divinity','second wind','focus points','ki points','superiority dice','wild shape'].forEach(function(kk){ if (r.res[kk]) r.res[kk] = kk === 'channel divinity' || kk === 'second wind' || kk === 'wild shape' ? Math.max(0, r.res[kk] - 1) : 0; }); D.resources.forEach(function(x){ if (x.hb && x.rest === 'short') delete r.res[x.key]; }); save(); render(false); break;
+      case 'short': r.pactUsed = 0; ['channel divinity','second wind','focus points','ki points','superiority dice','wild shape'].forEach(function(kk){ if (r.res[kk]) r.res[kk] = kk === 'channel divinity' || kk === 'second wind' || kk === 'wild shape' ? Math.max(0, r.res[kk] - 1) : 0; }); D.resources.forEach(function(x){ if ((x.hb || x.auto || x.custom) && x.rest === 'short') delete r.res[x.key]; }); save(); render(false); break;
       case 'long': var keepRes = {}; D.resources.forEach(function(x){ if (x.rest === 'none' && r.res[x.key]) keepRes[x.key] = r.res[x.key]; }); r.hp = D.hp.max; r.temp = 0; r.slotsUsed = []; r.pactUsed = 0; r.res = keepRes; r.conc = null; r.econ = {a:false,b:false,r:false,m:false}; r.round = 1; r.death = null; r.on = [];
         // reglas 2024: el descanso largo quita un nivel de cansancio
         if (r.exh) { r.exh--; if (!r.exh) r.conds = (r.conds || []).filter(function(k){ return k !== 'exhaustion'; }); }

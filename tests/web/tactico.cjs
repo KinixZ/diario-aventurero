@@ -21,7 +21,7 @@ const check = (name, cond) => { console.log((cond ? 'bien ' : 'MAL  ') + name); 
   check('todos los conjuros con definición; la mayoría automáticos', sv.total === lib.spell.length && sv.auto > sv.total * 0.45 && sv.zones > 50);
   console.log('conjuros:', sv.total, 'automáticos', sv.auto, 'asistidos', sv.asistidos, 'zonas', sv.zones);
   const X = w.Diario, A = X.actions();
-  const sg = A.find((a) => /Spirit Guardians/.test(a.title));
+  const sg = A.find((a) => /Spirit Guardians|Guardianes espirituales/.test(a.title));
   check('Espíritus guardianes: emanación que sigue a la ficha, con concentración', !!sg && sg.def.area.t === 'emanation' && sg.def.zone.follow && sg.def.conc && sg.save.ab === 'wis');
   const lan = A.find((a) => a.key === 'w:lan');
   check('la lanza: cuerpo a cuerpo, se puede arrojar (alcance en pies)', !!lan && lan.melee && lan.reach === 1 && lan.range && lan.range[0] === 20);

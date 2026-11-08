@@ -13,11 +13,27 @@ var Render5e = (function(){
   }
   function T(s){ if (!TR || !TRon || typeof s !== 'string' || s.length < 3) return s; var v = TR[hash(s)]; if (v != null) return v; if (/[a-z]{3}/i.test(s)) missN++; return s; }
   /* Nombres en etiquetas: {@spell fireball} → "bola de fuego" (con la mayúscula como venía) */
+  /* Nombres de conjuros: la traducción cargada manda; si no la tiene, el diccionario del diario (NombresES).
+     Modo (localStorage 'diario-spname'): 'es' español con el inglés chico, 'only' solo español, 'en' en inglés */
+  var SPM = 'es'; try { SPM = localStorage.getItem('diario-spname') || 'es'; } catch(e){}
+  function spMode(m){ if (m) { SPM = m; try { localStorage.setItem('diario-spname', m); } catch(e){} } return SPM; }
+  function dict(n){ if (SPM === 'en' || typeof NombresES === 'undefined') return null; var v = NombresES.spell(n); if (v == null) return null; return n.charAt(0) === n.charAt(0).toLowerCase() ? v.charAt(0).toLowerCase() + v.slice(1) : v; }
+  function spName(n){
+    if (!n) return n; if (SPM === 'en') return n;
+    if (TR && TRon) { var v = TR[hash(n)]; if (v != null) return v; }
+    return dict(n) || n;
+  }
+  /* ¿Se enseña el nombre en inglés debajo? */
+  function spEn(n){ return SPM === 'es' && spName(n) !== n ? n : ''; }
+  var DICT_NO = {light:1, shield:1};
   function Tname(n){
-    if (!TR || !TRon || !n) return n; var v = TR[hash(n)]; if (v != null) return v;
+    if (!n) return n;
+    if (!TR || !TRon) return DICT_NO[String(n).toLowerCase()] ? n : dict(n) || n;
+    var v = TR[hash(n)]; if (v != null) return v;
     var cap = n.charAt(0).toUpperCase() + n.slice(1), tc = n.replace(/(^|[\s(-])([a-z])/g, function(_, a, b){ return a + b.toUpperCase(); });
     v = cap !== n ? TR[hash(cap)] : null; if (v == null && tc !== n) v = TR[hash(tc)];
-    return v == null ? n : (n.charAt(0) === n.charAt(0).toLowerCase() ? v.charAt(0).toLowerCase() + v.slice(1) : v);
+    if (v == null) return DICT_NO[String(n).toLowerCase()] ? n : dict(n) || n;
+    return n.charAt(0) === n.charAt(0).toLowerCase() ? v.charAt(0).toLowerCase() + v.slice(1) : v;
   }
   function setTr(map){ TR = map && Object.keys(map).length ? map : null; }
   function trOn(on){ if (on != null) TRon = !!on; return TRon; }
@@ -36,7 +52,7 @@ var Render5e = (function(){
     if (t === 'recharge') return '(Recarga ' + (p[0] || 6) + ')';
     if (t === 'atk' || t === 'atkr') { var A = {m:'cuerpo a cuerpo', r:'a distancia', mw:'con arma cuerpo a cuerpo', rw:'con arma a distancia', ms:'de conjuro cuerpo a cuerpo', rs:'de conjuro a distancia'}; return '<i>Ataque ' + p[0].split(',').map(function(x){ return A[x.trim()] || x; }).join(' o ') + ':</i>'; }
     var name = p[0], src = p[1] || '', di = DISP[t] == null ? 2 : DISP[t];
-    var disp = di < 0 ? T(p[0]) : p[di] ? T(p[di]) : Tname(p[0]);
+    var disp = di < 0 ? T(p[0]) : p[di] ? T(p[di]) : t === 'spell' ? spName(p[0]) : Tname(p[0]);
     if (t === 'itemProperty') { var f0 = Lib5e.find('itemProperty', name, src); disp = p[2] ? T(p[2]) : Tname((f0 && f0.e.entries && f0.e.entries[0] && f0.e.entries[0].name) || name); }
     if (t === 'quickref' || t === 'filter' || t === 'book' || t === 'table' || t === 'adventure' || t === 'creature' || t === 'deity' || t === 'subclass' || t === 'classFeature' || t === 'subclassFeature' || !Lib5e.canLink(t)) return '<span class="term">' + (t === 'filter' ? p[0] : disp) + '</span>';
     if (!Lib5e.find(t, name, src)) return '<span class="term">' + disp + '</span>';
@@ -142,6 +158,6 @@ var Render5e = (function(){
     var rg = r.type === 'point' ? dist(r.distance) : r.type === 'special' ? 'Especial' : (AREA[r.type] || r.type || '') + (r.distance ? ' ' + dist(r.distance) : '');
     return {time: t.number ? t.number + ' ' + (UNIT_S[t.unit] || t.unit) : '', range: rg, school: SCHOOL[e.school] || e.school || '', conc: (e.duration || []).some(function(d){ return d.concentration; }), rit: !!(e.meta && e.meta.ritual)};
   }
-  return {T:T, Tname:Tname, setTr:setTr, trOn:trOn, hasTr:function(){ return !!TR && TRon; }, misses:function(){ return missN; }, hash:hash, esc:esc, attr:attr, inline:inline, entries:entries, detail:detail, itemType:itemType, ITYPE:ITYPE, spellShort:spellShort, SCHOOL:SCHOOL};
+  return {T:T, Tname:Tname, spName:spName, spEn:spEn, spMode:spMode, setTr:setTr, trOn:trOn, hasTr:function(){ return !!TR && TRon; }, misses:function(){ return missN; }, hash:hash, esc:esc, attr:attr, inline:inline, entries:entries, detail:detail, itemType:itemType, ITYPE:ITYPE, spellShort:spellShort, SCHOOL:SCHOOL};
 })();
 
