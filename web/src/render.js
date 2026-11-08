@@ -13,15 +13,15 @@ var Render5e = (function(){
   }
   function T(s){ if (!TR || !TRon || typeof s !== 'string' || s.length < 3) return s; var v = TR[hash(s)]; if (v != null) return v; if (/[a-z]{3}/i.test(s)) missN++; return s; }
   /* Nombres en etiquetas: {@spell fireball} → "bola de fuego" (con la mayúscula como venía) */
-  /* Nombres de conjuros: la traducción cargada manda; si no la tiene, el diccionario del diario (NombresES).
+  /* Nombres de conjuros y dotes: la traducción cargada manda; si no la tiene, el diccionario del diario (NombresES).
      Modo (localStorage 'diario-spname'): 'es' español con el inglés chico, 'only' solo español, 'en' en inglés */
   var SPM = 'es'; try { SPM = localStorage.getItem('diario-spname') || 'es'; } catch(e){}
   function spMode(m){ if (m) { SPM = m; try { localStorage.setItem('diario-spname', m); } catch(e){} } return SPM; }
-  function dict(n){ if (SPM === 'en' || typeof NombresES === 'undefined') return null; var v = NombresES.spell(n); if (v == null) return null; return n.charAt(0) === n.charAt(0).toLowerCase() ? v.charAt(0).toLowerCase() + v.slice(1) : v; }
+  function dict(n, onlySpell){ if (SPM === 'en' || typeof NombresES === 'undefined') return null; var v = NombresES.spell(n); if (v == null && !onlySpell && NombresES.feat) v = NombresES.feat(n); if (v == null) return null; return n.charAt(0) === n.charAt(0).toLowerCase() ? v.charAt(0).toLowerCase() + v.slice(1) : v; }
   function spName(n){
     if (!n) return n; if (SPM === 'en') return n;
     if (TR && TRon) { var v = TR[hash(n)]; if (v != null) return v; }
-    return dict(n) || n;
+    return dict(n, true) || n;
   }
   /* ¿Se enseña el nombre en inglés debajo? */
   function spEn(n){ return SPM === 'es' && spName(n) !== n ? n : ''; }

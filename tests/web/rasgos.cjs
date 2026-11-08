@@ -23,7 +23,7 @@ const check = (name, cond) => { console.log((cond ? 'bien ' : 'MAL  ') + name); 
   check('coste: reacción 2014', R.costOf('you can use your reaction to') === 'r');
   const groups = $$('#pRasgos .rg-gh b').map(e => e.textContent);
   check('grupos por origen', groups.join(',') === 'Paladin 11,Oathbreaker,Aasimar,Dotes,Homebrew');
-  check('mejoras de característica al final', /Ability Score Improvement/.test($('.rg-also').textContent));
+  check('mejoras de característica al final', /Ability Score Improvement|Mejora de característica/.test($('.rg-also').textContent));
   const first = $('#pRasgos .rg-g .rg-f .rg-t b:not(.sr)'); check('activos primero (Lay on Hands)', first && first.textContent === 'Lay on Hands');
   act('rgf', '[data-v="act"]'); const nAct = $$('#pRasgos .rg-f').length; act('rgf', '[data-v="pas"]'); const nPas = $$('#pRasgos .rg-f').length; act('rgf', '[data-v="all"]');
   check('filtros combate/pasivos', nAct > 0 && nPas > nAct);

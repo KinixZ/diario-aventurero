@@ -552,7 +552,7 @@
     var feats = D.features.filter(function(f){ return featCost(f) || featRes(f); });
     var its = items().filter(function(it){ return !it.eq && (it.use || it.k === 'con' || isPotion(it)) && !/ration|torch|raci|antorch/i.test(it.n + ' ' + (it.ref || '')); });
     var h = '';
-    if (feats.length) h += '<div class="group-h">Rasgos y habilidades</div>' + feats.map(function(f){ return row(f.hb ? 'hb:' + f.hb.id : 'f:' + f.name, f.name, featCost(f), f.hb ? 'homebrew' : f.from); }).join('');
+    if (feats.length) h += '<div class="group-h">Rasgos y habilidades</div>' + feats.map(function(f){ return row(f.hb ? 'hb:' + f.hb.id : 'f:' + f.name, Render5e.Tname(f.name), featCost(f), f.hb ? 'homebrew' : f.from); }).join('');
     if (sp.length) h += '<div class="group-h">Conjuros</div>' + sp.map(function(x){ return row('sp:' + x.e.name + '|' + x.e.source, Render5e.spName(x.e.name), R.spellCost(x.e), x.e.level ? 'nivel ' + x.e.level : 'truco'); }).join('');
     if (its.length) h += '<div class="group-h">Objetos</div>' + its.map(function(it){ return row('it:' + it.id, it.n + (it.q > 1 ? ' ×' + it.q : ''), itemCost(it), ''); }).join('');
     $('#quickList').innerHTML = h || '<p class="note">Todavía no tienes conjuros, rasgos con acción ni consumibles.</p>';
@@ -569,7 +569,7 @@
       var f = D.features.filter(function(x){ return t === 'hb' ? x.hb && x.hb.id === v : !x.hb && x.name === v; })[0]; if (!f) return;
       cost = featCost(f); var x = featRes(f);
       if (x && x.max) { if ((r.res[x.key] || 0) >= x.max) return; r.res[x.key] = (r.res[x.key] || 0) + 1; }
-      msg = 'Usaste ' + f.name + '.' + (f.hb && hbLine(f.hb) ? ' ' + hbLine(f.hb).replace(/<[^>]+>/g, '') : '');
+      msg = 'Usaste ' + Render5e.Tname(f.name) + '.' + (f.hb && hbLine(f.hb) ? ' ' + hbLine(f.hb).replace(/<[^>]+>/g, '') : '');
       // los rasgos con su momento: Furia y Forma salvaje quedan activas; Canalizar divinidad, Oleada de acción… destellan
       if (/^rage$/i.test(f.name) || /^wild shape$/i.test(f.name)) { var k0 = /^rage$/i.test(f.name) ? 'rage' : 'wild'; r.on = r.on || []; if (r.on.indexOf(k0) < 0) r.on.push(k0); }
       if (window.Identidad) Identidad.flash('use', Render5e.Tname(f.name));
@@ -587,7 +587,7 @@
   function quickList(){
     var C = cur(); if (!C || !D || !D.ok) return []; var r = rt(C), out = [], seen = {};
     var add = function(k){ if (seen[k]) return; seen[k] = 1; var t = k.slice(0, k.indexOf(':')), v = k.slice(k.indexOf(':') + 1);
-      if (t === 'f' || t === 'hb') { var f = D.features.filter(function(x){ return t === 'hb' ? x.hb && x.hb.id === v : !x.hb && x.name === v; })[0]; if (!f) return; var x = featRes(f), left = x && x.max ? x.max - (r.res[x.key] || 0) : null; out.push({key:k, kind:'f', label:f.name, sub:(left != null ? left + ' de ' + x.max : '') + (featCost(f) ? (left != null ? ' · ' : '') + ({a:'acción', b:'adicional', r:'reacción'}[featCost(f)] || '') : ''), cost:featCost(f), left:left}); }
+      if (t === 'f' || t === 'hb') { var f = D.features.filter(function(x){ return t === 'hb' ? x.hb && x.hb.id === v : !x.hb && x.name === v; })[0]; if (!f) return; var x = featRes(f), left = x && x.max ? x.max - (r.res[x.key] || 0) : null; out.push({key:k, kind:'f', label:Render5e.Tname(f.name), sub:(left != null ? left + ' de ' + x.max : '') + (featCost(f) ? (left != null ? ' · ' : '') + ({a:'acción', b:'adicional', r:'reacción'}[featCost(f)] || '') : ''), cost:featCost(f), left:left}); }
       else if (t === 'it') { var it = itemById(v); if (!it) return; out.push({key:k, kind:'it', label:it.n + (it.q > 1 ? ' ×' + it.q : ''), sub:isPotion(it) ? 'adicional' : 'acción', cost:itemCost(it), icon:it.ic || 'i-flask'}); }
       else if (t === 'sp') { var e = R.findSpell(v); if (e && !e.level) out.push({key:k, kind:'sp', label:Render5e.spName(e.name), sub:'truco', cost:R.spellCost(e)}); } };
     quickKeys(r).forEach(add);
@@ -1898,7 +1898,7 @@
   function optCard(c, o, multi){
     var on = multi ? (c.value || []).indexOf(o.v) >= 0 : c.value === o.v;
     var flags = (o.st === 'no' ? '<span class="flag no">No cumples</span>' : o.st === 'dm' ? '<span class="flag dm">Decide el DM</span>' : '') + (o.taken ? '<span class="flag taken">Ya la tienes</span>' : '');
-    return '<div class="opt" aria-checked="' + on + '"><button type="button" data-act="crpick" data-c="' + attr(c.id) + '" data-v="' + attr(o.v) + '"' + (multi ? ' data-multi="1"' : '') + '><span class="radio' + (multi ? ' box' : '') + '"></span><span style="min-width:0"><b>' + esc(o.label) + '</b>' + (o.sub ? '<small>' + esc(o.sub) + '</small>' : '') + (o.req ? '<small>' + esc(o.req) + '</small>' : '') + flags + '</span></button>' + (o.detail ? '<details data-det="' + detAttr(o.detail) + '"><summary>Qué incluye</summary><div class="gtext"></div></details>' : '') + '</div>';
+    return '<div class="opt" aria-checked="' + on + '"><button type="button" data-act="crpick" data-c="' + attr(c.id) + '" data-v="' + attr(o.v) + '"' + (multi ? ' data-multi="1"' : '') + '><span class="radio' + (multi ? ' box' : '') + '"></span><span style="min-width:0"><b>' + esc(Render5e.Tname(o.label)) + '</b>' + (o.sub ? '<small>' + esc(o.sub) + '</small>' : '') + (o.req ? '<small>' + esc(o.req) + '</small>' : '') + flags + '</span></button>' + (o.detail ? '<details data-det="' + detAttr(o.detail) + '"><summary>Qué incluye</summary><div class="gtext"></div></details>' : '') + '</div>';
   }
   function renderChoice(c){
     var h = '<div class="ch' + (c.parent ? ' sub' : '') + (c.done ? '' : ' todo') + '" id="ch-' + attr(c.id) + '">' + chHead(c);
@@ -1910,7 +1910,7 @@
       }
     } else if (c.kind === 'many') {
       if (c.options.length <= 18 && !c.search) h += '<p class="help">' + ((c.value || []).length) + ' de ' + c.count + ' elegidas.</p><div class="opts">' + c.options.map(function(o){ return optCard(c, o, true); }).join('') + '</div>';
-      else h += '<div class="chosen">' + (c.value || []).map(function(v){ var o = c.options.filter(function(x){ return x.v === v; })[0]; return '<span>' + esc(o ? o.label : v) + '</span>'; }).join('') + '</div><div><button class="btn' + (c.done ? '' : ' main') + '" type="button" data-act="pkopen" data-c="' + attr(c.id) + '">Elegir (' + ((c.value || []).length) + '/' + c.count + ')</button></div>';
+      else h += '<div class="chosen">' + (c.value || []).map(function(v){ var o = c.options.filter(function(x){ return x.v === v; })[0]; return '<span>' + esc(o ? Render5e.Tname(o.label) : v) + '</span>'; }).join('') + '</div><div><button class="btn' + (c.done ? '' : ' main') + '" type="button" data-act="pkopen" data-c="' + attr(c.id) + '">Elegir (' + ((c.value || []).length) + '/' + c.count + ')</button></div>';
     } else if (c.kind === 'spells') {
       h += '<div class="chosen">' + (c.value || []).map(function(v){ var e = R.findSpell(v); return '<span>' + (e ? spellLink(e) + ' <small class="muted">' + (e.level ? 'nv ' + e.level : 'truco') + '</small>' : esc(v)) + '</span>'; }).join('') + '</div><div><button class="btn' + (c.done ? '' : ' main') + '" type="button" data-act="pkopen" data-c="' + attr(c.id) + '">Elegir (' + ((c.value || []).length) + '/' + c.count + ')</button></div>';
     } else if (c.kind === 'abil') {
