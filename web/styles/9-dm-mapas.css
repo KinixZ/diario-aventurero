@@ -97,4 +97,4 @@
 .notes-maps{display:flex;align-items:center;gap:8px;justify-content:center;width:100%;margin:10px 0}
 .notes-maps .ic{width:18px;height:18px}
 @media (min-width:900px){ .map-ed{max-width:none} .map-tools{max-width:620px} }
-#bestSheet,#quickSheet{z-index:18}
+#bestSheet,#quickSheet,#addSheet,#ctrSheet{z-index:18}

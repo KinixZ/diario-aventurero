@@ -40,7 +40,7 @@ Fuera de sesión todo sigue disponible: combate, chat, pizarra, tablero, mapas y
 |---|---|---|---|
 | `init` | `value` o `roll`: `n` \| `adv` \| `dis`, `id?` | jugador (el suyo) / DM (cualquiera) | Pone la iniciativa (escrita) o la tira el servidor: 1d20 (con ventaja o desventaja) + `initMod` de la hoja o del enemigo; queda en el registro con los dados. Reordena. |
 | `init.npcs` | `map?`, `group?` | DM | Tira la iniciativa de los enemigos que no la tienen (con el combate separado, los del mapa). `group`: los del mismo tipo comparten tirada. |
-| `npc.add` | `name`, `ac`, `hp`, `init?`, `count?`, `hidden?`, `ref?`, `initMod?`, `formula?`, `binfo?`, `img?`, `reach?` | DM | Agrega uno o varios PNJ ("Goblin 1", "Goblin 2"…). `ref` = `Nombre|LIBRO` del Manual; `binfo: {type, size}` es lo que se anota en el encuentro; `reach`, su alcance cuerpo a cuerpo en casillas (para los ataques de oportunidad). |
+| `npc.add` | `name`, `ac`, `hp`, `init?`, `roll?`, `count?`, `hidden?`, `ref?`, `initMod?`, `formula?`, `binfo?`, `img?`, `reach?` | DM | Agrega uno o varios PNJ ("Goblin 1", "Goblin 2"…; si ya hay del mismo nombre, la numeración sigue). `roll`: sin `init`, el servidor tira 1d20 + `initMod` una vez para todos (o toma la de los que ya había con ese nombre). `ref` = `Nombre|LIBRO` del Manual; `binfo: {type, size}` es lo que se anota en el encuentro; `reach`, su alcance cuerpo a cuerpo en casillas (para los ataques de oportunidad). |
 | `npc.del` | `id` | DM | Quita un PNJ. |
 | `npc.set` | `id`, `hp?`, `hpMax?`, `delta?`, `ac?`, `name?`, `conds?` | DM | Ajusta a mano un enemigo. |
 | `npc.reveal` | `id` | DM | Muestra u oculta un PNJ a los jugadores. |
