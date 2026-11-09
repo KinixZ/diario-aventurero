@@ -13,7 +13,7 @@ var Acciones = (function(){
   var $ = function(s, r){ return (r || document).querySelector(s); };
   var AB = {str:'Fuerza', dex:'Destreza', con:'Constitución', int:'Inteligencia', wis:'Sabiduría', cha:'Carisma'}, ABS = {str:'FUE', dex:'DES', con:'CON', int:'INT', wis:'SAB', cha:'CAR'};
   var TYPES = ['', 'ácido', 'contundente', 'cortante', 'perforante', 'fuego', 'frío', 'fuerza', 'relámpago', 'necrótico', 'veneno', 'psíquico', 'radiante', 'trueno'];
-  var cards = [], fightN = 0, comp = null, older = false, seenMine = {};
+  var cards = [], fightN = 0, comp = null, older = false, seenMine = {}, lastId = null, lastKey = null, pendingRes = false;
 
   function room(){ return window.Sala && Sala.status() === 'on' ? Sala.room() : null; }
   function isDm(){ var r = room(); return !!r && r.role === 'dm'; }
@@ -50,6 +50,7 @@ var Acciones = (function(){
     if (a && b.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.type !== 'checkbox' && b.innerHTML && !render.force) { render.pending = true; return; }
     render.force = false; render.pending = false;
     b.innerHTML = stageHtml(r) + compHtml(r) + feedHtml(r);
+    var cb = document.getElementById('combat'); if (cb) cb.classList.toggle('composing', !!comp);
     var cm = document.getElementById('cMine'); if (cm) cm.innerHTML = mineHtml(r);
   }
   /* Tu turno, en un solo lugar: lo que te queda, cuatro verbos grandes y un solo «Terminar turno» que dice quién sigue.
@@ -107,10 +108,14 @@ var Acciones = (function(){
     // desde el mapa (o desde Mi turno): primero a la escena de combate (salvo desde el abanico, que apunta en el mapa)
     if (!o.stay && !shown()) { if ((o.tries = (o.tries || 0) + 1) > 3) return; goCombat(); setTimeout(function(){ open(o); }, 60); return; }
     var dm = isDm(), actor = o.actor || (dm ? (r.turnId && (r.npcs || []).some(function(n){ return n.id === r.turnId; }) ? r.turnId : (r.npcs[0] || {}).id || 'dm') : 'me');
-    comp = {actor:actor, comp:'', key:'free', title:'', atkOn:false, bonus:0, k:'n', kSet:false, saveOn:false, ab:'dex', dc:13, half:true, dmg:'', type:'', heal:false, text:'', lv:'', targets:{}, conds:[], repeat:false, conc:false, def:null, area:null, map:null, man:{}};
-    if (!o.key && o.kind && actor === 'me' && (o.kind === 'w' || o.kind === 's')) { var pre = o.kind === 'w' ? /^w:/ : /^sp:/, first = sources(r).filter(function(x){ return pre.test(x.key); })[0]; if (first) o.key = first.key; }
+    lastId = null;
+    comp = {step:'src', more:false, cost:'', group:'', actor:actor, comp:'', key:'free', title:'', atkOn:false, bonus:0, k:'n', kSet:false, saveOn:false, ab:'dex', dc:13, half:true, dmg:'', type:'', heal:false, text:'', lv:'', targets:{}, conds:[], repeat:false, conc:false, def:null, area:null, map:null, man:{}};
+    if (!o.key && o.kind === 'w' && actor === 'me') { var pre = /^w:/, first = sources(r).filter(function(x){ return pre.test(x.key); })[0]; if (first) o.key = first.key; }
     if (o.key) pick(o.key);
     if (o.target) comp.targets[o.target] = 1;
+    (o.targets || []).forEach(function(id){ comp.targets[id] = 1; });
+    if (o.kind === 'free') { comp.step = 'go'; comp.more = true; }
+    else if (o.key) comp.step = !needsTg() || (Object.keys(comp.targets).length && (single() || o.targets)) ? 'go' : 'tg';
     if (o.title) { comp.title = o.title; if (o.reaction) comp.text = 'Reacción'; }
     if (dm && window.Bestiario && !Bestiario.has()) Bestiario.ready().then(function(){ render.force = true; render(); });
     render.force = true; render();
@@ -120,7 +125,7 @@ var Acciones = (function(){
     var r = room(), src = sources(r), a = src.filter(function(x){ return x.key === key; })[0];
     comp.key = key;
     if (!a) { comp.title = comp.title || ''; return; }
-    comp.title = a.title; comp.text = a.text || ''; comp.atkOn = !!a.atk; comp.bonus = a.atk ? a.atk.bonus + (comp.actor === 'me' && window.Diario && Diario.exhPen ? Diario.exhPen() : 0) : 0; comp.saveOn = !!a.save;
+    comp.title = a.title; comp.text = a.text || ''; comp.cost = a.cost || ''; comp.group = a.group || ''; comp.multi = !!a.multi; comp.atkOn = !!a.atk; comp.bonus = a.atk ? a.atk.bonus + (comp.actor === 'me' && window.Diario && Diario.exhPen ? Diario.exhPen() : 0) : 0; comp.saveOn = !!a.save;
     // lo del mapa: cuerpo a cuerpo o a distancia, el área, los estados que impone, si se repite la salvación y la concentración
     var d = a.def || {}; comp.def = a.def || null; comp.melee = !!a.melee; comp.reach = a.reach || 1; comp.range = a.range || (d.range ? [d.range] : null);
     comp.conds = (d.conds || []).slice(); comp.repeat = !!d.repeat; comp.conc = !!d.conc; comp.area = null; comp.map = null; comp.kSet = false;
@@ -131,36 +136,124 @@ var Acciones = (function(){
     // a quién: una curación a ti mismo; un ataque, al enemigo del turno si es el DM el que mira
   }
   function recast(sp, slot){ var lv = slot.v === 'pact' ? slot.lvl : +slot.v, d = Diario.spellDice(sp.ref, lv); if (!d) return ''; var a = sources(room()).filter(function(x){ return x.key === 'sp:' + sp.ref; })[0], base = a && a.dmg[0] ? a.dmg[0].dice : ''; var m = /([+-]\s*\d+)\s*$/.exec(base.replace(/\s+/g, '')); return d + (m && !/d/.test(m[1]) ? ' ' + m[1].replace(/([+-])/, '$1 ') : ''); }
+  /* ---------- El turno en tres pasos: ¿con qué?, ¿a quién?, tirar (y el resultado en grande) ----------
+     comp.step: 'src' | 'tg' | 'go'. Lo técnico (bono, dados, tipo, salvación, detalle) va en «Cambiar números» (comp.more). */
+  var COST = {a:['Acción','a'], b:['Adicional','b'], r:['Reacción','r'], l:['Legendaria','r'], long:['Más tiempo','m']};
+  var GIC = {'Armas':'i-sword', 'Conjuros':'i-wand', 'Otros conjuros':'i-wand', 'Acciones':'i-swords', 'Adicionales':'i-swords', 'Reacciones':'i-shield', 'Legendarias':'i-crown'};
+  function needsTg(){ return !!(comp && (comp.atkOn || comp.saveOn || String(comp.dmg || '').trim() || comp.heal || comp.conds.length)); }
+  function single(){ return !!(comp && comp.atkOn && !(comp.def && comp.def.area)); }
+  function steps(n){ return '<ol class="tw-steps" aria-label="Pasos">' + ['Con qué','A quién','Tirar'].map(function(t, i){ return '<li class="' + (i + 1 === n ? 'on' : i + 1 < n ? 'done' : '') + '"' + (i + 1 === n ? ' aria-current="step"' : '') + '><i>' + (i + 1) + '</i>' + t + '</li>'; }).join('') + '</ol>'; }
+  function twHead(r, title, sub, n){
+    var back = n > 1 ? '<button class="btn quiet tw-back" type="button" data-act="actstep" data-v="' + (n === 3 && !needsTg() ? 'src' : n === 3 ? 'tg' : 'src') + '"><svg class="ic"><use href="#i-back"/></svg>Atrás</button>' : '';
+    return '<div class="tw-h"><div class="tw-top">' + back + '<div class="tw-t"><b>' + esc(title) + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div><button class="icon-btn sm" type="button" data-act="actclose" aria-label="Cancelar"><svg class="ic"><use href="#i-x"/></svg></button></div>' + steps(n) + '</div>';
+  }
+  function actorPick(r){
+    var dm = isDm(), me = r.members.filter(function(m){ return m.id === r.you; })[0] || {}, foes = r.npcs || [];
+    if (dm) return '<label class="tw-actor"><span>Actúa</span><select class="field" data-actf="actor" aria-label="Quién actúa">' + foes.map(function(n){ return '<option value="' + attr(n.id) + '"' + (comp.actor === n.id ? ' selected' : '') + '>' + esc(n.name) + (n.hidden ? ' (oculto)' : '') + '</option>'; }).join('') + '<option value="dm"' + (comp.actor === 'dm' ? ' selected' : '') + '>Narrador (el DM)</option></select></label>';
+    var cs = (me.char && me.char.comps) || []; if (!cs.length) return '';
+    return '<label class="tw-actor"><span>Actúa</span><select class="field" data-actf="comp" aria-label="Quién actúa"><option value="">' + esc((me.char && me.char.name) || 'Yo') + '</option>' + cs.map(function(k){ return '<option value="' + attr(k.name) + '"' + (comp.comp === k.name ? ' selected' : '') + '>' + esc(k.name) + '</option>'; }).join('') + '</select></label>';
+  }
+  function econLine(){
+    if (isDm() || !window.Diario || !Diario.econ) return ''; var E = Diario.econ(); if (!E) return '';
+    return '<div class="tw-econ" aria-label="Lo que te queda">' + [['a','Acción'],['b','Adicional'],['r','Reacción'],['m','Movimiento']].map(function(x){ return '<span class="e-' + x[0] + (E[x[0]] ? ' used' : '') + '">' + x[1] + '</span>'; }).join('') + '</div>';
+  }
+  function srcCard(a){
+    var c = COST[a.cost] || null;
+    return '<button type="button" class="tw-src" data-act="actpick" data-k="' + attr(a.key) + '" aria-pressed="' + (comp.key === a.key) + '"><span class="tw-ic"><svg class="ic"><use href="#' + (a.multi ? 'i-swords' : GIC[a.group] || 'i-star') + '"/></svg></span><span class="tw-tx"><b>' + esc(a.title) + '</b><small>' + esc(a.multi ? 'Varios ataques: tíralos uno tras otro' : srcLine(a)) + '</small></span>' + (c ? '<i class="tw-cost c-' + c[1] + '">' + c[0] + '</i>' : '') + '</button>';
+  }
+  function stepSrc(r){
+    var dm = isDm(), src = sources(r), groups = {}, order = [], cur = dm && comp.actor !== 'dm' ? who(r, comp.actor) : null;
+    src.forEach(function(a){ if (!groups[a.group]) { groups[a.group] = []; order.push(a.group); } groups[a.group].push(a); });
+    var RANK = ['Armas','Acciones','Conjuros','Adicionales','Reacciones','Legendarias','Otros conjuros']; order.sort(function(x, y){ var a = RANK.indexOf(x), b = RANK.indexOf(y); return (a < 0 ? 99 : a) - (b < 0 ? 99 : b); });
+    var h = twHead(r, dm ? (comp.actor === 'dm' ? 'El DM narra' : '¿Qué hace?') : '¿Con qué?', dm ? (cur ? 'Le toca a ' + esc(cur.name) : '') : (r.round > 0 && r.turnId === r.you ? 'Tu turno · ronda ' + r.round : 'Fuera de tu turno: reacción u otra cosa'), 1);
+    h += '<div class="tw-b">' + actorPick(r) + econLine();
+    order.forEach(function(g){ h += '<span class="label">' + esc(g.toLowerCase()) + '</span><div class="tw-list">' + groups[g].map(srcCard).join('') + '</div>'; });
+    if (!order.length && dm && comp.actor !== 'dm' && window.Bestiario && !Bestiario.has()) h += '<p class="note">Carga el Manual en Ajustes para ver sus acciones; mientras, escríbela.</p>';
+    // habilidades y objetos del acceso rápido (Suerte, Canalizar divinidad, pociones…): se usan directo
+    if (!dm && !comp.comp && window.Diario && Diario.quickList) {
+      var q = Diario.quickList().filter(function(x){ return x.kind !== 'sp'; });
+      if (q.length) h += '<span class="label">habilidades y objetos</span><div class="tw-list">' + q.map(function(x){ var c = COST[x.cost] || null; return '<button type="button" class="tw-src" data-act="actuse" data-k="' + attr(x.key) + '" data-l="' + attr(x.label) + '"' + (x.left === 0 ? ' disabled' : '') + '><span class="tw-ic"><svg class="ic"><use href="#' + (x.icon || (x.kind === 'it' ? 'i-flask' : 'i-star')) + '"/></svg></span><span class="tw-tx"><b>' + esc(x.label) + '</b><small>' + esc(x.left != null ? 'Te quedan ' + x.left : x.sub || 'Usar') + '</small></span>' + (c ? '<i class="tw-cost c-' + c[1] + '">' + c[0] + '</i>' : '') + '</button>'; }).join('') + '</div>';
+    }
+    h += '<button type="button" class="tw-free" data-act="actfree"><svg class="ic"><use href="#i-quill"/></svg>' + (dm ? 'Otra cosa (escribirla)' : 'Otra cosa: esquivar, ayudar, escribirla…') + '</button></div>';
+    return h;
+  }
+  function tgCard(r, x){
+    var st = x.down ? 'Caído' : x.hp != null && x.hpMax ? (x.pc || isDm() ? x.hp + ' / ' + x.hpMax : '') : x.state || '';
+    var p = x.hp != null && x.hpMax ? x.hp / x.hpMax : x.pct != null ? x.pct / 100 : null, cls = x.down ? 'down' : p == null ? '' : p <= .33 ? 'bad' : p < 1 ? 'hurt' : 'ok';
+    if (!st && p != null) st = p >= 1 ? 'Ileso' : p > .5 ? 'Herido' : p > 0 ? 'Grave' : 'Caído';
+    var cd = (x.conds || []).filter(function(k){ return k !== 'concentration'; }).map(function(k){ return COND_ES(k).toLowerCase(); }).slice(0, 2).join(', ');
+    return '<button type="button" class="tw-tg' + (x.pc ? ' pc' : ' npc') + (x.down ? ' down' : '') + '" data-act="acttg" data-id="' + attr(x.id) + '" aria-pressed="' + !!comp.targets[x.id] + '">' + pic(x, true) + '<b>' + esc(x.name) + '</b><small class="' + cls + '">' + esc(st) + (cd ? ' · ' + esc(cd) : '') + '</small></button>';
+  }
+  function stepTg(r){
+    var dm = isDm(), foes = (r.npcs || []).filter(function(n){ return dm || !n.hidden; }).map(function(n){ return who(r, n.id); }).filter(Boolean), pcs = r.members.filter(function(m){ return m.role !== 'dm'; }).map(function(m){ return who(r, m.id); }).filter(Boolean);
+    var me = comp.actor === 'me' ? r.you : comp.actor, sub = esc(comp.title || 'Acción') + (comp.atkOn ? ' · ' + sgn(comp.bonus) : '') + (comp.dmg ? ' · ' + esc(comp.dmg) + (comp.type ? ' ' + esc(comp.type) : '') : '');
+    var A = dm ? ['tu grupo', pcs, 'enemigos', foes] : comp.heal ? ['tu grupo', pcs, 'enemigos', foes] : ['enemigos', foes, 'tu grupo', pcs];
+    var h = twHead(r, '¿A quién?', sub, 2) + '<div class="tw-b">';
+    [0, 2].forEach(function(i){ var l = A[i + 1].filter(function(x){ return x.id !== me || comp.heal; }); if (l.length) h += '<span class="label">' + A[i] + '</span><div class="tw-tgs">' + l.map(function(x){ return tgCard(r, x); }).join('') + '</div>'; });
+    var n = Object.keys(comp.targets).length, canAim = !!(window.Mapas && Mapas.aim && actorKey() && (r.maps || []).length && mapNow());
+    h += '<p class="note">' + (single() ? 'Toca a uno y pasas a tirar.' : 'Marca a todos los que toca' + (comp.def && comp.def.area ? ' el área' : '') + ' y sigue.') + '</p>';
+    if (canAim) h += '<button class="btn" type="button" data-act="actaim"><svg class="ic"><use href="#i-aim"/></svg>' + (comp.def && comp.def.area ? 'Poner el área en el mapa' : 'Elegir en el mapa') + '</button>';
+    if (!single()) h += '<button class="btn main tw-next" type="button" data-act="actstep" data-v="go">' + (n ? 'Siguiente: tirar (' + n + ')' : 'Siguiente sin objetivo') + '</button>';
+    return h + '</div>';
+  }
+  function stepGo(r){
+    var tg = Object.keys(comp.targets).map(function(id){ return who(r, id); }).filter(Boolean), c = COST[comp.cost] || null, rows = [];
+    if (comp.atkOn) rows.push(['Para impactar', '1d20 ' + sgn(comp.bonus)]);
+    if (comp.saveOn) rows.push(['Salvación', ABS[comp.ab] + ' CD ' + comp.dc + (comp.half ? ' · mitad si la supera' : '')]);
+    if (String(comp.dmg || '').trim()) rows.push([comp.heal ? 'Cura' : 'Daño', comp.dmg + (comp.heal || !comp.type ? '' : ' ' + comp.type)]);
+    if (c) rows.push(['Gasta', c[0].toLowerCase()]);
+    var h = '<form class="cs-comp tw card" data-form="actpost">' + twHead(r, 'Tirar', needsTg() ? 'Revisa y tira' : 'Sin tirada: se cuenta al grupo', 3) + '<div class="tw-b">';
+    h += '<section class="tw-sum"><div class="tw-sum-h"><span class="tw-ic"><svg class="ic"><use href="#' + (GIC[comp.group] || 'i-swords') + '"/></svg></span><div><b>' + esc(comp.title || 'Acción') + '</b>' + (tg.length ? '<small>contra <b>' + tg.map(function(x){ return esc(x.name); }).join(', ') + '</b></small>' : needsTg() ? '<small>sin objetivo</small>' : '') + '</div></div>'
+      + rows.map(function(x){ return '<p class="tw-row"><span>' + x[0] + '</span><b>' + esc(x[1]) + '</b></p>'; }).join('') + '</section>';
+    // una acción escrita a mano (u «Otra cosa»): los objetivos aquí mismo
+    if (comp.key === 'free' || !comp.key) {
+      var dm0 = isDm(), all = (dm0 ? r.members.filter(function(m){ return m.role !== 'dm'; }).map(function(m){ return who(r, m.id); }) : []).concat((r.npcs || []).filter(function(n){ return dm0 || !n.hidden; }).map(function(n){ return who(r, n.id); })).concat(dm0 ? [] : r.members.filter(function(m){ return m.role !== 'dm' && m.id !== r.you; }).map(function(m){ return who(r, m.id); })).filter(Boolean);
+      if (all.length) h += '<span class="label">a quién (si a alguien)</span><div class="tw-tgs sm">' + all.map(function(x){ return tgCard(r, x); }).join('') + '</div>';
+    }
+    if (comp.spell && comp.spell.lv) { var sl = Diario.slotsFor(comp.spell.lv); h += '<label class="fl">Espacio<select class="field" data-actf="lv"><option value="">Sin gastar espacio</option>' + sl.map(function(x){ return '<option value="' + x.v + '"' + (comp.lv === x.v ? ' selected' : '') + (x.left > 0 ? '' : ' disabled') + '>' + esc(x.label) + '</option>'; }).join('') + '</select></label>'; }
+    var sg0 = comp.atkOn ? suggest(r) : null; if (sg0 && sg0.k && !comp.kSet && comp.k === 'n') comp.k = sg0.k;
+    if (comp.atkOn) h += '<span class="label">cómo tiras</span><div class="seg tw-k" role="group" aria-label="Ventaja">' + [['n','Normal'],['adv','Ventaja'],['dis','Desventaja']].map(function(x){ return '<button type="button" data-act="actk" data-v="' + x[0] + '" aria-pressed="' + (comp.k === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>';
+    h += tacHtml(r, true);
+    h += '<button type="button" class="tw-more" data-act="actmore" aria-expanded="' + !!comp.more + '">' + (comp.more ? 'Cambiar números ⌄' : 'Cambiar números ›') + '</button>';
+    if (comp.more) h += '<div class="tw-nums"><p class="note">Vienen de tu hoja. Cámbialos solo si algo no cuadra.</p>' + numbersHtml(r) + '</div>';
+    h += '<div class="cs-go tw-go"><button class="btn main" type="submit"><svg class="ic"><use href="#i-d20"/></svg>' + (needsTg() ? '¡Tirar!' : 'Contarlo al grupo') + '</button><small class="muted">' + (needsTg() ? 'Los dados los tira el servidor; todo el grupo lo ve.' : '') + '</small></div></div></form>';
+    return h;
+  }
+  /* El resultado de tu última acción, en grande: aplicar, otro ataque, otra cosa o terminar el turno */
+  function resultHtml(r){
+    var k = cards.filter(function(x){ return x.id === lastId; })[0]; if (!k) return '';
+    var mine = r.turnId === r.you && !isDm(), again = lastKey && /^(w:|m:)/.test(lastKey.key) && !lastKey.multi;
+    var h = '<section class="tw-res card"><div class="tw-top"><div class="tw-t"><b>Resultado</b><small>' + esc(k.title) + '</small></div><button class="icon-btn sm" type="button" data-act="actresx" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>' + cardHtml(k, r);
+    h += '<div class="tw-then"><span class="label">y ahora</span>' + (again ? '<button class="tw-src" type="button" data-act="actagain"><span class="tw-ic"><svg class="ic"><use href="#i-sword"/></svg></span><span class="tw-tx"><b>Otro ataque · ' + esc(lastKey.title) + '</b><small>Mismo objetivo; por Ataque adicional o ataque múltiple</small></span></button>' : '')
+      + '<button class="btn" type="button" data-act="actopen"' + (isDm() && lastKey && lastKey.actor ? ' data-actor="' + attr(lastKey.actor) + '"' : '') + '>Usar otra cosa</button>'
+      + (mine ? '<button class="btn main hud-next" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Terminar turno</button>' : isDm() && r.round > 0 ? '<button class="btn main" type="button" data-act="salaturn" data-v="next"><svg class="ic"><use href="#i-next"/></svg>Siguiente turno</button>' : '') + '</div></section>';
+    return h;
+  }
   function compHtml(r){
-    var dm = isDm(), me = r.members.filter(function(m){ return m.id === r.you; })[0] || {};
+    var dm = isDm();
     if (!comp) {
+      var res = lastId ? resultHtml(r) : '';
+      if (res) return res;
       if (!r.order.length && !(r.npcs || []).length) return '';
       if (!dm && hasMine() && r.round > 0 && r.order.indexOf(r.you) >= 0) return '';
       return '<div class="cs-acts"><button class="btn main" type="button" data-act="actopen"><svg class="ic"><use href="#i-swords"/></svg>' + (dm ? 'Acción de un enemigo' : 'Publicar mi acción') + '</button>' + (dm ? '<button class="btn" type="button" data-act="actopen" data-actor="dm"><svg class="ic"><use href="#i-scroll"/></svg>Narrar algo</button>' : '') + '</div>';
     }
-    var src = sources(r), groups = {}, order = [];
-    src.forEach(function(a){ if (!groups[a.group]) { groups[a.group] = []; order.push(a.group); } groups[a.group].push(a); });
-    var foes = (r.npcs || []), pcs = r.members.filter(function(m){ return m.role !== 'dm'; });
-    var actors = dm ? '<select class="field" data-actf="actor" aria-label="Quién actúa">' + foes.map(function(n){ return '<option value="' + attr(n.id) + '"' + (comp.actor === n.id ? ' selected' : '') + '>' + esc(n.name) + (n.hidden ? ' (oculto)' : '') + '</option>'; }).join('') + '<option value="dm"' + (comp.actor === 'dm' ? ' selected' : '') + '>Narrador (el DM)</option></select>'
-      : '<select class="field" data-actf="comp" aria-label="Quién actúa"><option value="">' + esc((me.char && me.char.name) || 'Yo') + '</option>' + ((me.char && me.char.comps) || []).map(function(k){ return '<option value="' + attr(k.name) + '"' + (comp.comp === k.name ? ' selected' : '') + '>' + esc(k.name) + '</option>'; }).join('') + '</select>';
-    var h = '<form class="cs-comp card" data-form="actpost"><div class="cs-comp-h"><b><svg class="ic"><use href="#i-swords"/></svg>Acción</b>' + actors + '<button class="icon-btn sm" type="button" data-act="actclose" aria-label="Cancelar"><svg class="ic"><use href="#i-x"/></svg></button></div>';
-    if (order.length) h += '<div class="cs-srcs">' + order.map(function(g){ return '<div class="cs-src"><span class="label">' + esc(g) + '</span><div class="cs-src-l">' + groups[g].map(function(a){ return '<button type="button" class="cs-pick" data-act="actpick" data-k="' + attr(a.key) + '" aria-pressed="' + (comp.key === a.key) + '"><b>' + esc(a.title) + '</b><small>' + esc(srcLine(a)) + '</small></button>'; }).join('') + '</div></div>'; }).join('') + '</div>';
-    else if (dm && comp.actor !== 'dm' && window.Bestiario && !Bestiario.has()) h += '<p class="note">Carga el bestiario en Ajustes para elegir sus acciones del Manual; mientras, escríbela abajo.</p>';
-    h += '<div class="cs-f"><label class="fl cs-title">Qué hace<input class="field" data-actf="title" maxlength="60" value="' + attr(comp.title) + '" placeholder="' + (dm ? 'Cimitarra, Aliento de fuego…' : 'Espada larga, Rayo de fuego…') + '" autocomplete="off"></label>';
+    if (comp.step === 'src') return '<div class="cs-comp tw card">' + stepSrc(r) + '</div>';
+    if (comp.step === 'tg') return '<div class="cs-comp tw card">' + stepTg(r) + '</div>';
+    return stepGo(r);
+  }
+  function numbersHtml(r){
+    var dm = isDm();
+    var h = '<div class="cs-f"><label class="fl cs-title">Qué hace<input class="field" data-actf="title" maxlength="60" value="' + attr(comp.title) + '" placeholder="' + (dm ? 'Cimitarra, Aliento de fuego…' : 'Espada larga, Rayo de fuego…') + '" autocomplete="off"></label>';
     if (comp.spell && comp.spell.lv) { var sl = Diario.slotsFor(comp.spell.lv); h += '<label class="fl">Espacio<select class="field" data-actf="lv"><option value="">Sin gastar espacio</option>' + sl.map(function(x){ return '<option value="' + x.v + '"' + (comp.lv === x.v ? ' selected' : '') + (x.left > 0 ? '' : ' disabled') + '>' + esc(x.label) + '</option>'; }).join('') + '</select></label>'; }
     h += '</div><div class="cs-f">'
-      + '<label class="toggle sm"><input type="checkbox" data-actf="atkOn"' + (comp.atkOn ? ' checked' : '') + '> Ataque</label>' + (comp.atkOn ? '<label class="fl mini-l">1d20 +<input class="field mini" data-actf="bonus" inputmode="numeric" value="' + comp.bonus + '" aria-label="Bonificador de ataque"></label><div class="seg sm" role="group" aria-label="Ventaja">' + [['n','Normal'],['adv','Ventaja'],['dis','Desventaja']].map(function(x){ return '<button type="button" data-act="actk" data-v="' + x[0] + '" aria-pressed="' + (comp.k === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>' : '')
+      + '<label class="toggle sm"><input type="checkbox" data-actf="atkOn"' + (comp.atkOn ? ' checked' : '') + '> Ataque</label>' + (comp.atkOn ? '<label class="fl mini-l">1d20 +<input class="field mini" data-actf="bonus" inputmode="numeric" value="' + comp.bonus + '" aria-label="Bonificador de ataque"></label>' : '')
       + '<label class="toggle sm"><input type="checkbox" data-actf="saveOn"' + (comp.saveOn ? ' checked' : '') + '> Salvación</label>' + (comp.saveOn ? '<select class="field mini-s" data-actf="ab" aria-label="Característica">' + Object.keys(AB).map(function(k){ return '<option value="' + k + '"' + (comp.ab === k ? ' selected' : '') + '>' + ABS[k] + '</option>'; }).join('') + '</select><label class="fl mini-l">CD<input class="field mini" data-actf="dc" inputmode="numeric" value="' + comp.dc + '" aria-label="CD"></label><label class="toggle sm"><input type="checkbox" data-actf="half"' + (comp.half ? ' checked' : '') + '> mitad si la supera</label>' : '')
       + '</div><div class="cs-f"><label class="fl cs-dice">' + (comp.heal ? 'Curación' : 'Daño') + '<input class="field" data-actf="dmg" value="' + attr(comp.dmg) + '" placeholder="2d6 + 3" autocomplete="off" spellcheck="false"></label>'
       + (comp.heal ? '' : '<label class="fl">Tipo<select class="field" data-actf="type">' + TYPES.map(function(t){ return '<option value="' + attr(t) + '"' + (comp.type === t ? ' selected' : '') + '>' + (t || '—') + '</option>'; }).join('') + '</select></label>')
       + '<label class="toggle sm"><input type="checkbox" data-actf="heal"' + (comp.heal ? ' checked' : '') + '> Cura</label></div>'
-      + tacHtml(r)
       + '<label class="fl">Detalle<textarea class="field" data-actf="text" rows="2" maxlength="500" placeholder="Lo que pasa, alcance, efectos…">' + esc(comp.text) + '</textarea></label>';
-    // objetivos: los del combate (los enemigos primero para un jugador; el grupo primero para el DM)
-    var tg = function(x){ return '<button type="button" class="cs-tg' + (x.pc ? ' pc' : ' npc') + (x.down ? ' down' : '') + '" data-act="acttg" data-id="' + attr(x.id) + '" aria-pressed="' + !!comp.targets[x.id] + '">' + pic(x) + '<span>' + esc(x.name) + '</span></button>'; };
-    var npcs = foes.map(function(n){ return who(r, n.id); }).filter(Boolean), ps = pcs.map(function(m){ return who(r, m.id); }).filter(Boolean), list = dm ? ps.concat(npcs) : npcs.concat(ps);
-    h += '<div class="cs-tgs"><span class="label">objetivos</span><div class="cs-tg-l">' + (list.length ? list.filter(function(x){ return x.id !== comp.actor; }).map(tg).join('') : '<small class="muted">Nadie en el combate todavía.</small>') + '</div></div>';
-    return h + '<div class="cs-go"><button class="btn main" type="submit"><svg class="ic"><use href="#i-d20"/></svg>Tirar y publicar</button><small class="muted">Los dados se tiran en el servidor; lo ve todo el grupo.</small></div></form>';
+    return h;
   }
   /* ---------- Lo táctico del compositor: el mapa, la ventaja sugerida, los estados y los dados físicos ---------- */
   var COND_ES = function(k){ return (Sala.COND || {})[k] || k; };
@@ -258,6 +351,7 @@ var Acciones = (function(){
     if (!act.title && !act.text && !act.atk && !act.dmg && !act.save && !act.conds) { Sala.toast('Escribe qué haces o elige una acción.'); return; }
     if (!act.title) act.title = act.heal ? 'Curación' : act.atk ? 'Ataque' : 'Acción';
     if (!Sala.send({t:'act.post', act:act})) return;
+    lastKey = {key:comp.key, title:comp.title, actor:dm ? comp.actor : null, targets:Object.keys(comp.targets), multi:comp.multi}; pendingRes = true;
     // un conjuro con espacio: se gasta en tu hoja (y queda la concentración si la pide)
     if (!dm && comp.spell && comp.lv) Diario.cast(comp.spell.ref, comp.lv);
     // un ataque con arma de tu hoja gasta tu acción (se ve en la barra de tu turno); la reacción, fuera de tu turno
@@ -268,7 +362,7 @@ var Acciones = (function(){
 
   /* ---------- Lo que va pasando ---------- */
   function feedHtml(r){
-    var cur = cards.filter(function(k){ return k.f === fightN; }).slice().reverse(), prev = cards.filter(function(k){ return k.f !== fightN; }).slice().reverse();
+    var cur = cards.filter(function(k){ return k.f === fightN && !(k.id === lastId && !comp); }).slice().reverse(), prev = cards.filter(function(k){ return k.f !== fightN; }).slice().reverse();
     if (!cur.length && !prev.length) return '';
     var h = '<section class="cs-feed"><div class="row"><span class="label">' + (cur.length ? 'lo que va pasando' : 'combate anterior') + '</span>' + (prev.length && cur.length ? '<button class="pill" type="button" data-act="actolder" aria-pressed="' + older + '">' + (older ? 'Ocultar' : 'Ver') + ' los anteriores</button>' : '') + '</div>';
     h += (cur.length ? cur : prev.slice(0, 12)).map(function(k){ return cardHtml(k, r); }).join('');
@@ -335,7 +429,9 @@ var Acciones = (function(){
     Sala.on('mesa.init', function(m){ cards = m.acts || []; fightN = m.fightN || 0; render(); });
     Sala.on('state', function(r){ if (r.fightN != null && r.fightN !== fightN) { fightN = r.fightN; older = false; } if (comp && isDm() && comp.actor !== 'dm' && !(r.npcs || []).some(function(n){ return n.id === comp.actor; })) comp.actor = 'dm'; render(); });
     Sala.on('act', function(m){
-      var k = m.card, r = room(), old = cards.filter(function(x){ return x.id === k.id; })[0], isNew = !old; upsert(k); render();
+      var k = m.card, r = room(), old = cards.filter(function(x){ return x.id === k.id; })[0], isNew = !old; upsert(k);
+      if (isNew && pendingRes && r && k.by === r.you) { lastId = k.id; pendingRes = false; render.force = true; }
+      render();
       // tus dados ruedan (los de tu acción y los de tus salvaciones)
       if (window.Dados && r) { if (isNew && k.by === r.you && !k.man && (k.atk || k.dmg || k.death)) Dados.card(k); (k.targets || []).forEach(function(t){ var was = old && (old.targets || []).filter(function(x){ return x.id === t.id; })[0]; if (t.sv && !t.sv.man && !t.sv.auto && !(was && was.sv) && (t.id === r.you || (isDm() && t.kind === 'npc'))) Dados.save(t.sv, t.name); }); }
       if (isNew && window.Sfx) Sfx.play(k.atk && k.atk.crit ? 'crit' : k.heal ? 'heal' : k.atk && (k.targets || []).some(function(x){ return x.hit; }) ? 'hit' : k.save ? 'spell' : 'dice');
@@ -357,15 +453,25 @@ var Acciones = (function(){
     else if (a === 'actclose') { comp = null; render.force = true; render(); }
     else if (a === 'actpick') {
       if (!comp || !shown()) { open({key:b.dataset.k}); return; }
-      pick(b.dataset.k); render.force = true; render();
+      pick(b.dataset.k); comp.step = !needsTg() || (Object.keys(comp.targets).length && single()) ? 'go' : 'tg'; render.force = true; render(); top();
     }
+    else if (a === 'actstep' && comp) { comp.step = b.dataset.v; render.force = true; render(); top(); }
+    else if (a === 'actmore' && comp) { comp.more = !comp.more; render.force = true; render(); }
+    else if (a === 'actfree' && comp) { var keepT = comp.targets; comp.key = 'free'; comp.title = ''; comp.atkOn = comp.saveOn = comp.heal = false; comp.dmg = ''; comp.text = ''; comp.spell = null; comp.def = null; comp.conds = []; comp.cost = ''; comp.group = ''; comp.targets = keepT; comp.step = 'go'; comp.more = true; render.force = true; render(); top(); }
+    else if (a === 'actuse') { use(b.dataset.k, b.dataset.l); comp = null; render.force = true; render(); if (window.Sala) Sala.toast('Usaste ' + b.dataset.l + '.'); }
+    else if (a === 'actresx') { lastId = null; render.force = true; render(); }
+    else if (a === 'actagain' && lastKey) open({key:lastKey.key, actor:lastKey.actor || undefined, targets:lastKey.targets});
     else if (a === 'actk' && comp) { comp.k = b.dataset.v; comp.kSet = true; render.force = true; render(); }
     else if (a === 'actaim' && comp) aimNow();
     else if (a === 'actcondt' && comp) { var ck = b.dataset.v, ci = comp.conds.indexOf(ck); if (ci >= 0) comp.conds.splice(ci, 1); else comp.conds.push(ck); render.force = true; render(); }
     else if (a === 'actcond') { Sala.send({t:'act.cond', id:b.dataset.id, tid:b.dataset.tid}); b.disabled = true; }
     else if (a === 'actdeath') { if (window.Diario && Diario.rollDeath) Diario.rollDeath(); }
     else if (a === 'actoa') { var pr = String(b.dataset.v || '').split('|'); open({actor:isDm() ? pr[0] : undefined, target:pr[1], title:'Ataque de oportunidad', reaction:true}); }
-    else if (a === 'acttg' && comp) { var id = b.dataset.id; if (comp.targets[id]) delete comp.targets[id]; else comp.targets[id] = 1; b.setAttribute('aria-pressed', String(!!comp.targets[id])); }
+    else if (a === 'acttg' && comp) {
+      var id = b.dataset.id;
+      if (comp.step === 'tg' && single()) { comp.targets = {}; comp.targets[id] = 1; comp.step = 'go'; render.force = true; render(); top(); return; }
+      if (comp.targets[id]) delete comp.targets[id]; else comp.targets[id] = 1; render.force = true; render();
+    }
     else if (a === 'actapply') { Sala.send({t:'act.apply', id:b.dataset.id, tid:b.dataset.tid, how:b.dataset.v}); b.disabled = true; }
     else if (a === 'actsave') {
       var sv = {t:'act.save', id:b.dataset.id, tid:b.dataset.tid, mod:+b.dataset.mod || 0}; if (b.dataset.k) sv.k = b.dataset.k; if (b.dataset.fail) sv.fail = true;
@@ -377,6 +483,8 @@ var Acciones = (function(){
     else if (a === 'actolder') { older = !older; render.force = true; render(); }
     else if (a === 'actgo') goCombat();
   });
+  /* Al cambiar de paso, que se vea el principio del compositor */
+  function top(){ var b = box(); var el = b && (b.querySelector('.tw') || b.querySelector('.tw-res')); if (el && el.scrollIntoView) try { el.scrollIntoView({block:'start', behavior:'smooth'}); } catch(e){} }
   /* Ir a la escena de combate (Combate → Orden) */
   function goCombat(){
     var cb = document.getElementById('combat'); if (cb) cb.hidden = false;
@@ -386,7 +494,7 @@ var Acciones = (function(){
   document.addEventListener('change', function(ev){
     var t = ev.target; if (!comp || !t.dataset || !t.dataset.actf) return; var f = t.dataset.actf;
     if (t.type === 'checkbox') comp[f] = t.checked; else comp[f] = t.value;
-    if (f === 'actor') { comp.key = 'free'; comp.title = ''; comp.atkOn = comp.saveOn = false; comp.dmg = ''; comp.text = ''; comp.heal = false; comp.spell = null; }
+    if (f === 'actor') { comp.step = 'src'; comp.key = 'free'; comp.title = ''; comp.atkOn = comp.saveOn = false; comp.dmg = ''; comp.text = ''; comp.heal = false; comp.spell = null; }
     if (f === 'comp') { comp.key = 'free'; }
     if (f === 'lv' && comp.spell) { var sl = Diario.slotsFor(comp.spell.lv).filter(function(x){ return x.v === t.value; })[0]; if (sl) comp.dmg = recast(comp.spell, sl) || comp.dmg; }
     if (/^(actor|comp|atkOn|saveOn|heal|lv)$/.test(f)) { render.force = true; render(); }

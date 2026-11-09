@@ -1354,17 +1354,17 @@
       var dm = [{dice:dmgExpr(a.dice, a.mod), type:a.type}]; a.extra.forEach(function(x){ if (/^\d+d\d+/.test(x.dice)) dm.push({dice:x.dice, type:x.type}); });
       // alcance: cuerpo a cuerpo (1,5 m, o 3 m con «alcance») o a distancia («80/320» pies)
       var rg = a.range ? String(a.range).split('/').map(function(v){ return +v || 0; }) : null;
-      out.push({key:'w:' + a.id, group:'Armas', title:a.name, atk:{bonus:a.atk}, dmg:dm, text:a.notes || '', melee:!a.ranged, reach:a.reach || 1, range:a.ranged || a.thrown ? rg : null});
+      out.push({key:'w:' + a.id, group:'Armas', cost:'a', title:a.name, atk:{bonus:a.atk}, dmg:dm, text:a.notes || '', melee:!a.ranged, reach:a.reach || 1, range:a.ranged || a.thrown ? rg : null});
     });
     allSpells().forEach(function(x){
       var e = x.e, json = JSON.stringify(e.entries || []), heal = (e.miscTags || []).indexOf('HL') >= 0, dice = spellDice(e, e.level);
       // la definición de efecto (área, zona, estados, concentración); los que no tienen tirada también van, como asistidos
       var H = window.Hechizos ? Hechizos.def(e) : null, key = 'sp:' + e.name + '|' + e.source;
-      if (!(e.spellAttack && e.spellAttack.length) && !(e.savingThrow && e.savingThrow.length) && !dice) { if (H) out.push({key:key, group:'Otros conjuros', title:Render5e.spName(e.name), lv:e.level || 0, dmg:[], text:'', def:H}); return; }
+      if (!(e.spellAttack && e.spellAttack.length) && !(e.savingThrow && e.savingThrow.length) && !dice) { if (H) out.push({key:key, group:'Otros conjuros', cost:R.spellCost(e) || '', title:Render5e.spName(e.name), lv:e.level || 0, dmg:[], text:'', def:H}); return; }
       var mod = K && heal && /spellcasting ability modifier/i.test(json) ? D.mod[K.ability] : 0;
       var dm = dice ? [{dice:dmgExpr(dice, mod), type:heal ? '' : DMG_EN[(e.damageInflict || [])[0]] || ''}] : [];
       if (H && H.dmg && H.dmg.length > 1 && dice) H.dmg.slice(1).forEach(function(d){ dm.push({dice:d.dice, type:d.type}); });
-      out.push({key:key, group:'Conjuros', title:Render5e.spName(e.name), lv:e.level || 0,
+      out.push({key:key, group:'Conjuros', cost:R.spellCost(e) || '', title:Render5e.spName(e.name), lv:e.level || 0,
         atk:e.spellAttack && e.spellAttack.length && K ? {bonus:K.atk} : null,
         save:e.savingThrow && e.savingThrow.length && K ? {ab:SAVE_EN[e.savingThrow[0]] || 'dex', dc:K.dc, half:/half as much damage|half damage/i.test(json)} : null,
         dmg:dm, heal:heal, text:'', def:H, melee:H && H.atk === 'melee'});
