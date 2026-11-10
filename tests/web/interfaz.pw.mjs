@@ -37,7 +37,7 @@ const iconOnly = (p) => p.evaluate(() => [...document.querySelectorAll('#vttHud 
 const pj = await open('pj', 390, 844, PAL);
 // --- Encabezado del libro (módulo 14): vitales, botones con nombre, recogido al bajar, lomo en horizontal ---
 ok('el encabezado muestra PG y CA', await pj.evaluate(() => { const v = document.getElementById('hVit'); return !v.hidden && /PG/.test(v.textContent) && /CA/.test(v.textContent); }));
-ok('Campaña y Ajustes tienen nombre (aria y texto)', await pj.evaluate(() => [...document.querySelectorAll('.h-pill')].map((b) => b.querySelector('span').textContent).join() === 'Campaña,Ajustes'));
+ok('Buscar y Menú tienen nombre (aria y texto); Campaña y Ajustes viven en el menú', await pj.evaluate(() => [...document.querySelectorAll('#head .h-btn')].map((b) => b.querySelector('span').textContent).join() === 'Buscar,Menú' && !!document.querySelector('#hMenu [data-act="campanas"]') && !!document.querySelector('#hMenu [data-act="settings"]')));
 await pj.evaluate(() => { document.getElementById('scroll').scrollTop = 600; }); await pj.waitForTimeout(250);
 ok('al bajar, el encabezado se recoge', await pj.evaluate(() => document.getElementById('head').classList.contains('fold') && document.getElementById('head').offsetHeight < 80));
 await pj.evaluate(() => { document.getElementById('scroll').scrollTop = 0; }); await pj.waitForTimeout(250);

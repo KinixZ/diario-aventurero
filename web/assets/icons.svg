@@ -9,7 +9,12 @@
   <symbol id="i-book" viewBox="-17 -17 34 34"><path d="M-13 -12 H13 V12 H-13 Z M-9 -12 V12 M13 -3 H16 V3 H13"/></symbol>
   <symbol id="i-tome" viewBox="-17 -17 34 34"><path d="M-14 -11 Q-7 -14 0 -10 Q7 -14 14 -11 V12 Q7 9 0 13 Q-7 9 -14 12 Z M0 -10 V13"/></symbol>
   <symbol id="i-armor" viewBox="-17 -17 34 34"><path d="M-12 -12 L-5 -14 L0 -10 L5 -14 L12 -12 L10 4 L6 14 H-6 L-10 4 Z M0 -10 V14"/></symbol>
-  <symbol id="i-gear" viewBox="-17 -17 34 34"><path d="M0 -6 A6 6 0 1 1 0 6 A6 6 0 1 1 0 -6 M0 -15 V-10 M0 10 V15 M-15 0 H-10 M10 0 H15 M-10.6 -10.6 L-7 -7 M7 7 L10.6 10.6 M-10.6 10.6 L-7 7 M7 -7 L10.6 -10.6"/></symbol>
+  <symbol id="i-search" viewBox="-17 -17 34 34"><path d="M-2 -12 A10 10 0 1 1 -2 8 A10 10 0 1 1 -2 -12 Z M5 5 L14 14"/></symbol>
+<symbol id="i-menu" viewBox="-17 -17 34 34"><path d="M-12 -9 H12 M-12 0 H12 M-12 9 H12"/></symbol>
+<symbol id="i-dots" viewBox="-17 -17 34 34"><path d="M-10 0 h0.01 M0 0 h0.01 M10 0 h0.01" stroke-width="4" stroke-linecap="round"/></symbol>
+<symbol id="i-sheet" viewBox="-17 -17 34 34"><path d="M-9 -14 H5 L10 -9 V14 H-9 Z M4 -14 V-8 H10 M-4 -2 H5 M-4 4 H5 M-4 9 H2"/></symbol>
+<symbol id="i-table" viewBox="-17 -17 34 34"><path d="M-13 -4 H13 M-10 -4 V12 M10 -4 V12 M-6 -11 H6 M0 2 h0.01"/></symbol>
+<symbol id="i-gear" viewBox="-17 -17 34 34"><path d="M0 -6 A6 6 0 1 1 0 6 A6 6 0 1 1 0 -6 M0 -15 V-10 M0 10 V15 M-15 0 H-10 M10 0 H15 M-10.6 -10.6 L-7 -7 M7 7 L10.6 10.6 M-10.6 10.6 L-7 7 M7 -7 L10.6 -10.6"/></symbol>
   <symbol id="i-x" viewBox="-17 -17 34 34"><path d="M-10 -10 L10 10 M10 -10 L-10 10"/></symbol>
   <symbol id="i-back" viewBox="-17 -17 34 34"><path d="M8 -12 L-4 0 L8 12"/></symbol>
   <symbol id="i-helm" viewBox="-17 -17 34 34"><path d="M-12 8 V-2 Q-12 -14 0 -14 Q12 -14 12 -2 V8 Z M-12 0 H-3 V8 M12 0 H3 V8"/></symbol>

@@ -6,9 +6,11 @@ const [html,pkg]=process.argv.slice(2), lib=JSON.parse(fs.readFileSync(pkg,'utf8
   const dom=new JSDOM(fs.readFileSync(html,'utf8'),{runScripts:'dangerously',pretendToBeVisual:true,url:'https://example.org/',beforeParse(w){w.indexedDB=idb;w.matchMedia=()=>({matches:false,addEventListener(){},addListener(){}});w.HTMLElement.prototype.scrollIntoView=function(){};w.Element.prototype.animate=function(){return {set onfinish(f){setTimeout(f,5)}}};w.addEventListener('error',e=>errors.push(e.error&&e.error.stack||e.message));w.console.error=(...a)=>errors.push(a.join(' '));}});
   const w=dom.window,d=w.document,$=s=>d.querySelector(s),$$=s=>[...d.querySelectorAll(s)];
   const click=el=>{ if(!el) throw new Error('falta elemento'); el.dispatchEvent(new w.MouseEvent('click',{bubbles:true})); };
+  // los compañeros viven en «Características» si ya hay alguno (o tu clase da uno); si no, en «Competencias»
+  const compBtn=()=>{ for (const t of ['car','comp']) { const b=$('[data-act="compnew"]'); if (b) return b; const pt=$('[data-act="ptab"][data-v="'+t+'"]'); if (pt) click(pt); } return $('[data-act="compnew"]'); };
   const set=(n,v)=>{ const el=$('#ceForm [name="'+n+'"]'); if(!el) throw new Error('falta campo '+n); el.value=v; };
   await wait(1500);
-  click($('[data-act="compnew"]')); await wait(20);
+  click(compBtn()); await wait(20);
   click($('[data-act="compblank"]')); await wait(20);
   set('name','Haku'); set('kind','Dragón feérico'); set('size','T'); set('ac','15'); set('hpMax','22'); set('sp_walk','20'); set('sp_fly','40');
   set('ab_str','6'); set('ab_dex','16'); set('ab_con','13'); set('ab_int','10'); set('ab_wis','12'); set('ab_cha','14');
@@ -27,7 +29,7 @@ const [html,pkg]=process.argv.slice(2), lib=JSON.parse(fs.readFileSync(pkg,'utf8
   click(card.querySelector('[data-act="compedit"]')); await wait(20); set('hpMax','30'); $('#ceForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true})); await wait(30);
   console.log('tras editar PG:', $('#pPersonaje .compc .comp-stats').textContent);
   // homúnculo integrado → hoja editable
-  click($('[data-act="compnew"]')); await wait(20); click($('#compList [data-act="compadd"][data-ref="Homunculus Servant|TCE"]')); await wait(30);
+  click(compBtn()); await wait(20); click($('#compList [data-act="compadd"][data-ref="Homunculus Servant|TCE"]')); await wait(30);
   const cards=$$('#pPersonaje .compc'); click(cards[1].querySelector('[data-act="compnick"]')); await wait(20); set('n','Tuerca'); $('#ceForm').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true})); await wait(30);
   console.log('apodo:', $$('#pPersonaje .compc')[1].querySelector('.comp-h b').textContent, '|', $$('#pPersonaje .compc')[1].querySelector('.comp-h small').textContent);
   click($$('#pPersonaje .compc')[1].querySelector('[data-act="compfork"]')); await wait(30);
