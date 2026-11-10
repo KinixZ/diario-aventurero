@@ -16,7 +16,7 @@ var Sala = (function(){
   var hooks = {};
   function on(t, fn){ (hooks[t] = hooks[t] || []).push(fn); }
   function emit(t, m){ (hooks[t] || []).forEach(function(fn){ try { fn(m); } catch(e){ if (window.console) console.warn(e); } }); }
-  var ws = null, room = null, status = 'off', lastErr = '', sel = {}, retry = 0, retryT = null, manual = false, toastT = null, lastSent = '', syncT = null, box = null, npcOpen = false, pending = null, durable = true;
+  var connSince = 0, wakeT = null, ws = null, room = null, status = 'off', lastErr = '', sel = {}, retry = 0, retryT = null, manual = false, toastT = null, lastSent = '', syncT = null, box = null, npcOpen = false, pending = null, durable = true;
 
   function store(){ try { localStorage.setItem(KEY, JSON.stringify(st)); } catch(e){} }
   function esc(s){ return Render5e.esc(s == null ? '' : s); }
@@ -52,7 +52,7 @@ var Sala = (function(){
   function connect(first){
     var url = serverUrl(); if (!url) { status = 'error'; lastErr = 'Falta la dirección del servidor (Ajustes → Servidor de campañas).'; draw(); return; }
     try { if (ws) { ws.onclose = null; ws.close(); } } catch(e){}
-    status = 'connecting'; lastErr = ''; manual = false; pending = first; draw();
+    status = 'connecting'; lastErr = ''; manual = false; pending = first; if (!connSince) connSince = Date.now(); draw();
     try { ws = new WebSocket(url); } catch(e){ status = 'error'; lastErr = 'No pude abrir la conexión: revisa la dirección.'; draw(); return; }
     ws.onopen = function(){ retry = 0; ws.send(JSON.stringify(first)); };
     ws.onmessage = function(ev){ var m; try { m = JSON.parse(ev.data); } catch(e){ return; } onMsg(m); };
@@ -144,7 +144,28 @@ var Sala = (function(){
 
   /* ---------- Combate → Orden (lista de iniciativa) ---------- */
   function mount(el){ box = el || null; draw(); }
+  /* «Despertando el servidor»: el servidor gratuito se duerme y tarda hasta un minuto en abrir.
+     Pasados unos segundos conectando, se dice eso con una barra en vez de parecer trabado. */
+  function waking(){ return status === 'connecting' && connSince && Date.now() - connSince > 2500; }
+  function wakeHtml(){
+    var e = active(), s = Math.round((Date.now() - (connSince || Date.now())) / 1000), lost = /perdió/.test(lastErr);
+    return '<div class="wake card" role="status" aria-live="polite"><span class="wake-ic"><svg class="ic"><use href="#i-cloud"/></svg></span>'
+      + '<b>' + (lost ? 'Reconectando' : 'Despertando el servidor') + '</b>'
+      + '<p>' + (lost ? 'Se perdió la conexión con ' + esc((e && (e.name || e.code)) || 'la campaña') + '. Vuelvo a entrar solo.' : 'El servidor gratuito se duerme cuando nadie lo usa. Tarda hasta un minuto en despertar' + (e ? ' y entrar a ' + esc(e.name || e.code) : '') + '.') + '</p>'
+      + '<span class="wake-bar"><i style="width:' + wakePct(s) + '%"></i></span><span class="wake-t">' + s + ' s · reintentando solo</span>'
+      + '<span class="wake-ok"><svg class="ic"><use href="#i-check"/></svg>Mientras, tu hoja funciona sin conexión.</span></div>';
+  }
+  function wakePct(s){ return Math.min(95, Math.round(s / 60 * 100)); }
+  function wakeTick(){
+    clearTimeout(wakeT); wakeT = null; if (status !== 'connecting') return;
+    var s = Math.round((Date.now() - connSince) / 1000);
+    var cb = document.getElementById('combat');
+    if (!document.querySelector('.wake') && waking() && cb && !cb.hidden) { emit('wake'); if (box && document.contains(box)) box.innerHTML = room && status === 'on' ? roomHtml() : lobbyHtml(); }
+    Array.prototype.forEach.call(document.querySelectorAll('.wake'), function(w){ var i = w.querySelector('.wake-bar i'), t = w.querySelector('.wake-t'); if (i) i.style.width = wakePct(s) + '%'; if (t) t.textContent = s + ' s · reintentando solo'; });
+    wakeT = setTimeout(wakeTick, 1000);
+  }
   function draw(){
+    if (status !== 'connecting') { connSince = 0; clearTimeout(wakeT); wakeT = null; } else if (!wakeT) wakeT = setTimeout(wakeTick, 1000);
     emit('redraw');
     if (!box || !document.contains(box)) { box = document.getElementById('salaBox'); if (!box) { header(); return; } }
     box.innerHTML = status === 'on' && room ? roomHtml() : lobbyHtml();
@@ -170,6 +191,7 @@ var Sala = (function(){
   function nameOf(id){ var m = room.members.filter(function(x){ return x.id === id; })[0]; if (m) return m.char ? m.char.name : m.name; var n = room.npcs.filter(function(x){ return x.id === id; })[0]; return n ? n.name : ''; }
   function lobbyHtml(){
     var e = active();
+    if (e && waking()) return wakeHtml();
     return '<div class="card sala"><div class="row"><span class="label">combate en grupo</span>' + (status === 'connecting' ? '<span class="muted" style="font-size:14px">Conectando…</span>' : '') + '</div>'
       + '<p class="note">' + (e && status === 'connecting' ? 'Entrando a ' + esc(e.name || e.code) + '…' : 'El orden de iniciativa, los enemigos y los turnos se comparten dentro de una campaña. Mientras tanto, Mi turno y Recursos funcionan con tu hoja.') + '</p>'
       + (e && status === 'connecting' ? '' : '<button class="btn main" type="button" data-act="mesatab" data-v="inicio">Elegir campaña</button>')
@@ -289,7 +311,7 @@ var Sala = (function(){
   /* Al abrir el diario, si estabas en una campaña, vuelve a entrar sola */
   function resume(){ if (st.active && active() && available() && status === 'off') rejoin(); }
 
-  return {legacyEncs:encList, dropLegacy:encDrop, mount:mount, sync:sync, settings:settings, resume:resume, status:function(){ return status; }, room:function(){ return room; }, on:on, send:send, toast:toast, httpBase:httpBase,
+  return {legacyEncs:encList, dropLegacy:encDrop, mount:mount, sync:sync, settings:settings, resume:resume, status:function(){ return status; }, waking:waking, wakeHtml:wakeHtml, room:function(){ return room; }, on:on, send:send, toast:toast, httpBase:httpBase,
     code:function(){ return st.active; }, token:function(){ var e = active(); return e ? e.token : null; }, role:function(){ var e = active(); return e ? e.role : null; }, redraw:function(){ draw(); },
     list:function(){ return st.list.slice(); }, active:active, select:select, create:createCampaign, join:joinCampaign, leave:leaveActive, forget:forgetCampaign, peek:peek, available:available,
     error:function(){ return lastErr; }, clearError:function(){ lastErr = ''; }, durable:function(){ return durable; }, summary:summary, COND:COND};

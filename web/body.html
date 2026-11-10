@@ -327,6 +327,18 @@
   </section>
 
   <nav class="ribbons" id="ribbons" aria-label="Separadores del diario"></nav>
+  <div class="nv-more" id="nvMore" hidden>
+    <button class="nv-more-scrim" type="button" data-act="nvmoreclose" aria-label="Cerrar Más" tabindex="-1"></button>
+    <section class="nv-more-p" role="dialog" aria-label="Más del diario" tabindex="-1">
+      <b>Más del diario</b>
+      <div class="nv-tiles">
+        <button class="nv-tile" type="button" data-act="tab" data-tab="notas"><svg class="ic"><use href="#i-quill"/></svg><b>Notas</b><small>Lo que pasa en la partida y lo que no quieres olvidar</small></button>
+        <button class="nv-tile" type="button" data-act="tab" data-tab="bestias"><svg class="ic"><use href="#i-paw"/></svg><b>Bestiario</b><small>Lo que el grupo ha encontrado</small></button>
+        <button class="nv-tile" type="button" data-act="tab" data-tab="grimorio"><svg class="ic"><use href="#i-tome"/></svg><b>Grimorio</b><small>Reglas, conjuros, objetos y estados</small></button>
+        <button class="nv-tile" type="button" data-act="settings"><svg class="ic"><use href="#i-gear"/></svg><b>Ajustes</b><small>Apariencia, dados, idioma y biblioteca</small></button>
+      </div>
+    </section>
+  </div>
 
   <!-- MODO COMBATE -->
   <section class="combat" id="combat" hidden aria-label="Campaña" data-tab="inicio">

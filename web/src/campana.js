@@ -54,7 +54,7 @@ var Campana = (function(){
 
   function selector(){
     var L = Sala.list(), act = Sala.active(), err = Sala.error(), r = room(), can = Sala.available();
-    var h = '<div class="camp-home">';
+    var h = '<div class="camp-home">' + (Sala.waking && Sala.waking() ? Sala.wakeHtml() : '');
     if (r) h += '<button class="btn sm camp-back" type="button" data-act="campback"><svg class="ic"><use href="#i-back"/></svg>Volver a ' + esc(r.name) + '</button>';
     h += '<div class="camp-sec"><h3 class="camp-h">Tus campañas</h3>';
     if (!can) h += '<p class="note">Para jugar en grupo abre el diario desde el servidor del proyecto o escribe su dirección en Ajustes → Servidor de campañas.</p>';
@@ -64,7 +64,7 @@ var Campana = (function(){
         + '<button class="icon-btn camp-forget" type="button" data-act="campforget" data-code="' + attr(e.code) + '" aria-label="Olvidar ' + attr(e.name || e.code) + ' en este aparato" title="Olvidar en este aparato"><svg class="ic"><use href="#i-x"/></svg></button></div>';
     }).join('') + '</div>';
     else h += '<p class="note">Todavía no estás en ninguna campaña. Únete con el código que te pase tu DM, o crea una si tú diriges.</p>';
-    if (err && Sala.status() !== 'on') h += '<p class="err">' + esc(err) + '</p>';
+    if (err && Sala.status() !== 'on' && !(Sala.waking && Sala.waking())) h += '<p class="err">' + esc(err) + '</p>';
     h += '</div>';
     /* Dos puertas: jugador y DM */
     var chars = window.Diario && Diario.chars ? Diario.chars() : [];
@@ -214,6 +214,7 @@ var Campana = (function(){
   Sala.on('joined', function(m){ showList = false; keyMsg = ''; render(); if (m.created && visible()) render(); });
   Sala.on('error', function(){ refresh(); });
   Sala.on('redraw', function(){ title(); });
+  Sala.on('wake', refresh);
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch); else watch();
   return {render:render, title:title};
