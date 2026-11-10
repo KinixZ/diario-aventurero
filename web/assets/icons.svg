@@ -13,7 +13,7 @@
 <symbol id="i-menu" viewBox="-17 -17 34 34"><path d="M-12 -9 H12 M-12 0 H12 M-12 9 H12"/></symbol>
 <symbol id="i-dots" viewBox="-17 -17 34 34"><path d="M-10 0 h0.01 M0 0 h0.01 M10 0 h0.01" stroke-width="4" stroke-linecap="round"/></symbol>
 <symbol id="i-sheet" viewBox="-17 -17 34 34"><path d="M-9 -14 H5 L10 -9 V14 H-9 Z M4 -14 V-8 H10 M-4 -2 H5 M-4 4 H5 M-4 9 H2"/></symbol>
-<symbol id="i-cloud" viewBox="-17 -17 34 34"><path d="M-9 9 H9 A6 6 0 0 0 9.5 -3 A9 9 0 0 0 -7.5 -4.5 A6.5 6.5 0 0 0 -9 9 Z"/></symbol><symbol id="i-table" viewBox="-17 -17 34 34"><path d="M-13 -4 H13 M-10 -4 V12 M10 -4 V12 M-6 -11 H6 M0 2 h0.01"/></symbol>
+<symbol id="i-cloud" viewBox="-17 -17 34 34"><path d="M-9 9 H9 A6 6 0 0 0 9.5 -3 A9 9 0 0 0 -7.5 -4.5 A6.5 6.5 0 0 0 -9 9 Z"/></symbol><symbol id="i-globe" viewBox="-17 -17 34 34"><path d="M0 -13 A13 13 0 1 0 0.01 -13 M-13 0 H13 M0 -13 C-7 -6 -7 6 0 13 M0 -13 C7 -6 7 6 0 13 M-11 -7 H11 M-11 7 H11"/></symbol><symbol id="i-table" viewBox="-17 -17 34 34"><path d="M-13 -4 H13 M-10 -4 V12 M10 -4 V12 M-6 -11 H6 M0 2 h0.01"/></symbol>
 <symbol id="i-gear" viewBox="-17 -17 34 34"><path d="M0 -6 A6 6 0 1 1 0 6 A6 6 0 1 1 0 -6 M0 -15 V-10 M0 10 V15 M-15 0 H-10 M10 0 H15 M-10.6 -10.6 L-7 -7 M7 7 L10.6 10.6 M-10.6 10.6 L-7 7 M7 -7 L10.6 -10.6"/></symbol>
   <symbol id="i-x" viewBox="-17 -17 34 34"><path d="M-10 -10 L10 10 M10 -10 L-10 10"/></symbol>
   <symbol id="i-back" viewBox="-17 -17 34 34"><path d="M8 -12 L-4 0 L8 12"/></symbol>
