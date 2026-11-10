@@ -26,7 +26,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   act('crstep', '[data-v="listo"]'); await wait(20); act('crnext'); await wait(40);
   console.log('sheet head:', $('#hSub').textContent, '| lvl', $('#hLvl').textContent);
   act('tab', '[data-tab="conjuros"]'); await wait(20);
-  console.log('slots card:', ($('#pConjuros .card') || {}).textContent.replace(/\s+/g,' ').slice(0, 200));
+  console.log('espacios por nivel:', $$('#pConjuros .sp-lh').map(e => e.textContent.trim() + ' ' + e.querySelectorAll('.pip').length).join(' | '));
+  if (!$$('#pConjuros .sp-lh.pact .pip').length) throw new Error('faltan los espacios de pacto en la lista');
   console.log('banners:', $$('#pConjuros .banner p').map(e => e.textContent).join(' || '));
   // remove the warlock level again
   act('levelup'); await wait(30); act('crdown'); await wait(30);

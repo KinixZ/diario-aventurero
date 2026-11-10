@@ -24,14 +24,19 @@
       <div class="panel" data-panel="personaje" id="pPersonaje"></div>
       <div class="panel" data-panel="conjuros" id="pConjuros" hidden></div>
       <div class="panel" data-panel="equipo" id="pEquipo" hidden>
+        <div class="card eq-sum">
+          <div class="eq-st"><div><b id="eqAc">10</b><small>CA con tu equipo</small></div><div><b id="attuneCount">0 / 3</b><small>Sintonizados</small></div><div><b id="eqCells">0 / 80</b><small>Casillas</small></div></div>
+          <div class="coins" id="coins" role="group" aria-label="Monedas"></div>
+        </div>
         <div class="card worn">
-          <div class="row"><span class="label">equipado</span><span class="muted" style="font-size:13px" id="attuneCount">Sintonización 0 / 3</span></div>
-          <div class="slots" id="bodySlots"></div>
-          <p class="note" style="margin-top:8px">Un objeto por tipo: un par de botas, guantes y brazales, una capa, algo en la cabeza y una armadura (guía de la DMG). Anillos y amuletos van en accesorios; su límite real es la sintonización.</p>
+          <div class="row"><span class="label">puesto</span></div>
+          <div class="slots eq-fig" id="bodySlots"></div>
+          <details class="eq-help"><summary>¿Qué va en cada espacio?</summary><p>Un objeto por tipo: un par de botas, guantes y brazales, una capa, algo en la cabeza y una armadura (guía de la DMG). Anillos y amuletos van en accesorios; su límite real es la sintonización.</p></details>
         </div>
         <div class="case">
           <div class="boxtabs" id="boxTabs" role="tablist" aria-label="Contenedores"></div>
-          <div class="case-h"><b id="caseName">Mochila</b><span id="caseCount">0 / 80 casillas</span></div>
+          <div class="case-h"><b id="caseName">Mochila</b><span id="caseCount">0 / 80 casillas</span><div class="seg sm inv-view" id="invView" role="group" aria-label="Ver lo que llevas como"><button type="button" data-act="invview" data-v="list" aria-pressed="true">Lista</button><button type="button" data-act="invview" data-v="grid" aria-pressed="false">Cuadrícula</button></div></div>
+          <div class="inv-list" id="invList"></div>
           <div class="grid" id="grid" role="group" aria-label="Contenedor abierto. Arrastra los objetos para acomodarlos; con un objeto elegido, las flechas lo mueven y la R lo gira.">
             <div class="ghost" id="ghost" hidden></div>
           </div>
@@ -41,17 +46,12 @@
           </div>
         </div>
         <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" type="button" data-act="finditems" style="flex:1 1 200px">Buscar objetos en el grimorio</button><button class="btn" type="button" data-act="hbnew" style="flex:1 1 200px">Crear homebrew: armas, armaduras, objetos</button></div>
-        <div class="card torn">
-          <span class="label">monedas</span>
-          <div class="coins" id="coins"></div>
-        </div>
       </div>
       <div class="panel" data-panel="rasgos" id="pRasgos" hidden></div>
       <div class="panel" data-panel="notas" hidden>
-        <label for="notes" class="label">diario de sesión</label>
-        <textarea id="notes" class="notes" placeholder="Escribe aquí lo que pasó en la sesión: nombres, pistas y promesas rotas…"></textarea>
-        <button class="btn notes-maps" type="button" data-act="mapsopen"><svg class="ic"><use href="#i-map"/></svg>Mapas de las zonas</button>
+        <div id="pNotas"></div>
         <div class="card ses-list" id="sesList"></div>
+        <button class="btn notes-maps" type="button" data-act="mapsopen"><svg class="ic"><use href="#i-map"/></svg>Mapas de las zonas</button>
       </div>
       <div class="panel" data-panel="bestias" id="pBestias" hidden></div>
       <div class="panel" data-panel="grimorio" id="grim" hidden></div>
@@ -216,6 +216,10 @@
     <div class="sheet" id="restSheet" hidden role="dialog" aria-labelledby="restTitle">
       <div class="sheet-h"><h2 id="restTitle">Descanso</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="scroll"><div id="restBody"></div></div>
+    </div>
+    <div class="sheet" id="noteSheet" hidden role="dialog" aria-labelledby="noteTitle">
+      <div class="sheet-h"><h2 id="noteTitle">Nota</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll"><div id="noteBody" class="nt-ed"></div></div>
     </div>
     <div class="sheet" id="useSheet" hidden role="dialog" aria-labelledby="useTitle">
       <div class="sheet-h"><h2 id="useTitle">Usar</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>

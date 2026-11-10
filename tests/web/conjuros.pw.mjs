@@ -38,23 +38,37 @@ const p = await open('pj', 390, 844, C);
 const tab = async (t) => { await p.evaluate((t) => { const b = document.querySelector('[data-act="tab"][data-tab="' + t + '"], .ribbon[data-tab="' + t + '"]'); if (b) b.click(); }, t); await p.waitForTimeout(400); };
 // --- Conjuros: nombres en español ---
 await tab('conjuros');
-const names = await p.evaluate(() => [...document.querySelectorAll('#pConjuros .spell h3 a.ref')].map((a) => a.textContent));
+const names = await p.evaluate(() => [...document.querySelectorAll('#pConjuros .sp-row .sp-n')].map((a) => a.textContent));
 ok('hay conjuros en la página (' + names.length + ')', names.length > 10);
 ok('los nombres salen en español (Bendición, Curar heridas…)', names.includes('Bendición') && names.includes('Curar heridas'));
-ok('debajo va el nombre en inglés', await p.evaluate(() => [...document.querySelectorAll('#pConjuros .spell .sp-en')].some((s) => s.textContent === 'Bless')));
+ok('al lado va el nombre en inglés', await p.evaluate(() => [...document.querySelectorAll('#pConjuros .sp-row .sp-en')].some((s) => s.textContent === 'Bless')));
+// lista compacta: los espacios en la cabecera de cada nivel; tocar un conjuro lo abre ahí mismo
+ok('cada nivel lleva sus espacios en la cabecera', await p.evaluate(() => { const h = [...document.querySelectorAll('#pConjuros .sp-lh')].find((x) => /Nivel 1/.test(x.textContent)); return !!h && h.querySelectorAll('.pip.slotpip').length === 4; }));
+ok('ya no va la tarjeta de espacios aparte', await p.evaluate(() => ![...document.querySelectorAll('#pConjuros .card .label')].some((l) => /espacios de conjuro/i.test(l.textContent))));
+await p.evaluate(() => [...document.querySelectorAll('#pConjuros .sp-row')].find((r) => r.querySelector('.sp-n').textContent === 'Bendición').querySelector('.sp-tog').click()); await p.waitForTimeout(250);
+ok('tocar Bendición la abre ahí: alcance, duración, texto y Lanzar', await p.evaluate(() => { const o = document.querySelector('#pConjuros .sp-row.open'); return !!o && /Alcance/.test(o.textContent) && /Duración/.test(o.textContent) && !!o.querySelector('[data-act="spcast"]') && !!o.querySelector('[data-act="gopen"]'); }));
+await shot(p, 'lista');
+const used0 = await p.evaluate(() => Diario.rt(Diario.cur()).slotsUsed[0] || 0);
+await p.click('#pConjuros .sp-row.open [data-act="spcast"]'); await p.waitForTimeout(300);
+ok('Lanzar gasta un espacio de nivel 1 y se puede deshacer', (await p.evaluate(() => Diario.rt(Diario.cur()).slotsUsed[0] || 0)) === used0 + 1 && await p.evaluate(() => !document.getElementById('undoToast').hidden && /Bendición/.test(document.getElementById('undoTxt').textContent)));
+await p.click('[data-act="undo"]'); await p.waitForTimeout(200);
+ok('deshacer devuelve el espacio', (await p.evaluate(() => Diario.rt(Diario.cur()).slotsUsed[0] || 0)) === used0);
+await p.click('.sp-quick [data-act="spft"][data-v="r"]'); await p.waitForTimeout(250);
+ok('el atajo Reacción deja solo reacciones', await p.evaluate(() => { const r = [...document.querySelectorAll('#pConjuros .sp-row .sp-sub')]; return r.length > 0 && r.every((x) => /^Reacción/.test(x.textContent)); }));
+await p.click('.sp-quick [data-act="spft"][data-v=""]'); await p.waitForTimeout(250);
 // buscar en español y en inglés
-const count = () => p.evaluate(() => document.querySelectorAll('#pConjuros .spell').length);
+const count = () => p.evaluate(() => document.querySelectorAll('#pConjuros .sp-row').length);
 const all = await count();
 await p.fill('#spQ', 'curar'); await p.waitForTimeout(300);
-ok('buscar «curar» encuentra Curar heridas', await p.evaluate(() => [...document.querySelectorAll('#pConjuros .spell h3 a.ref')].some((a) => a.textContent === 'Curar heridas')) && (await count()) < all);
+ok('buscar «curar» encuentra Curar heridas', await p.evaluate(() => [...document.querySelectorAll('#pConjuros .sp-row .sp-n')].some((a) => a.textContent === 'Curar heridas')) && (await count()) < all);
 await p.fill('#spQ', 'bless'); await p.waitForTimeout(300);
-ok('buscar en inglés («bless») también', await p.evaluate(() => [...document.querySelectorAll('#pConjuros .spell h3 a.ref')].some((a) => a.textContent === 'Bendición')));
+ok('buscar en inglés («bless») también', await p.evaluate(() => [...document.querySelectorAll('#pConjuros .sp-row .sp-n')].some((a) => a.textContent === 'Bendición')));
 await p.fill('#spQ', ''); await p.waitForTimeout(300);
 // --- Filtros ---
 await p.click('[data-act="spfopen"]'); await p.waitForTimeout(300);
-ok('se abren los filtros con nivel, tiempo, escuela y qué hace', await p.evaluate(() => document.querySelectorAll('.sp-filters .sp-fg').length === 4));
+ok('se abren los filtros con nivel, tiempo, escuela, qué hace y cómo verlos', await p.evaluate(() => document.querySelectorAll('.sp-filters .sp-fg').length === 5 && /Ver como/.test(document.querySelector('.sp-filters').textContent)));
 await p.click('.sp-chip[data-g="lv"][data-v="1"]'); await p.waitForTimeout(300);
-ok('filtrar nivel 1: solo conjuros de nivel 1', await p.evaluate(() => { const s = [...document.querySelectorAll('#pConjuros .lvl-sep')].map((x) => x.textContent); return s.length === 1 && /nivel 1/.test(s[0]); }));
+ok('filtrar nivel 1: solo conjuros de nivel 1', await p.evaluate(() => { const s = [...document.querySelectorAll('#pConjuros .lvl-sep')].map((x) => x.textContent); return s.length === 1 && /nivel 1/i.test(s[0]); }));
 const n1 = await count();
 await p.click('.sp-chip[data-g="t"][data-v="b"]'); await p.waitForTimeout(300);
 const n1b = await count();
@@ -63,12 +77,12 @@ ok('el botón dice cuántos filtros hay', await p.evaluate(() => /Filtros · 2/.
 await shot(p, 'filtros');
 await p.click('.sp-chip[data-g="t"][data-v="b"]'); await p.click('.sp-chip[data-g="lv"][data-v="1"]'); await p.waitForTimeout(200);
 await p.click('.sp-chip[data-g="p"][data-v="conc"]'); await p.waitForTimeout(300);
-ok('filtro de concentración', await p.evaluate(() => document.querySelectorAll('#pConjuros .spell').length > 0) && (await count()) < all);
+ok('filtro de concentración', await p.evaluate(() => document.querySelectorAll('#pConjuros .sp-row').length > 0) && (await count()) < all);
 await p.click('[data-act="spfclear"]'); await p.waitForTimeout(300);
 ok('quitar filtros vuelve a todos', (await count()) === all);
 // --- Modo inglés ---
 await p.evaluate(() => Render5e.spMode('en')); await p.evaluate(() => Diario.renderAll()); await p.waitForTimeout(300);
-ok('en modo inglés salen en inglés', await p.evaluate(() => [...document.querySelectorAll('#pConjuros .spell h3 a.ref')].some((a) => a.textContent === 'Bless')));
+ok('en modo inglés salen en inglés', await p.evaluate(() => [...document.querySelectorAll('#pConjuros .sp-row .sp-n')].some((a) => a.textContent === 'Bless')));
 await p.evaluate(() => Render5e.spMode('es')); await p.evaluate(() => Diario.renderAll()); await p.waitForTimeout(200);
 // --- Rasgos: Suerte con sus puntos ---
 await tab('rasgos');

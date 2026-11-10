@@ -189,12 +189,11 @@
       ['#pPersonaje','#pConjuros','#pRasgos'].forEach(function(s){ $(s).innerHTML = h; });
       $('#bodySlots').innerHTML = ''; $('#coins').innerHTML = '';
       $$('.it', grid).forEach(function(e){ e.remove(); }); $('#caseText').innerHTML = h; $('#caseActions').innerHTML = '';
-      $('#notes').value = ''; $('#notes').disabled = true;
+      $('#pNotas').innerHTML = h;
       renderChars(); if (S.tab === 'bestias' && window.Cronica) Cronica.render(); save(); return;
     }
-    $('#notes').disabled = false; $('#notes').value = rt(C).notes || '';
     if (window.Identidad) Identidad.apply();
-    renderPersonaje(C); renderConjuros(C); renderRasgos(C); renderEquip(); renderCoins(C); renderChars();
+    renderPersonaje(C); renderConjuros(C); renderRasgos(C); renderEquip(); renderCoins(C); renderNotas(C); renderChars();
     if (S.tab === 'bestias' && window.Cronica) Cronica.render();
     if (!$('#combat').hidden) renderCombat();
     save(); fabSync();
@@ -379,6 +378,7 @@
     else if (a === 'long') { lb = 'Descanso largo: todo recuperado'; closeSheets(); }
     else if (a === 'quse') lb = 'Lo usaste' + (b.closest('#useSheet') ? '' : '');
     else if (a === 'exh') lb = 'Cansancio ' + (r1.exh || 0);
+    else if (a === 'spcast') lb = 'Lanzaste ' + Render5e.spName(b.dataset.n || '') + (b.dataset.pact === '1' ? ' con un espacio de pacto' : ' · nivel ' + b.dataset.lv);
     undoOffer(snap, lb);
     if (!$('#useSheet').hidden) $('#useBody').innerHTML = useHtml();
   }
@@ -491,22 +491,70 @@
     if (!any) return '';
     return '<label class="toggle fulltog"><input type="checkbox" data-act="fullspells"' + (on ? ' checked' : '') + '> Lista completa de mi clase siempre preparada <small class="muted">(regla de la mesa)</small></label>';
   }
+  /* ---------- Lista compacta (módulo 22): los espacios en la cabecera de cada nivel; un conjuro se abre ahí mismo ---------- */
+  var spOpen = null;
+  function spView(){ return S.spView === 'table' || S.spView === 'cards' ? S.spView : 'list'; }
+  function spTime(e){ var c = R.spellCost(e); if (c && COST[c]) return COST[c]; var d = Render5e.detail('spell', e).meta.filter(function(x){ return x[0] === 'Lanzamiento'; })[0]; return d ? d[1].replace(/<[^>]+>/g, '').split(',')[0] : ''; }
+  function casterLine(){ return (D.casters || []).map(function(K){ return '<p class="sp-cl">' + (D.multi ? '<b>' + esc(K.name) + '</b> · ' : '') + 'CD <b>' + K.dc + '</b> · ataque <b>' + sgn(K.atk) + '</b> · ' + R.AB[K.ability] + '</p>'; }).join(''); }
+  /* El espacio más bajo que sirve para un conjuro de nivel lv: primero los normales, luego el pacto */
+  function castSlot(lv){
+    var r = rt(cur());
+    for (var i = lv - 1; i < D.slots.length; i++) if (D.slots[i] > 0 && (r.slotsUsed[i] || 0) < D.slots[i]) return {lv:i + 1, pact:false};
+    if (D.pact && D.pact.level >= lv && (r.pactUsed || 0) < D.pact.count) return {lv:D.pact.level, pact:true};
+    return null;
+  }
+  function spRow(x){
+    var e = x.e, k = e.name + '|' + e.source, open = spOpen === k, conc = (e.duration || []).some(function(d){ return d.concentration; }), rit = !!(e.meta && e.meta.ritual);
+    var info = spellInfo(e).split(' · ').filter(function(t){ return t !== 'concentración'; }).join(' · '), en = Render5e.spEn(e.name);
+    var h = '<div class="sp-row' + (open ? ' open' : '') + '"><button type="button" class="sp-tog" data-act="sprow" data-k="' + attr(k) + '" aria-expanded="' + open + '">'
+      + '<span class="sp-ic"><svg class="ic"><use href="#i-star"/></svg></span>'
+      + '<span class="sp-t"><span class="sp-nl"><b class="sp-n">' + spNm(e.name) + '</b>' + (en ? '<small class="sp-en" lang="en">' + esc(en) + '</small>' : '') + '</span><span class="sp-sub">' + esc([spTime(e), info].filter(Boolean).join(' · ')) + '</span></span>'
+      + '<span class="sp-tags">' + (conc ? '<span class="tag conc" title="Concentración">C</span>' : '') + (rit ? '<span class="tag cls" title="Ritual">R</span>' : '') + '<em>' + esc(String(x.tag).split(' · ')[0]) + '</em></span></button>';
+    if (open) {
+      var meta = Render5e.detail('spell', e).meta.filter(function(m){ return /Lanzamiento|Alcance|Componentes|Duración/.test(m[0]); }).map(function(m){ return '<span><small>' + esc(m[0]) + '</small>' + m[1].replace(/<(?!\/?(?:b|i|em)\b)[^>]+>/g, '') + '</span>'; }).join('');
+      var sl = e.level ? castSlot(e.level) : null;
+      h += '<div class="sp-x"><div class="sp-meta">' + meta + '</div><p>' + esc(plainText(e.entries, 340)) + '</p><div class="sp-xb">'
+        + (e.level ? (sl ? '<button class="btn main sm" type="button" data-act="spcast" data-lv="' + sl.lv + '" data-pact="' + (sl.pact ? 1 : 0) + '" data-n="' + attr(e.name) + '">Lanzar · gasta ' + (sl.pact ? 'un espacio de pacto' : 'nivel ' + sl.lv) + '</button>' : '<button class="btn sm" type="button" disabled>Sin espacios de nivel ' + e.level + ' o más</button>') : '')
+        + '<button class="btn sm" type="button" data-act="gopen" data-ref="spell|' + attr(e.name) + '|' + attr(e.source) + '">Ver todo</button></div></div>';
+    }
+    return h + '</div>';
+  }
+  function spLvHead(lv, r){
+    var n = lv > 0 ? D.slots[lv - 1] || 0 : 0;
+    return '<div class="lvl-sep sp-lh"><span>' + (lv ? 'Nivel ' + lv : 'Trucos') + '</span>' + (n ? '<span class="pips" role="group" aria-label="Espacios de nivel ' + lv + '">' + pipsHTML(n, Math.min(n, r.slotsUsed[lv - 1] || 0), 'slot:' + (lv - 1)) + '</span>' : '') + '</div>';
+  }
   function renderConjuros(C){
-    var r = rt(C), h = '', sp = allSpells();
+    var r = rt(C), h = '', sp = allSpells(), view = spView();
     if (!D.spellAbility && !sp.length) { $('#pConjuros').innerHTML = '<div class="empty-state"><b>Sin conjuros</b>Tu clase no lanza conjuros. Si una dote o tu especie te da alguno, aparecerá aquí.</div>'; return; }
-    h += casterTrios();
-    h += slotsCard(r);
-    h += fullToggle();
     var total = sp.length, F = spFilt();
-    h += '<div class="viewseg" role="group" aria-label="Vista de conjuros"><button type="button" data-act="spview" data-v="cards" aria-pressed="' + (S.spView !== 'table') + '">Tarjetas</button><button type="button" data-act="spview" data-v="table" aria-pressed="' + (S.spView === 'table') + '">Tabla</button>'
+    if (view === 'list') h += casterLine();
+    else { h += casterTrios(); h += slotsCard(r); }
+    if (view !== 'list') h += fullToggle();
+    h += '<div class="viewseg sp-bar" role="group" aria-label="Buscar y filtrar conjuros">'
       + '<input class="field spq" id="spQ" type="search" placeholder="Buscar entre ' + total + '" aria-label="Buscar conjuro (en español o en inglés)" autocomplete="off" value="' + attr(spQ) + '">'
       + '<button type="button" class="btn sm sp-fbtn' + (spFN(F) ? ' on' : '') + '" data-act="spfopen" aria-expanded="' + !!S.spFOpen + '">Filtros' + (spFN(F) ? ' · ' + spFN(F) : '') + '</button></div>';
+    var t1 = F.t.length === 1 ? F.t[0] : F.t.length ? '*' : '';
+    h += '<div class="sp-quick" role="group" aria-label="Por tiempo de lanzamiento">' + [['', 'Todos'], ['a', 'Acción'], ['b', 'Adicional'], ['r', 'Reacción']].map(function(c){ return '<button type="button" class="sp-chip" data-act="spft" data-v="' + c[0] + '" aria-pressed="' + (t1 === c[0]) + '">' + c[1] + '</button>'; }).join('') + '</div>';
     if (S.spFOpen) h += spFiltHtml(sp, F);
     sp = sp.filter(function(x){ return spPass(x.e, F); });
     if (spQ.trim()) { var qq = N(spQ.trim()); sp = sp.filter(function(x){ return N(x.e.name).indexOf(qq) >= 0 || N(Render5e.Tname(x.e.name)).indexOf(qq) >= 0; }); }
     if (spFN(F) || spQ.trim()) h += '<p class="sp-count">' + sp.length + ' de ' + total + ' conjuros' + (spFN(F) ? ' · <button type="button" class="linkbtn" data-act="spfclear">Quitar filtros</button>' : '') + '</p>';
-    if (S.spView === 'table') { h += spellRowsHtml(sp, {origin:true, act:'spsort', sort:S.spSort || {k:'lv', dir:1}}); h += prepBanners(); $('#pConjuros').innerHTML = h; return; }
+    if (view === 'table') { h += spellRowsHtml(sp, {origin:true, act:'spsort', sort:S.spSort || {k:'lv', dir:1}}); h += prepBanners(); $('#pConjuros').innerHTML = h; return; }
     var byLv = {}; sp.forEach(function(x){ (byLv[x.e.level] = byLv[x.e.level] || []).push(x); });
+    if (view === 'list') {
+      var narrowed = spFN(F) || spQ.trim();
+      if (!narrowed) D.slots.forEach(function(n, i){ if (n > 0 && !byLv[i + 1]) byLv[i + 1] = []; });
+      if (D.pact && !narrowed) h += '<div class="lvl-sep sp-lh pact"><span>Pacto · nivel ' + D.pact.level + '</span><span class="pips" role="group" aria-label="Espacios de pacto">' + pipsHTML(D.pact.count, Math.min(D.pact.count, r.pactUsed || 0), 'pact') + '</span></div>';
+      h += '<div class="sp-list">' + Object.keys(byLv).sort(function(a, b){ return a - b; }).map(function(lv){
+        var rows = byLv[lv].sort(function(a, b){ return Render5e.spName(a.e.name).localeCompare(Render5e.spName(b.e.name)); });
+        return spLvHead(+lv, r) + (rows.length ? rows.map(spRow).join('') : '<p class="note sp-none">Ningún conjuro de este nivel: sirve para lanzar uno menor con más fuerza.</p>');
+      }).join('') + '</div>';
+      if (!sp.length && narrowed) h += '<p class="empty-state">Ningún conjuro cumple con eso.</p>';
+      h += prepBanners() + fullToggle();
+      $('#pConjuros').innerHTML = h;
+      var qj = $('#spQ'); if (qj && spFocus) { qj.focus(); qj.setSelectionRange(qj.value.length, qj.value.length); }
+      return;
+    }
     h += '<div class="spell-grid">' + Object.keys(byLv).sort(function(a, b){ return a - b; }).map(function(lv){
       return '<div class="lvl-sep" style="grid-column:1/-1">— ' + (+lv === 0 ? 'trucos' : 'nivel ' + lv) + ' —</div>' + byLv[lv].sort(function(a, b){ return a.e.name.localeCompare(b.e.name); }).map(function(x){ return spellCard(x.e, x.tag, x.cls); }).join('');
     }).join('') + '</div>';
@@ -546,6 +594,7 @@
       + grp('Tiempo de lanzamiento', SPF_T.map(function(t){ return chip('t', t[0], t[1]); }).join(''))
       + grp('Escuela', Object.keys(scs).sort().map(function(k){ return chip('sc', k, (Render5e.SCHOOL && Render5e.SCHOOL[k]) || k); }).join(''))
       + grp('Qué hace', SPF_P.map(function(t){ return chip('p', t[0], t[1]); }).join(''))
+      + '<div class="sp-fg"><span class="label">Ver como</span><div class="seg sm" role="group" aria-label="Vista de conjuros">' + [['list','Lista'],['cards','Tarjetas'],['table','Tabla']].map(function(v){ return '<button type="button" data-act="spview" data-v="' + v[0] + '" aria-pressed="' + (spView() === v[0]) + '">' + v[1] + '</button>'; }).join('') + '</div></div>'
       + '</div>';
   }
   var spFocus = false;
@@ -588,7 +637,7 @@
     var cost = featCost(f), x = featRes(f), txt = f.hb ? f.hb.text : plainText(f.e.entries, 400), qk = f.hb ? 'hb:' + f.hb.id : 'f:' + f.name, pinned = quickKeys(r).indexOf(qk) >= 0;
     var line = f.hb ? hbLine(f.hb) : '';
     return '<div class="rg-f' + (cost ? ' act' : x ? ' pinable' : '') + '"><details class="feat-d" data-feat="' + i + '"><summary><span class="rg-t">' + costBadge(cost, true) + '<b>' + nm(f.name) + '</b>' + (f.level ? '<small>nv ' + (D.multi && f.clv ? f.clv : f.level) + '</small>' : '') + '</span>'
-      + (line ? '<span class="rg-line">' + line + '</span>' : '') + (txt ? '<span class="rg-s">' + esc(firstSentence(txt)) + '</span>' : '') + '</summary><div class="gtext"></div>'
+      + (line ? '<span class="rg-line">' + line + '</span>' : '') + (txt ? '<span class="rg-s">' + esc(firstSentence(txt)) + '</span>' : '') + (txt && txt.length > firstSentence(txt).length + 4 ? '<span class="rg-more" aria-hidden="true">más</span>' : '') + '</summary><div class="gtext"></div>'
       + (f.hb ? '<div class="row rg-hbact"><button class="btn sm" type="button" data-act="abedit" data-id="' + attr(f.hb.id) + '">Editar</button><button class="btn sm" type="button" data-act="abdel" data-id="' + attr(f.hb.id) + '">Borrar</button></div>'
         : x && x.pool ? '' : '<div class="row rg-hbact"><button class="btn sm quiet" type="button" data-act="ctropen" data-n="' + attr(f.name) + '">' + (x ? 'Ajustar usos' : 'Contar usos') + '</button>' + (x && (x.auto || x.custom) ? '<small class="muted rg-how">' + (x.custom ? 'usos puestos por ti' : 'usos leídos del texto') + '</small>' : '') + '</div>') + '</details>'
       + resUse(x, r)
@@ -607,16 +656,17 @@
     groups.push({k:'feat', title:'Dotes', sub:'', test:function(f){ return f.from === 'Dote'; }});
     groups.push({k:'hb', title:'Homebrew', sub:'habilidades propias', test:function(f){ return f.from === 'Homebrew'; }, hb:true});
     var all = D.features.map(function(f, i){ return {f:f, i:i}; });
-    var nAct = all.filter(function(x){ return featCost(x.f) || featRes(x.f); }).length;
+    var nAct = all.filter(function(x){ return featCost(x.f) || featRes(x.f); }).length, nUse = all.filter(function(x){ return featRes(x.f); }).length;
+    if (filt === 'pas') filt = 'all';
     var h = pendingBanner() + mcBanner()
       + '<div class="rg-bar"><input class="field" id="rgQ" type="search" placeholder="Buscar entre ' + all.length + ' rasgos" aria-label="Buscar rasgo" autocomplete="off" value="' + attr(rgQ) + '">'
-      + '<div class="rg-seg" role="group" aria-label="Filtrar rasgos">' + [['all','Todos'],['act','En combate · ' + nAct],['pas','Pasivos']].map(function(x){ return '<button type="button" data-act="rgf" data-v="' + x[0] + '" aria-pressed="' + (filt === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>'
-      + '<div class="rg-tools"><button class="btn" type="button" data-act="abnew">Nueva habilidad</button><button class="btn main" type="button" data-act="levelup">Subir de nivel</button></div></div>'
+      + '<div class="rg-seg" role="group" aria-label="Filtrar rasgos">' + [['use','Con usos · ' + nUse],['act','En combate · ' + nAct],['all','Todos']].map(function(x){ return '<button type="button" data-act="rgf" data-v="' + x[0] + '" aria-pressed="' + (filt === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>'
+      + '<div class="rg-tools"><button class="btn" type="button" data-act="abnew">Nueva habilidad</button></div></div>'
       + '<div class="rg-legend">' + costBadge('a') + costBadge('b') + costBadge('r') + '<span class="muted">· lo demás es pasivo</span></div>';
     function keep(x){
       var c = featCost(x.f), res = featRes(x.f);
       if (filt === 'act' && !c && !res) return false;
-      if (filt === 'pas' && (c || res)) return false;
+      if (filt === 'use' && !res) return false;
       if (q && N(x.f.name).indexOf(q) < 0 && N(Render5e.Tname(x.f.name)).indexOf(q) < 0 && N(plainText(x.f.e.entries, 300)).indexOf(q) < 0) return false;
       return true;
     }
@@ -825,6 +875,94 @@
   }, true);
 
   /* ---------- Monedas ---------- */
+  /* ==================== NOTAS (módulo 22): diario por sesión y fichas de personajes, lugares y pistas ==================== */
+  var NTK = [['ses','Sesiones','i-quill'],['npc','Personajes','i-group'],['place','Lugares','i-pin'],['clue','Pistas','i-scroll']], NTN = {npc:'personaje', place:'lugar', clue:'pista'};
+  function journal(r){
+    if (!r.journal) {
+      r.journal = {ses:[], fi:[]};
+      if (r.notes && String(r.notes).trim()) r.journal.ses.push({id:'s' + Date.now().toString(36), n:1, at:Date.now(), title:'Notas de antes', text:String(r.notes)});
+    }
+    r.journal.ses = r.journal.ses || []; r.journal.fi = r.journal.fi || [];
+    return r.journal;
+  }
+  function ntNext(J){ return J.ses.reduce(function(m, x){ return Math.max(m, x.n || 0); }, 0) + 1; }
+  function ntFicon(k){ return (NTK.filter(function(t){ return t[0] === k; })[0] || NTK[3])[2]; }
+  function ntMent(text, J){ var t = N(text || ''); return J.fi.filter(function(f){ return f.name && f.name.trim().length > 1 && t.indexOf(N(f.name.trim())) >= 0; }); }
+  function ntDate(at){ try { return new Date(at).toLocaleDateString('es-MX', {day:'numeric', month:'short'}); } catch(e){ return ''; } }
+  function ntSesCard(x, J){
+    var m = ntMent(x.title + ' ' + x.text, J);
+    return '<button type="button" class="nt-ses" data-act="ntopen" data-id="' + attr(x.id) + '"><span class="nt-tl"><b>Sesión ' + (x.n || '?') + (x.title ? ' · ' + esc(x.title) : '') + '</b><small>' + ntDate(x.at) + '</small></span>'
+      + (x.text ? '<p>' + esc(x.text.trim().slice(0, 400)) + '</p>' : '<p class="muted">Sin escribir todavía.</p>')
+      + (m.length ? '<span class="nt-tags">' + m.slice(0, 6).map(function(f){ return '<span class="nt-tag"><svg class="ic"><use href="#' + ntFicon(f.k) + '"/></svg>' + esc(f.name) + '</span>'; }).join('') + '</span>' : '') + '</button>';
+  }
+  function ntFiRow(f, J){
+    var n = J.ses.filter(function(x){ return ntMent(x.title + ' ' + x.text, {fi:[f]}).length; }).length;
+    return '<button type="button" class="nt-fi" data-act="ntopen" data-id="' + attr(f.id) + '"><svg class="ic"><use href="#' + ntFicon(f.k) + '"/></svg><span><b>' + esc(f.name || 'Sin nombre') + '</b>' + (f.text ? '<small>' + esc(f.text.split('\n')[0]) + '</small>' : '') + '</span>' + (n ? '<em>' + n + (n === 1 ? ' sesión' : ' sesiones') + '</em>' : '') + '</button>';
+  }
+  function renderNotas(C){
+    var box = $('#pNotas'); if (!box) return;
+    var J = journal(rt(C)), tab = S.ntTab || 'ses', h = '';
+    h += '<div class="nt-h"><div class="seg" role="tablist" aria-label="Partes de las notas">' + NTK.map(function(t){ var n = t[0] === 'ses' ? J.ses.length : J.fi.filter(function(f){ return f.k === t[0]; }).length; return '<button type="button" role="tab" data-act="nttab" data-v="' + t[0] + '" aria-selected="' + (tab === t[0]) + '" aria-pressed="' + (tab === t[0]) + '">' + t[1] + (n ? ' <small>' + n + '</small>' : '') + '</button>'; }).join('') + '</div></div>';
+    if (tab === 'ses') {
+      h += '<button class="btn main nt-new" type="button" data-act="ntnew" data-k="ses"><svg class="ic"><use href="#i-plus"/></svg>Nota de hoy</button>';
+      var list = J.ses.slice().sort(function(a, b){ return (b.at || 0) - (a.at || 0); });
+      h += list.length ? '<div class="nt-list">' + list.map(function(x){ return ntSesCard(x, J); }).join('') + '</div>' : '<p class="empty-state"><b>Tu diario está vacío</b>Escribe lo que pasó hoy: nombres, pistas y promesas rotas. Si nombras a un personaje, lugar o pista de tus fichas, queda marcado solo.</p>';
+      var rec = J.fi.slice().sort(function(a, b){ return (b.at || 0) - (a.at || 0); }).slice(0, 3);
+      if (rec.length) h += '<div class="card"><span class="label">fichas recientes</span>' + rec.map(function(f){ return ntFiRow(f, J); }).join('') + '</div>';
+      h += '<p class="nt-foot">El resumen de cada sesión de la campaña entra aquí solo al terminarla.</p>';
+    } else {
+      var fl = J.fi.filter(function(f){ return f.k === tab; }).sort(function(a, b){ return String(a.name).localeCompare(String(b.name)); });
+      h += '<button class="btn main nt-new" type="button" data-act="ntnew" data-k="' + tab + '"><svg class="ic"><use href="#i-plus"/></svg>Añadir ' + NTN[tab] + '</button>';
+      h += fl.length ? '<div class="card nt-fis">' + fl.map(function(f){ return ntFiRow(f, J); }).join('') + '</div>' : '<p class="empty-state"><b>Sin ' + (tab === 'npc' ? 'personajes' : tab === 'place' ? 'lugares' : 'pistas') + ' todavía</b>' + (tab === 'npc' ? 'La gente que conocen: quién es, qué quiere, qué les debe.' : tab === 'place' ? 'Pueblos, mazmorras y caminos: qué hay y qué falta.' : 'Lo que no cuadra, las llaves y los secretos.') + '</p>';
+    }
+    box.innerHTML = h;
+    var sl = $('#sesList'); if (sl) sl.hidden = tab !== 'ses';
+    if (tab === 'ses' && window.Mesa && Mesa.renderSessions) Mesa.renderSessions();
+  }
+  var NT = {id:null};
+  function ntFind(id){ var J = journal(rt(cur())); return J.ses.filter(function(x){ return x.id === id; })[0] || J.fi.filter(function(x){ return x.id === id; })[0] || null; }
+  function ntEditHtml(){
+    var x = ntFind(NT.id); if (!x) return '';
+    var J = journal(rt(cur())), isS = !x.k;
+    if (isS) {
+      var m = ntMent(x.title + ' ' + x.text, J), d = new Date(x.at || Date.now()), dv = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+      return '<div class="row"><label class="fl" style="flex:1 1 200px">Título<input class="field" id="ntTitle" maxlength="80" value="' + attr(x.title || '') + '" placeholder="El patio de la cripta" autocomplete="off"></label><label class="fl" style="flex:0 1 160px">Fecha<input class="field" id="ntDate" type="date" value="' + dv + '"></label></div>'
+        + '<label class="fl">Lo que pasó<textarea class="field" id="ntText" placeholder="Nombres, pistas y promesas rotas…">' + esc(x.text || '') + '</textarea></label>'
+        + '<p class="nt-ment" id="ntMent">' + (m.length ? 'Aparecen: ' + m.map(function(f){ return esc(f.name); }).join(', ') : 'Si escribes el nombre de una de tus fichas, queda marcada.') + '</p>'
+        + '<div class="row"><button class="btn main" type="button" data-act="closesheet">Listo</button><button class="btn del" type="button" data-act="ntdel">Borrar esta nota</button></div>';
+    }
+    var ses = J.ses.filter(function(s0){ return ntMent(s0.title + ' ' + s0.text, {fi:[x]}).length; });
+    return '<div class="seg" role="group" aria-label="Qué es">' + NTK.slice(1).map(function(t){ return '<button type="button" data-act="ntkind" data-v="' + t[0] + '" aria-pressed="' + (x.k === t[0]) + '">' + {npc:'Personaje', place:'Lugar', clue:'Pista'}[t[0]] + '</button>'; }).join('') + '</div>'
+      + '<label class="fl">Nombre<input class="field" id="ntName" maxlength="80" value="' + attr(x.name || '') + '" placeholder="' + (x.k === 'npc' ? 'Hermana Vela' : x.k === 'place' ? 'Cripta olvidada' : 'La llave de hueso') + '" autocomplete="off"></label>'
+      + '<label class="fl">Qué sabes<textarea class="field" id="ntText" placeholder="' + (x.k === 'npc' ? 'Sacerdotisa del templo. Nos debe un favor.' : x.k === 'place' ? 'La puerta norte está cerrada; necesita la llave.' : 'Tres runas: falta una.') + '">' + esc(x.text || '') + '</textarea></label>'
+      + '<p class="nt-ment" id="ntMent">' + (ses.length ? 'Sale en: ' + ses.map(function(s0){ return 'Sesión ' + s0.n; }).join(', ') : 'Todavía no sale en ninguna nota.') + '</p>'
+      + '<div class="row"><button class="btn main" type="button" data-act="closesheet">Listo</button><button class="btn del" type="button" data-act="ntdel">Borrar ficha</button></div>';
+  }
+  function ntOpen(id){
+    NT.id = id; var x = ntFind(id); if (!x) return;
+    $('#noteTitle').textContent = x.k ? (x.name || 'Nueva ficha') : 'Sesión ' + (x.n || '');
+    $('#noteBody').innerHTML = ntEditHtml(); openSheet('noteSheet');
+    var f = $(x.k ? '#ntName' : (x.title ? '#ntText' : '#ntTitle')); if (f) f.focus({preventScroll:true});
+  }
+  /* Al cerrar, lo que quedó vacío se va */
+  function ntTidy(){
+    var C = cur(); if (!C || !NT.id) return; var J = journal(rt(C)), x = ntFind(NT.id); NT.id = null; if (!x) return;
+    if (x.k ? !String(x.name || '').trim() && !String(x.text || '').trim() : !String(x.title || '').trim() && !String(x.text || '').trim()) { J.ses = J.ses.filter(function(y){ return y !== x; }); J.fi = J.fi.filter(function(y){ return y !== x; }); }
+    save(); renderNotas(C);
+  }
+  document.addEventListener('input', function(ev){
+    var t = ev.target; if (!t.id || !/^nt(Title|Date|Text|Name)$/.test(t.id)) return;
+    var x = ntFind(NT.id); if (!x) return;
+    if (t.id === 'ntTitle') x.title = t.value;
+    else if (t.id === 'ntName') { x.name = t.value; $('#noteTitle').textContent = t.value || 'Nueva ficha'; }
+    else if (t.id === 'ntText') x.text = t.value;
+    else if (t.id === 'ntDate' && t.value) { var p0 = t.value.split('-'); x.at = new Date(+p0[0], +p0[1] - 1, +p0[2], 12).getTime(); }
+    x.at = x.at || Date.now(); if (x.k) x.at = Date.now();
+    clearTimeout(ntTidy.t); ntTidy.t = setTimeout(save, 300);
+    var me = $('#ntMent'), Jm = journal(rt(cur()));
+    if (me && !x.k) { var m = ntMent(x.title + ' ' + x.text, Jm); me.textContent = m.length ? 'Aparecen: ' + m.map(function(f){ return f.name; }).join(', ') : 'Si escribes el nombre de una de tus fichas, queda marcada.'; }
+    else if (me) { var ss = Jm.ses.filter(function(s0){ return ntMent(s0.title + ' ' + s0.text, {fi:[x]}).length; }); me.textContent = ss.length ? 'Sale en: ' + ss.map(function(s0){ return 'Sesión ' + s0.n; }).join(', ') : 'Todavía no sale en ninguna nota.'; }
+  });
   function renderCoins(C){
     var r = rt(C), c = [['cp','pc','#b5703f','#7c4723','#fbf3e2'],['sp','pp','#d4d1c8','#8a867a','#2b1d12'],['ep','pe','#c9c3a0','#8a8460','#2b1d12'],['gp','po','#e0b84a','#9c7a1e','#2b1d12'],['pp','ppt','#e8e6ef','#8f8ca3','#2b1d12']];
     $('#coins').innerHTML = c.map(function(x){ return '<div><div class="coin" style="background:' + x[2] + ';border:2px solid ' + x[3] + ';color:' + x[4] + '">' + x[1] + '</div><input class="field coinin" type="text" inputmode="numeric" data-coin="' + x[0] + '" aria-label="Monedas ' + x[1] + '" value="' + (r.coins[x[0]] || 0) + '"></div>'; }).join('');
@@ -919,7 +1057,10 @@
       if (!its.length) return '<div class="slot empty"><span class="ico"><svg class="ic"><use href="#'+s[2]+'"/></svg></span><div><small>'+s[1]+'</small><span class="v">Vacío</span></div></div>';
       return its.map(function(it){ return '<button type="button" class="slot" data-act="selslot" data-id="'+it.id+'" aria-pressed="'+(sel===it.id)+'"><span class="ico"><svg class="ic"><use href="#'+it.ic+'"/></svg></span><div><small>'+s[1]+'</small><span class="v">'+esc(it.n)+(it.q > 1 ? ' ×' + it.q : '')+'</span></div></button>'; }).join('');
     }).join('');
-    $('#attuneCount').textContent = 'Sintonización ' + attuned() + ' / 3';
+    $('#attuneCount').textContent = attuned() + ' / 3';
+    $('#eqAc').textContent = D && D.ok ? D.ac : '–';
+    var cells = boxes().filter(function(x){ return x.id !== 'body'; }), cu = cells.reduce(function(t, x){ return t + boxUsed(x.id); }, 0), ct = cells.reduce(function(t, x){ return t + x.w * x.h; }, 0);
+    $('#eqCells').textContent = ct ? cu + ' / ' + ct : '–';
     renderGrid();
   }
   function boxUsed(id){ return inBox(id).reduce(function(t, i){ return t + i.w * i.h; }, 0); }
@@ -943,6 +1084,17 @@
       place(bt, it.x, it.y, it.w, it.h, b); grid.appendChild(bt);
     });
     $('#caseCount').textContent = boxUsed(ob) + ' / ' + (b.w * b.h) + ' casillas';
+    /* Lista (por defecto) o cuadrícula: la cuadrícula sigue ahí para arrastrar */
+    var asList = S.invView !== 'grid';
+    grid.hidden = asList; $('#invList').hidden = !asList;
+    $$('#invView button').forEach(function(x){ x.setAttribute('aria-pressed', String((x.dataset.v === 'grid') !== asList)); });
+    if (asList) {
+      var list = inBox(ob).slice().sort(function(a, c){ return (c.box ? 1 : 0) - (a.box ? 1 : 0) || String(a.n).localeCompare(String(c.n)); });
+      $('#invList').innerHTML = list.length ? list.map(function(it){
+        var sub = [it.d ? String(it.d).split(' · ')[0] : '', it.w * it.h + (it.w * it.h === 1 ? ' casilla' : ' casillas'), it.box ? 'guarda ' + it.box.w * it.box.h : ''].filter(Boolean).join(' · ');
+        return '<button type="button" class="inv-row" data-act="invsel" data-id="' + attr(it.id) + '" aria-pressed="' + (sel === it.id) + '"><span class="ico"><svg class="ic"><use href="#' + (it.ic || 'i-bag') + '"/></svg></span><span class="inv-t"><b>' + esc(it.n) + '</b><small>' + esc(sub) + '</small></span>' + (it.q > 1 ? '<span class="inv-q">×' + it.q + '</span>' : '') + (it.box ? '<span class="inv-open">Abrir</span>' : '') + '</button>';
+      }).join('') : '<p class="inv-empty">Aquí no llevas nada. Busca objetos en el grimorio o crea uno propio.</p>';
+    }
     renderInfo();
   }
   function renderInfo(){
@@ -970,7 +1122,7 @@
     if (!it.eq) acts.push('<button class="btn" type="button" data-act="drop">Tirar</button>');
     $('#caseActions').innerHTML = acts.join('');
   }
-  function select(id){ sel = id; pendingDrop = null; moveMenu = false; renderEquip(); var e = grid.querySelector('[data-id="'+id+'"]'); if (e) e.focus({preventScroll:true}); }
+  function select(id){ sel = id; pendingDrop = null; moveMenu = false; renderEquip(); var e = grid.hidden ? $('#invList [data-id="'+id+'"]') : grid.querySelector('[data-id="'+id+'"]'); if (e) e.focus({preventScroll:true}); }
   function invChanged(){ save(); render(false); }
   function rotate(){
     var it = sel && itemById(sel); if (!it || it.eq) return;
@@ -1532,7 +1684,8 @@
     var nat = 1 + Math.floor(Math.random() * 20); deathSave(r, nat); if (window.Sala && Sala.toast) Sala.toast('Salvación contra la muerte: ' + nat); save(); render(false);
   }
   window.Diario = {cur:cur, D:function(){ return D; }, rt:rt, save:function(){ save(); }, redraw:function(){ renderHead(); if (cur() && D && D.ok) renderPersonaje(cur()); if (!$('#combat').hidden) combatHead(); }, applyToMe:applyToMe, trWrap:function(h, k){ return trWrap(h, k); }, trInit:function(r){ trInit(r); }, openSheet:function(id){ openSheet(id); }, closeSheets:function(){ closeSheets(); },
-    addNote:function(text){ var C = cur(); if (!C) return false; var r = rt(C); r.notes = (r.notes ? r.notes.replace(/\s+$/, '') + '\n\n' : '') + text; save(); if ($('#notes')) $('#notes').value = r.notes; return true; },
+    addNote:function(text, o){ var C = cur(); if (!C) return false; o = o || {}; var J = journal(rt(C)); J.ses.push({id:'s' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), n:ntNext(J), at:o.at || Date.now(), title:o.title || 'Sesión', text:String(text || ''), camp:!!o.camp}); save(); if (!$('#pNotas').hidden) renderNotas(C); return true; },
+    journal:function(){ var C = cur(); return C ? journal(rt(C)) : null; },
     econ:function(){ var C = cur(); if (!C) return null; var e = rt(C).econ || {}; return {a:!!e.a, b:!!e.b, r:!!e.r, m:!!e.m}; },
     econSet:function(k, v){ var C = cur(); if (!C || 'abrm'.indexOf(k) < 0) return; var r = rt(C); r.econ = r.econ || {a:false,b:false,r:false,m:false}; r.econ[k] = v == null ? !r.econ[k] : !!v; save(); if (!$('#combat').hidden) renderCombat(); },
     newTurn:function(){ var C = cur(); if (!C) return; rt(C).econ = {a:false,b:false,r:false,m:false}; S.cSub = 'turno'; save(); if (!$('#combat').hidden) renderCombat(); },
@@ -2422,7 +2575,7 @@
   function openSheet(id){ $$('.sheet').forEach(function(s){ s.hidden = s.id !== id; }); var s = $('#' + id); var f = s.querySelector('input,button'); if (f) f.focus({preventScroll:true}); }
   function spNameSeg(){ var m = Render5e.spMode(); $$('#spNameSeg button').forEach(function(x){ x.setAttribute('aria-pressed', x.dataset.v === m); }); }
   function openSettings(){ spNameSeg(); if (window.Sala) Sala.settings(); $('#dirPick').hidden = !wide(); $('#dirPick').parentNode.style.gridTemplateColumns = wide() ? '' : '1fr'; libTable(); renderChars(); trSettings(); if (window.Bestiario) Bestiario.settings(); openSheet('settingsSheet'); if (window.Interfaz) Interfaz.home(); }
-  function closeSheets(){ $$('.sheet').forEach(function(s){ s.hidden = true; }); }
+  function closeSheets(){ var wasNote = $('#noteSheet') && !$('#noteSheet').hidden; $$('.sheet').forEach(function(s){ s.hidden = true; }); if (wasNote) ntTidy(); }
 
   /* ---------- Libro ---------- */
   var busy = false;
@@ -2482,7 +2635,7 @@
     if (it && grid.contains(it)) { select(it.dataset.id); return; }
     var b = ev.target.closest('[data-act]'); if (!b) return;
     var a = b.dataset.act, C = cur(), r = C ? rt(C) : null;
-    var USNAP = /^(pip|pool|hp|short|long|quse|exh)$/.test(a) && C && D && D.ok ? undoSnap() : null, uBefore = USNAP && JSON.parse(USNAP.rt);
+    var USNAP = /^(pip|pool|hp|short|long|quse|exh|spcast)$/.test(a) && C && D && D.ok ? undoSnap() : null, uBefore = USNAP && JSON.parse(USNAP.rt);
     if (a !== 'hmenu' && !$('#hMenu').hidden && !b.closest('#hMenu')) menuOpen(false);
     if (b.closest('#hMenu') && a !== 'hmenu') menuOpen(false);
     if (a !== 'nvmore' && !$('#nvMore').hidden) { if (b.closest('#nvMore') && a !== 'nvmoreclose' && !$('#combat').hidden) $('#combat').hidden = true; if (a !== 'tab') moreOpen(false); }
@@ -2540,6 +2693,13 @@
       case 'delno': pendingDel = null; renderChars(); break;
       case 'delyes': S.chars = S.chars.filter(function(x){ return x.id !== b.dataset.id; }); if (S.active === b.dataset.id) S.active = S.chars[0] ? S.chars[0].id : null; pendingDel = null; render(false); break;
       case 'selslot': select(b.dataset.id); break;
+      case 'invview': S.invView = b.dataset.v; save(); renderGrid(); break;
+      case 'nttab': S.ntTab = b.dataset.v; save(); renderNotas(C); break;
+      case 'ntnew': var Jn = journal(r), nx = b.dataset.k === 'ses' ? {id:'s' + Date.now().toString(36), n:ntNext(Jn), at:Date.now(), title:'', text:''} : {id:'f' + Date.now().toString(36), k:b.dataset.k, name:'', text:'', at:Date.now()}; (nx.k ? Jn.fi : Jn.ses).push(nx); save(); ntOpen(nx.id); break;
+      case 'ntopen': ntOpen(b.dataset.id); break;
+      case 'ntkind': var xk = ntFind(NT.id); if (xk) { xk.k = b.dataset.v; save(); $('#noteBody').innerHTML = ntEditHtml(); } break;
+      case 'ntdel': var Jd = journal(r), xd = ntFind(NT.id); if (xd) { Jd.ses = Jd.ses.filter(function(y){ return y !== xd; }); Jd.fi = Jd.fi.filter(function(y){ return y !== xd; }); } NT.id = null; save(); closeSheets(); renderNotas(C); toastMsg('Borrada.'); break;
+      case 'invsel': var iv = itemById(b.dataset.id); if (iv && iv.box) { rt(C).openBox = iv.id; sel = null; moveMenu = false; save(); renderGrid(); } else select(b.dataset.id); break;
       case 'hbnew': if (!cur()) { openSettings(); break; } openHb(null); break;
       case 'hbedit': var hi = itemById(sel); if (hi && hi.hb) openHb(hi); break;
       case 'hbadd': var tpl = S.homebrew[+b.dataset.i]; if (tpl) { var e3 = hbPlace(JSON.parse(JSON.stringify(tpl)), false); if (e3) { var he = $('#hbErr'); he.textContent = e3; he.hidden = false; } else { closeSheets(); invChanged(); } } break;
@@ -2567,6 +2727,9 @@
       case 'ctropen': openCtr(b.dataset.n); break;
       case 'spname': Render5e.spMode(b.dataset.v); spNameSeg(); render(false); renderGrim(); break;
       case 'spfopen': S.spFOpen = !S.spFOpen; save(); renderConjuros(cur()); break;
+      case 'sprow': spOpen = spOpen === b.dataset.k ? null : b.dataset.k; renderConjuros(cur()); var so = $('#pConjuros .sp-row.open'); if (so && so.scrollIntoView) { var rb = so.getBoundingClientRect(); if (rb.bottom > innerHeight - 90) so.scrollIntoView({block:'nearest', behavior: still() ? 'auto' : 'smooth'}); } break;
+      case 'spft': var F1 = spFilt(); F1.t = b.dataset.v ? [b.dataset.v] : []; S.spF = F1; save(); renderConjuros(cur()); break;
+      case 'spcast': if (b.dataset.pact === '1') r.pactUsed = Math.min(D.pact.count, (r.pactUsed || 0) + 1); else { var li = +b.dataset.lv - 1; r.slotsUsed[li] = Math.min(D.slots[li], (r.slotsUsed[li] || 0) + 1); } spOpen = null; save(); render(false); break;
       case 'spf': var F0 = spFilt(), g0 = b.dataset.g, v0 = b.dataset.v, ix0 = F0[g0].indexOf(v0); if (ix0 >= 0) F0[g0].splice(ix0, 1); else F0[g0].push(v0); S.spF = F0; save(); renderConjuros(cur()); break;
       case 'spfclear': S.spF = null; save(); renderConjuros(cur()); break;
       case 'ctroff': ctrSet($('#ctrForm').dataset.n, {off:true}); closeSheets(); break;
@@ -2661,8 +2824,6 @@
     if (!$('#combat').hidden && $$('.sheet').every(function(s){ return s.hidden; })) $('#combat').hidden = true;
     closeSheets();
   });
-  var notes = $('#notes');
-  notes.addEventListener('input', function(){ var C = cur(); if (C) { rt(C).notes = notes.value; save(); } });
 
   applySkin();
   if (mq.addEventListener) mq.addEventListener('change', layout); else mq.addListener(layout);

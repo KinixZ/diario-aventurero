@@ -1,0 +1,111 @@
+/* ==================== Secciones compactas (módulo 22): conjuros, equipo, rasgos y notas ==================== */
+
+/* ---------- Conjuros: lista con los espacios en cada nivel ---------- */
+.sp-cl{margin:0 0 6px;font-size:15px;color:var(--ink-2)}
+.sp-cl b{color:var(--ink);font-family:var(--display)}
+.sp-bar{display:flex;gap:8px;align-items:center}
+.sp-bar .spq{flex:1;min-width:0}
+.sp-quick{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 2px}
+.sp-quick .sp-chip{min-height:36px;padding:0 14px;border-radius:18px}
+.sp-list{display:flex;flex-direction:column}
+.sp-lh{display:flex;align-items:center;gap:10px;min-height:44px;margin-top:8px;padding:0 2px;text-align:left;border-bottom:1px solid var(--rule)}
+.sp-lh > span:first-child{flex:1;font-family:var(--display);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.sp-lh .pips{display:flex;flex-wrap:wrap;justify-content:flex-end}
+.sp-lh .pip{width:30px;height:40px}
+.sp-lh.pact > span:first-child{color:var(--oath)}
+.sp-row{border-bottom:1px solid var(--rule-2,var(--rule))}
+.sp-tog{width:100%;display:flex;align-items:center;gap:10px;min-height:54px;padding:6px 2px;border:0;background:transparent;color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+.sp-ic{flex:none;width:24px;display:flex;justify-content:center;color:var(--oath)}
+.sp-ic .ic{width:18px;height:18px}
+.sp-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sp-nl{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.sp-n{font-size:16.5px;font-weight:600}
+.sp-nl .sp-en{font-size:13px;font-style:italic;color:var(--ink-2)}
+.sp-sub{font-size:13.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-tags{flex:none;display:flex;align-items:center;gap:4px;max-width:34%}
+.sp-tags em{font-style:normal;font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-tags .tag{font-size:11px;padding:0 5px}
+.sp-row.open{background:color-mix(in srgb, var(--parch-2) 70%, transparent);border-radius:8px}
+.sp-row.open .sp-sub{white-space:normal}
+.sp-x{display:flex;flex-direction:column;gap:8px;padding:0 10px 12px 36px}
+.sp-x p{margin:0;font-size:15px;line-height:1.4}
+.sp-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;font-size:14px}
+.sp-meta span{display:flex;flex-direction:column}
+.sp-meta small{font-family:var(--display);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+.sp-xb{display:flex;gap:8px;flex-wrap:wrap}
+.sp-none{margin:6px 2px 0}
+@media (min-width:900px){ .sp-meta{grid-template-columns:repeat(4,minmax(0,1fr))} }
+
+/* ---------- Equipo: resumen arriba, figura compacta, mochila en lista ---------- */
+.eq-sum{display:flex;flex-direction:column;gap:10px}
+.eq-st{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;text-align:center}
+.eq-st b{display:block;font-family:var(--display);font-size:22px;line-height:1.1;color:var(--ink)}
+.eq-st small{font-size:12.5px;color:var(--ink-2)}
+.eq-sum .coins{padding-top:8px;border-top:1px solid var(--rule)}
+.worn .slots.eq-fig{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.eq-fig .slot{min-height:66px;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px 2px;text-align:center}
+.eq-fig .slot .ico{width:28px;height:28px}
+.eq-fig .slot > div{display:flex;flex-direction:column;align-items:center;min-width:0;width:100%}
+.eq-fig .slot small{font-size:10.5px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.eq-fig .slot .v{font-size:12.5px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.eq-fig .slot.empty .v{display:none}
+.eq-help{font-size:14px;color:var(--ink-2)}
+.eq-help summary{cursor:pointer;min-height:36px;display:flex;align-items:center}
+.eq-help p{margin:4px 0 0}
+.case-h{align-items:center}
+.inv-view{margin-left:auto}
+.inv-view button{min-height:34px;padding:0 12px;font-size:13px}
+.inv-list{display:flex;flex-direction:column}
+.inv-list[hidden],.case .grid[hidden]{display:none!important}
+.inv-row{display:flex;align-items:center;gap:10px;min-height:52px;padding:4px 6px;border:0;border-top:1px solid var(--rule-2,rgba(255,255,255,.12));background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer;border-radius:6px}
+.inv-row:first-child{border-top:0}
+.inv-row[aria-pressed="true"]{background:rgba(217,184,102,.14);box-shadow:inset 3px 0 0 var(--gold-hi)}
+.inv-row .ico{flex:none;width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.06);color:var(--gold-hi)}
+.inv-row .ico .ic{width:20px;height:20px}
+.inv-row .inv-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.inv-row .inv-t b{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inv-row .inv-t small{font-size:13px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inv-row .inv-q{flex:none;font-family:var(--display);font-size:15px}
+.inv-row .inv-open{flex:none;font-size:13px;padding:2px 8px;border-radius:9px;border:1px solid var(--gold-hi);color:var(--gold-hi)}
+.inv-empty{margin:10px 4px;opacity:.8}
+
+/* ---------- Rasgos: dos líneas y «más» ---------- */
+.rg-f .rg-s{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rg-f details[open] .rg-s{display:block;-webkit-line-clamp:unset}
+.rg-more{font-size:13.5px;font-weight:600;color:var(--oath);margin-top:2px}
+.rg-f details[open] .rg-more{display:none}
+
+/* ---------- Notas: sesiones y fichas ---------- */
+.nt-h{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.nt-h .seg{flex:1}
+.nt-new{flex:none}
+.nt-list{display:flex;flex-direction:column;gap:10px}
+.nt-ses{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;border:1px solid var(--rule);background:var(--parch-2);color:var(--ink);text-align:left;font:inherit;cursor:pointer;width:100%}
+.nt-ses .nt-tl{display:flex;align-items:baseline;gap:8px}
+.nt-ses .nt-tl b{flex:1;font-family:var(--display);font-size:16px}
+.nt-ses .nt-tl small{font-size:13px;color:var(--ink-2)}
+.nt-ses p{margin:0;font-size:15px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
+.nt-tags{display:flex;gap:6px;flex-wrap:wrap}
+.nt-tag{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;padding:2px 8px;border-radius:9px;background:var(--parch-3);color:var(--ink)}
+.nt-tag .ic{width:12px;height:12px;color:var(--oath)}
+.nt-fi{display:flex;align-items:center;gap:10px;min-height:52px;padding:4px 2px;border:0;border-top:1px solid var(--rule);background:transparent;color:var(--ink);text-align:left;font:inherit;cursor:pointer;width:100%}
+.nt-fi:first-of-type{border-top:0}
+.nt-fi > .ic{flex:none;width:20px;height:20px;color:var(--oath)}
+.nt-fi span{flex:1;min-width:0;display:flex;flex-direction:column}
+.nt-fi b{font-size:16px}
+.nt-fi small{font-size:13.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nt-fi em{flex:none;font-style:normal;font-size:12.5px;color:var(--ink-2)}
+.nt-foot{margin:12px 2px 0;font-size:13px;font-style:italic;color:var(--ink-2)}
+.nt-ed{display:flex;flex-direction:column;gap:12px;padding:14px 16px 24px}
+.nt-ed textarea{min-height:220px;resize:vertical;font-size:16px;line-height:1.45}
+.nt-ed .nt-ment{font-size:14px;color:var(--ink-2)}
+.nt-ed .row{gap:8px;flex-wrap:wrap}
+.case .inv-list{color:var(--on-dark,#f3e6c8)}
+.case .inv-row .inv-t small{color:var(--on-dark-2,#d8c8a8);opacity:1}
+.case .inv-empty{color:var(--on-dark-2,#d8c8a8)}
+.case-h{flex-wrap:wrap}
+/* Que lo último de cada página no quede debajo del botón Acciones */
+@media (max-width:899px){ #scroll > .panel{padding-bottom:80px} }
+.case .inv-view button{color:var(--ink);background:var(--parch-2)}
+.case .inv-view button[aria-pressed="true"]{background:var(--oath);color:var(--on-accent)}
+.ses-list[hidden],.ses-list:empty{display:none}
