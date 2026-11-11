@@ -14,9 +14,10 @@ const [htmlFile, bundle] = process.argv.slice(2), html = fs.readFileSync(htmlFil
     await until(() => M.$('.sala-code') && A.$('[data-form="salainit"]'));
     console.log('DM en modo DM:', M.$('#combat').classList.contains('dm-mode'), '| ronda visible antes de empezar:', !A.$('#roundTxt').hidden);
     // agregar enemigos
-    M.click(M.$('[data-act="salanpc"]')); await wait(20);
-    const f = M.$('[data-form="salanpc"]'); f.querySelector('[name=name]').value = 'Ogro'; f.querySelector('[name=hp]').value = '59'; f.querySelector('[name=ac]').value = '11'; f.querySelector('[name=init]').value = '8';
-    M.submit(f); await until(() => M.$$('.sala-row.npc').length === 1);
+    M.click(M.$('[data-act="addopen"]')); await wait(20);
+    M.$('#addRoll').checked = false; M.$('#addRoll').dispatchEvent(new M.w.Event('change', {bubbles:true}));
+    M.$('#addLine').value = 'Ogro 59 PG CA 11'; M.submit(M.$('#addHand')); await until(() => M.$$('.sala-row.npc').length === 1);
+    M.w.Sala.send({t:'init', id:M.w.Sala.room().npcs[0].id, value:8}); await until(() => M.w.Sala.room().npcs[0].init === 8);
     A.$('[data-form="salainit"] [name=v]').value = '17'; A.submit(A.$('[data-form="salainit"]'));
     await until(() => M.$$('.sala-list > .sala-row').length === 2 && !M.$('.sala-sep'));
     console.log('el DM no puede seleccionar al jugador:', !M.$$('.sala-row:not(.npc) [data-act="salasel"]').length);

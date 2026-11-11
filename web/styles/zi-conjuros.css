@@ -18,3 +18,20 @@
 .ctr-form .seg button{min-height:38px;padding:0 12px;border-radius:999px;border:1px solid var(--rule);background:transparent;color:var(--ink);font:inherit;cursor:pointer}
 .ctr-form .seg button[aria-pressed="true"]{background:var(--oath);color:var(--on-accent);border-color:var(--gild,var(--gold))}
 .rg-how{align-self:center;font-style:italic}
+
+/* ===== Agregar enemigos rápido (DM) ===== */
+.sala-addbtn{background:var(--oath);color:var(--on-accent);border-color:var(--gild,var(--gold))}
+.qa{display:flex;flex-direction:column;gap:12px}
+.qa-q{font-size:17px;min-height:46px}
+.qa-opts{display:flex;flex-wrap:wrap;gap:6px 16px}
+.qa-res{display:flex;flex-direction:column;gap:6px}
+.qa-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--rule);border-radius:10px;background:var(--parch-2,transparent)}
+.qa-n{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;text-align:left;background:none;border:0;padding:0;color:var(--ink);cursor:pointer;font:inherit}
+.qa-n b{font-family:var(--display);font-size:16px;letter-spacing:.02em}
+.qa-n small{font-size:13px;color:var(--ink-2);font-style:italic}
+.qa-b{display:flex;gap:5px;flex:none}
+.qa-b .btn{min-width:44px;min-height:40px;padding:0 8px}
+.qa-hand{display:flex;flex-direction:column;gap:8px;padding:12px}
+.qa-hrow{display:flex;gap:8px}
+.qa-hrow .field{flex:1;min-width:0}
+.qa-now p{margin:4px 0 0;color:var(--ink-2)}

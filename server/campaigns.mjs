@@ -364,10 +364,20 @@ export class Campaigns {
       case 'npc.add': {
         dmOnly('Solo el DM agrega enemigos.');
         if (c.npcs.size >= MAX_NPCS) throw err('too_many', 'Ya hay demasiados PNJ en el combate.');
-        const count = int(msg.count, 1, 12, 1);
+        const count = int(msg.count, 1, 12, 1), base = str(msg.name, 40) || 'Enemigo', bkey = base.toLowerCase();
+        // los que ya hay con el mismo nombre: la numeración sigue (Goblin 3, 4…) y comparten su iniciativa
+        const kin = [...c.npcs.values()].filter(x => x.name.replace(/\s+\d+$/, '').toLowerCase() === bkey);
+        let next = kin.reduce((mx, x) => { const m = /\s(\d+)$/.exec(x.name); return Math.max(mx, m ? +m[1] : 1); }, 0);
+        const numbered = count > 1 || kin.length > 0;
+        let init = msg.init == null || msg.init === '' ? null : int(msg.init, -10, 50, 0), rolledInit = null;
+        if (init == null && msg.roll) {
+          const had = kin.find(x => x.init != null);
+          init = had ? had.init : Math.max(-10, Math.min(50, d20().d + int(msg.initMod, -10, 20, 0)));
+          rolledInit = init;
+        }
         for (let i = 0; i < count; i++) {
           const hpMax = int(msg.hp, 1, 9999, 10);
-          const n = { id: 'n' + id(4), name: (str(msg.name, 40) || 'Enemigo') + (count > 1 ? ' ' + (i + 1) : ''), ac: int(msg.ac, 0, 40, 12), hp: hpMax, hpMax, temp: 0, init: msg.init == null || msg.init === '' ? null : int(msg.init, -10, 50, 0), conds: [], hidden: !!msg.hidden,
+          const n = { id: 'n' + id(4), name: base + (numbered ? ' ' + (++next) : ''), ac: int(msg.ac, 0, 40, 12), hp: hpMax, hpMax, temp: 0, init, conds: [], hidden: !!msg.hidden,
             ref: msg.ref ? str(msg.ref, 120) : null, initMod: int(msg.initMod, -10, 20, 0), formula: msg.formula ? str(msg.formula, 30) : null,
             binfo: msg.binfo && typeof msg.binfo === 'object' ? { type: str(msg.binfo.type, 40), size: str(msg.binfo.size, 40) } : null,
             img: msg.img && c.images.has(str(msg.img, 30)) ? str(msg.img, 30) : null, reach: int(msg.reach, 1, 6, 1) };
@@ -376,7 +386,7 @@ export class Campaigns {
           if (!n.hidden && i === 0) this.autoBeast(c, n);
         }
         this.sortOrder(c);
-        this.log(c, `El DM agregó ${count > 1 ? count + ' × ' : ''}${str(msg.name, 40) || 'enemigo'}`, msg.hidden ? '' : null);
+        this.log(c, `El DM agregó ${count > 1 ? count + ' × ' : ''}${base}${rolledInit != null ? ' (iniciativa ' + rolledInit + ')' : ''}`, msg.hidden ? '' : null);
         break;
       }
       case 'npc.del': {
