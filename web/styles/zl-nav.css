@@ -1,0 +1,76 @@
+/* ==================== Navegación (módulo 21): un solo menú de separadores ==================== */
+/* Teléfono: Hoja · Conjuros · Equipo · Rasgos · Mesa · Más. Laptop: un riel a la izquierda del libro con todo. */
+.ribbons{grid-template-columns:repeat(6,minmax(0,1fr))}
+.ribbon{position:relative}
+.ribbon .nv-dot{position:absolute;top:6px;left:50%;margin-left:9px;width:10px;height:10px;border-radius:5px;background:#4caf50;border:2px solid var(--leather-3,#3a1d17)}
+.ribbon .nv-dot.turn{background:var(--oath);border-color:var(--gold-hi)}
+.ribbon .nv-dot[hidden]{display:none}
+.ribbon.nv-wd,.ribbons .nv-gap{display:none}
+
+/* «Más»: Notas, Bestiario, Grimorio y Ajustes */
+.nv-more{position:absolute;left:0;right:0;top:-8px;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:17;display:flex;flex-direction:column;justify-content:flex-end}
+.nv-more[hidden]{display:none!important}
+.nv-more-scrim{position:absolute;inset:0;background:rgba(20,10,6,.5);border:0;padding:0;cursor:pointer}
+.nv-more-p{position:relative;display:flex;flex-direction:column;gap:12px;padding:16px 14px 14px;border-radius:18px 18px 0 0;border-top:2px solid var(--gild,var(--gold));background:var(--parch);box-shadow:0 -10px 28px rgba(0,0,0,.35);animation:sheetin .18s ease-out}
+.nv-more-p > b{font-family:var(--display);font-size:18px;color:var(--ink)}
+.nv-tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.nv-tile{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:100px;padding:12px;border-radius:12px;border:1px solid var(--rule);background:var(--parch-2);color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+.nv-tile .ic{width:26px;height:26px;color:var(--oath)}
+.nv-tile b{font-family:var(--display);font-size:16px}
+.nv-tile small{font-size:14px;color:var(--ink-2);line-height:1.3}
+.nv-tile[aria-current="page"]{border:2px solid var(--gild,var(--gold));background:var(--parch-3)}
+
+/* La Mesa dentro del mismo menú (teléfono en vertical): la campaña deja ver los separadores abajo
+   y sus secciones suben arriba, como pestañas */
+@media (max-width:899px) and (orientation:portrait){
+  .app.camp-wide .ribbons{display:grid!important}
+  .app.camp-wide .combat:not(.map-full){bottom:calc(64px + env(safe-area-inset-bottom,0px));padding-bottom:0}
+  .app.camp-wide .combat:not(.map-full) > .mesa-tabs{order:0;border-top:0;border-bottom:1px solid var(--rule);padding-bottom:0;overflow-x:auto;scrollbar-width:none}
+  .app.camp-wide .combat:not(.map-full) > .mesa-tabs::-webkit-scrollbar{display:none}
+  .app.camp-wide .combat:not(.map-full) > .mesa-tabs button{min-height:52px}
+  .app.camp-wide .combat:not(.map-full) > .mesa-tabs button[aria-selected="true"]{box-shadow:inset 0 -3px 0 var(--gold-hi)}
+  .app.camp-wide .combat .sala-toast{bottom:16px}
+}
+
+/* Teléfono acostado: Más sale junto al riel de la derecha */
+@media (orientation:landscape) and (max-height:520px) and (max-width:899px){
+  .nv-more{top:0;bottom:0;right:64px;justify-content:flex-end;align-items:flex-end}
+  .nv-more-p{width:min(420px,100%);border-radius:18px 0 0 0;border-top:2px solid var(--gild,var(--gold));border-left:2px solid var(--gild,var(--gold))}
+  .nv-tile{min-height:76px}
+}
+
+/* Laptop: el riel a la izquierda del libro, con nombre. Hoja y Grimorio son la página izquierda;
+   lo demás, la derecha. Las secciones del grimorio van dentro de su página. */
+@media (min-width:900px){
+  .ctabs{display:none!important}
+  .ribbons{left:auto;right:calc(100% - 4px);top:58px;bottom:16px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;overflow:visible}
+  .ribbon,.ribbon[aria-pressed="true"]{width:130px;height:50px;justify-content:flex-end;padding:0 14px 0 0;clip-path:polygon(10% 50%,0 0,100% 0,100% 100%,0 100%)}
+  .ribbon[aria-pressed="true"]{width:140px}
+  .ribbon span{font-size:13px;overflow:visible}
+  .ribbon[data-tab="personaje"],.ribbon.grim{display:flex}
+  .ribbon.nv-ph{display:none}
+  .ribbon.nv-wd{display:flex}
+  .ribbons .nv-gap{display:block;flex:1;min-height:8px}
+  .ribbon .nv-dot{top:7px;left:auto;right:8px;margin:0}
+  .head .h-btn[data-act="gsearch"]{display:none}
+  .grim .gsecs{margin-top:4px}
+}
+@media (min-width:900px) and (max-height:720px){
+  .ribbons{top:40px;gap:4px}
+  .ribbon,.ribbon[aria-pressed="true"]{height:42px}
+}
+
+/* «Despertando el servidor»: el servidor gratuito tarda en abrir */
+.wake{display:flex;flex-direction:column;align-items:center;gap:12px;padding:22px 16px;text-align:center}
+.wake-ic{width:76px;height:76px;border-radius:38px;display:flex;align-items:center;justify-content:center;border:2px solid var(--gild,var(--gold));color:var(--gold-hi);background:var(--parch-2)}
+.wake-ic .ic{width:36px;height:36px;animation:wakePulse 1.6s ease-in-out infinite}
+.wake > b{font-family:var(--display);font-size:20px}
+.wake > p{margin:0;font-size:16px;color:var(--ink-2);max-width:320px}
+.wake-bar{width:min(260px,80%);height:8px;border-radius:4px;background:var(--rule-2,var(--rule));overflow:hidden}
+.wake-bar i{display:block;height:100%;width:0;background:var(--gold-hi);transition:width .9s linear}
+.wake-t{font-size:15px;color:var(--ink-2)}
+.wake-ok{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--rule);font-size:15px;text-align:left;max-width:340px}
+.wake-ok .ic{flex:none;width:20px;height:20px;color:#4caf50}
+@keyframes wakePulse{0%,100%{opacity:.55;transform:scale(.94)}50%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){ .wake-ic .ic{animation:none} }
+.nv-more-p:focus{outline:none}

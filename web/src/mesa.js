@@ -34,6 +34,7 @@ var Mesa = (function(){
   Sala.on('draw.clear', function(){ if (C.strokes.length) C.pages.push({at: Date.now(), strokes: C.strokes}); C.strokes = []; persist(); drawAll(); render(); });
   Sala.on('ended', function(m){ endedSnap = m.snapshot; finishSession(m.snapshot); });
   Sala.on('left', function(){ C = blank(); persist(); render(); });
+  Sala.on('wake', function(){ if (tab !== 'inicio' && tab !== 'combate' && visibleNow()) render(); });
   function visibleNow(){ var c = document.getElementById('combat'); return c && !c.hidden; }
 
 
@@ -54,7 +55,7 @@ var Mesa = (function(){
     else if (tab === 'encuentros' && window.Encuentros) Encuentros.render();
     else if (tab === 'combate' && window.Diario && Diario.renderCombat) Diario.renderCombat();
   }
-  function lobby(where){ var e = Sala.active(), conn = e && Sala.status() === 'connecting'; return '<div class="mesa-lobby card">' + (endedSnap ? endedBanner() : '') + '<p class="note">' + (where || 'Esto vive dentro de una campaña.') + '</p>' + (conn ? '<p class="note"><b>Entrando a ' + esc(e.name || e.code) + '…</b> ' + esc(Sala.error() || '') + '</p>' : '<button class="btn main" type="button" data-act="mesatab" data-v="inicio">Elegir campaña</button>') + '</div>'; }
+  function lobby(where){ var e = Sala.active(), conn = e && Sala.status() === 'connecting'; return '<div class="mesa-lobby card">' + (endedSnap ? endedBanner() : '') + '<p class="note">' + (where || 'Esto vive dentro de una campaña.') + '</p>' + (conn ? (Sala.waking && Sala.waking() ? Sala.wakeHtml() : '<p class="note"><b>Entrando a ' + esc(e.name || e.code) + '…</b> ' + esc(Sala.error() || '') + '</p>') : '<button class="btn main" type="button" data-act="mesatab" data-v="inicio">Elegir campaña</button>') + '</div>'; }
   function mountLobby(){}
 
   /* ---------- Chat ---------- */

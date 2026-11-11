@@ -105,8 +105,16 @@
   }
 
   /* ---------- Separadores ---------- */
-  $('#ribbons').innerHTML = TABS.map(function(t){
-    return '<button type="button" class="ribbon'+(t[0]==='grimorio'?' grim':'')+'" data-act="tab" data-tab="'+t[0]+'" aria-pressed="false"><svg class="ic"><use href="#'+t[2]+'"/></svg><span>'+t[1]+'</span></button>';
+  /* Un solo menú: en el teléfono Hoja · Conjuros · Equipo · Rasgos · Mesa · Más; en la laptop, un riel con todo */
+  var NAV = [
+    ['tab','personaje','Hoja','i-sheet',''], ['tab','conjuros','Conjuros','i-star',''], ['tab','equipo','Equipo','i-bag',''], ['tab','rasgos','Rasgos','i-shield',''],
+    ['tab','notas','Notas','i-quill','nv-wd'], ['tab','bestias','Bestiario','i-paw','nv-wd'], ['tab','grimorio','Grimorio','i-tome','nv-wd grim'],
+    ['nvmesa','mesa','Mesa','i-table','mesa'], ['nvmore','mas','Más','i-dots','nv-ph'], null,
+    ['gsearch','buscar','Buscar','i-search','nv-wd'], ['settings','ajustes','Ajustes','i-gear','nv-wd']
+  ];
+  $('#ribbons').innerHTML = NAV.map(function(t){
+    if (!t) return '<span class="nv-gap" aria-hidden="true"></span>';
+    return '<button type="button" class="ribbon' + (t[4] ? ' ' + t[4] : '') + '" data-act="' + t[0] + '" data-tab="' + t[1] + '" aria-pressed="false"' + (t[0] === 'nvmore' ? ' aria-expanded="false" aria-controls="nvMore"' : '') + '><svg class="ic"><use href="#' + t[3] + '"/></svg><span>' + t[2] + '</span>' + (t[1] === 'mesa' ? '<i class="nv-dot" id="nvMesaDot" hidden></i>' : '') + '</button>';
   }).join('');
   $('#ctabs').innerHTML = '<button type="button" class="ctab char" data-act="left" data-v="personaje" aria-pressed="false">Personaje</button>' + GSECS.map(function(s){
     return '<button type="button" class="ctab" data-act="left" data-v="'+s[0]+'" aria-pressed="false">'+s[1]+'</button>';
@@ -132,10 +140,42 @@
     return '<div class="empty-state"><b>Falta tu biblioteca de 5etools</b>El diario calcula todo con los datos de 5etools. Cárgalos una vez desde Ajustes.<br><br><button class="btn main" type="button" data-act="settings">Abrir Ajustes</button></div>';
   }
   function noCharHtml(){ return '<div class="empty-state"><b>Todavía no hay personaje</b>Crea uno con el asistente: elige clase, origen y características y el diario hace las cuentas.<br><br><button class="btn main" type="button" data-act="newchar">Crear personaje</button></div>'; }
+  /* Qué separador está puesto: en la mesa, Mesa; en la laptop, la página izquierda (Hoja o Grimorio) y la derecha */
+  function navSync(){
+    var mesa = !$('#combat').hidden, w = wide(), more = !$('#nvMore').hidden;
+    $$('#ribbons .ribbon').forEach(function(b){
+      var t = b.dataset.tab, on;
+      if (more) on = t === 'mas';
+      else if (mesa) on = t === 'mesa';
+      else if (w) on = t === S.tab || (t === 'personaje' && S.left === 'personaje') || (t === 'grimorio' && S.left !== 'personaje');
+      else on = t === S.tab || (t === 'mas' && /^(notas|bestias|grimorio)$/.test(S.tab));
+      b.setAttribute('aria-pressed', String(!!on));
+      if (b.dataset.act === 'tab' || b.dataset.act === 'nvmesa') { if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+    });
+    $$('#nvMore .nv-tile[data-tab]').forEach(function(b){ if (!mesa && b.dataset.tab === S.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  }
+  function moreOpen(on){
+    var m = $('#nvMore'); if (!m) return; m.hidden = !on;
+    $$('[data-act="nvmore"]').forEach(function(b){ b.setAttribute('aria-expanded', String(on)); });
+    navSync(); if (on) { var f = m.querySelector('.nv-more-p'); if (f) f.focus({preventScroll:true}); }
+  }
+  /* Ir a una sección desde el menú: sale de la mesa si estabas en ella */
+  function navTo(t, b){
+    moreOpen(false);
+    if (!$('#combat').hidden) $('#combat').hidden = true;
+    if (wide() && (t === 'personaje' || t === 'grimorio')) {
+      closeSheets();
+      var was = S.left;
+      if (t === 'personaje') S.left = 'personaje'; else if (S.left === 'personaje') S.left = G.sec || 'reglas';
+      if (window.Sfx && was !== S.left) Sfx.play('page');
+      render(true); renderGrim(); left.querySelector('.scroll') && (left.querySelector('.scroll').scrollTop = 0); return;
+    }
+    if (window.Sfx && S.tab !== t) Sfx.play('page'); closeSheets(); S.tab = t; if (S.tab === 'grimorio') G.from = null; render(true); renderGrim(); $('#scroll').scrollTop = 0; if (b && (S.tab === 'grimorio' || S.tab === 'equipo')) fxAt(null, 10, b);
+  }
   function render(animate){
     recompute();
     var C = cur(), showLeftGrim = wide() && S.left !== 'personaje';
-    $$('.ribbon').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab)); });
+    navSync();
     $$('.ctab').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.v === S.left)); });
     if (wide()) { personaje.hidden = showLeftGrim; grim.hidden = !showLeftGrim; }
     $$('#scroll > .panel').forEach(function(p){
@@ -200,6 +240,7 @@
   }
   function headLive(){
     var on = inRoom(), l = $('#hLive'); if (l) l.hidden = !on;
+    var nd = $('#nvMesaDot'); if (nd) { var rm0 = on && Sala.room(); nd.hidden = !on; nd.classList.toggle('turn', !!(rm0 && rm0.turnId && rm0.turnId === rm0.you && rm0.role !== 'dm')); nd.title = on ? (nd.classList.contains('turn') ? 'Es tu turno' : 'Conectado a la campaña') : ''; }
     var rm = on && Sala.room(), c = $('#hmCamp'), d = $('#hmCampDot');
     if (c) c.textContent = on ? (rm.name || 'Campaña') + ' · conectada' + (rm.round > 0 ? ' · ronda ' + rm.round : '') : 'Entrar o crear una';
     if (d) d.hidden = !on;
@@ -297,8 +338,8 @@
   document.addEventListener('input', function(ev){ if (ev.target.id === 'gsQ') { GS.q = ev.target.value; clearTimeout(gsDraw.t); gsDraw.t = setTimeout(gsDraw, 120); } });
 
   /* El botón «Acciones» se ve con el libro abierto y fuera de la campaña */
-  try { var fabMO = new MutationObserver(function(){ fabSync(); }); fabMO.observe(cover, {attributes:true, attributeFilter:['hidden']}); fabMO.observe($('#combat'), {attributes:true, attributeFilter:['hidden']}); $$('.sheet').forEach(function(x){ fabMO.observe(x, {attributes:true, attributeFilter:['hidden']}); }); } catch(e){}
-  document.addEventListener('keydown', function(ev){ if (ev.key !== 'Escape') return; if (!$('#hMenu').hidden) { menuOpen(false); ev.preventDefault(); } else if (!$('#fabMenu').hidden) { fabOpen(false); ev.preventDefault(); } });
+  try { var fabMO = new MutationObserver(function(){ fabSync(); navSync(); }); fabMO.observe(cover, {attributes:true, attributeFilter:['hidden']}); fabMO.observe($('#combat'), {attributes:true, attributeFilter:['hidden']}); $$('.sheet').forEach(function(x){ fabMO.observe(x, {attributes:true, attributeFilter:['hidden']}); }); } catch(e){}
+  document.addEventListener('keydown', function(ev){ if (ev.key !== 'Escape') return; if (!$('#hMenu').hidden) { menuOpen(false); ev.preventDefault(); } else if (!$('#nvMore').hidden) { moreOpen(false); ev.preventDefault(); } else if (!$('#fabMenu').hidden) { fabOpen(false); ev.preventDefault(); } });
   /* ---------- Menú del encabezado ---------- */
   function menuOpen(on){ var m = $('#hMenu'); m.hidden = !on; $$('[data-act="hmenu"]').forEach(function(b){ b.setAttribute('aria-expanded', String(on)); }); }
   /* ---------- Botón «Acciones» (abajo a la derecha) ---------- */
@@ -1700,8 +1741,8 @@
       + '</tbody></table></div>';
   }
   function renderGrim(){
-    var showSecs = !wide();
-    if (!Lib5e.has()) { grim.innerHTML = (showSecs ? grimSecs() : '<div class="folio"><span>Grimorio</span></div>') + noLibHtml(); return; }
+    var showSecs = true;
+    if (!Lib5e.has()) { grim.innerHTML = (wide() ? '<div class="folio"><span>Grimorio</span></div>' : '') + grimSecs() + noLibHtml(); return; }
     if (G.view) { renderGrimDetail(showSecs); return; }
     var L = Lib5e.get(), sec = G.sec, rows = SECDATA[sec](L), q = G.q.trim().toLowerCase(), isSp = sec === 'conjuros';
     G.cls = G.cls || '*'; G.school = G.school || '*'; G.mode = G.mode || 'list'; G.sort = G.sort || {k:'lv', dir:1};
@@ -1730,7 +1771,7 @@
     else if (isSp) {
       var lv = -1; body = '<div class="glist">' + shown.map(function(r){ var e = r[1], h = ''; if (e.level !== lv) { lv = e.level; h += '<div class="group-h" style="margin:12px 0 2px">' + (lv ? 'Nivel ' + lv : 'Trucos') + '</div>'; } var ss = Render5e.spellShort(e); return h + '<button type="button" class="gitem gi-item" data-act="gopen" data-ref="' + attr('spell|' + e.name + '|' + e.source) + '">' + (window.Iconos ? Iconos.spellTile(e, 'sm') : '') + '<b>' + spNm(e.name) + '</b><small>' + esc(ss.school.toLowerCase()) + (ss.conc ? ' · C' : '') + (ss.rit ? ' · R' : '') + ' · ' + esc(e.source) + '</small></button>'; }).join('') + '</div>';
     } else body = '<div class="glist">' + shown.map(function(r){ var e = r[1], sub = (r[0] === 'item' || r[0] === 'baseitem') ? Render5e.itemType(e).toLowerCase() + ' · ' : ''; return '<button type="button" class="gitem" data-act="gopen" data-ref="' + attr(r[0] + '|' + e.name + '|' + e.source) + '"><b>' + nm(e.name) + '</b><small>' + esc(sub) + esc(e.source) + '</small></button>'; }).join('') + '</div>';
-    grim.innerHTML = (showSecs ? grimSecs() : '<div class="folio"><span>Grimorio · ' + secName + '</span></div>') + fil
+    grim.innerHTML = (wide() ? '<div class="folio"><span>Grimorio · ' + secName + '</span></div>' : '') + grimSecs() + fil
       + '<p class="note" style="margin:10px 0 4px">' + total + ' resultados' + (total > cap ? '; se muestran ' + cap + ', afina con los filtros' : '') + '.</p>' + body;
     var gq = $('#gq'); if (gq) gq.addEventListener('input', function(){ G.q = gq.value; var pos = gq.selectionStart; renderGrim(); var n = $('#gq'); n.focus(); n.setSelectionRange(pos, pos); });
     [['#gsub','sub'],['#gcls','cls'],['#gsch','school']].forEach(function(p){ var el = $(p[0]); if (el) el.addEventListener('change', function(){ G[p[1]] = el.value; renderGrim(); }); });
@@ -2444,6 +2485,7 @@
     var USNAP = /^(pip|pool|hp|short|long|quse|exh)$/.test(a) && C && D && D.ok ? undoSnap() : null, uBefore = USNAP && JSON.parse(USNAP.rt);
     if (a !== 'hmenu' && !$('#hMenu').hidden && !b.closest('#hMenu')) menuOpen(false);
     if (b.closest('#hMenu') && a !== 'hmenu') menuOpen(false);
+    if (a !== 'nvmore' && !$('#nvMore').hidden) { if (b.closest('#nvMore') && a !== 'nvmoreclose' && !$('#combat').hidden) $('#combat').hidden = true; if (a !== 'tab') moreOpen(false); }
     if (b.closest('#fabMenu')) fabOpen(false);
     switch (a) {
       case 'hmenu': menuOpen($('#hMenu').hidden); break;
@@ -2468,7 +2510,7 @@
       case 'undo': undoNow(); break;
       case 'open': openBook(); break;
       case 'close': closeBook(); break;
-      case 'tab': if (window.Sfx && S.tab !== b.dataset.tab) Sfx.play('page'); closeSheets(); S.tab = b.dataset.tab; if (S.tab === 'grimorio') G.from = null; render(true); renderGrim(); $('#scroll').scrollTop = 0; if (S.tab === 'grimorio' || S.tab === 'equipo') fxAt(null, 10, b); break;
+      case 'tab': navTo(b.dataset.tab, b); break;
       case 'left': S.left = b.dataset.v; if (S.left !== 'personaje') { G.sec = S.left; G.view = null; G.hist = []; G.q = ''; G.sub = '*'; } render(true); renderGrim(); break;
       case 'gsec': G.sec = b.dataset.v; G.view = null; G.hist = []; G.q = ''; G.sub = '*'; renderGrim(); break;
       case 'gopen': openRef(b.dataset.ref); break;
@@ -2535,7 +2577,11 @@
       case 'quse': quickUse(b.dataset.q, b.dataset.lv); break;
       case 'qequip': sel = b.dataset.id; equip(); sel = null; if (!$('#combat').hidden) renderCombat(); if (invMsg) { if (window.Sala) Sala.toast(invMsg.replace(/<[^>]+>/g, '')); invMsg = ''; } break;
       case 'combat': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('combate'); break;
-      case 'campanas': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show(window.Sala && Sala.status() === 'on' && Mesa.tab() !== 'inicio' ? Mesa.tab() : 'inicio'); break;
+      case 'nvmore': moreOpen($('#nvMore').hidden); break;
+      case 'nvmoreclose': moreOpen(false); break;
+      case 'nvmesa': if (!$('#combat').hidden) { if (window.Mesa && Mesa.tab() !== 'inicio' && !(window.Sala && Sala.status() === 'on')) Mesa.show('inicio'); break; }
+        /* falls through */
+      case 'campanas': moreOpen(false); closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show(window.Sala && Sala.status() === 'on' && Mesa.tab() !== 'inicio' ? Mesa.tab() : 'inicio'); break;
       case 'mapsopen': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('mapas'); break;
       case 'mesa': closeSheets(); $('#combat').hidden = false; renderCombat(); if (window.Mesa) Mesa.show('chat'); break;
       case 'endcombat': $('#combat').hidden = true; break;
