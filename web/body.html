@@ -8,16 +8,15 @@
 
   <section class="page page-right" id="pageRight">
     <header class="head" id="head">
-      <button class="lvl btn-lvl" type="button" data-act="levelup" aria-label="Subir de nivel o editar el personaje" title="Subir de nivel o editar"><span class="lvl-pt" id="hPt"></span><b id="hLvl">1</b><span>nivel</span></button>
+      <button class="lvl btn-lvl" type="button" data-act="levelup" aria-label="Subir de nivel o editar el personaje" title="Subir de nivel o editar"><span class="lvl-pt" id="hPt"></span><b id="hLvl">1</b><span>nivel</span><i class="lvl-dot" id="hDot" hidden></i></button>
       <div class="who">
         <h1 id="hName">Diario del Aventurero</h1>
         <p id="hSub"></p>
         <p class="h-vit" id="hVit" hidden></p>
       </div>
       <div class="h-acts">
-        <button class="h-pill war" type="button" data-act="campanas" aria-label="Campañas: elegir campaña, mapa, combate y chat" title="Campañas"><svg class="ic"><use href="#i-banner"/></svg><span>Campaña</span><i class="h-live" id="hLive" hidden></i></button>
-        <button class="h-pill" type="button" data-act="settings" aria-label="Ajustes del diario" title="Ajustes"><svg class="ic"><use href="#i-gear"/></svg><span>Ajustes</span></button>
-        <button class="icon-btn h-close" type="button" data-act="close" aria-label="Cerrar diario" title="Cerrar diario"><svg class="ic"><use href="#i-book"/></svg><span>Cerrar diario</span></button>
+        <button class="h-btn" type="button" data-act="gsearch" aria-label="Buscar en todo el diario"><svg class="ic"><use href="#i-search"/></svg><span>Buscar</span></button>
+        <button class="h-btn" type="button" data-act="hmenu" aria-expanded="false" aria-controls="hMenu"><svg class="ic"><use href="#i-menu"/></svg><span>Menú</span><i class="h-live" id="hLive" hidden></i></button>
       </div>
     </header>
     <div class="scroll" id="scroll">
@@ -178,6 +177,49 @@
     <div class="sheet" id="ctrSheet" hidden role="dialog" aria-labelledby="ctrTitle">
       <div class="sheet-h"><h2 id="ctrTitle">Usos</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
       <div class="scroll"><div id="ctrBody"></div></div>
+    </div>
+    <div class="h-menu" id="hMenu" hidden>
+      <div class="h-menu-scrim" data-act="hmclose"></div>
+      <nav class="h-menu-p" aria-label="Menú">
+        <div class="h-menu-h"><b>Menú</b><button class="btn sm quiet" type="button" data-act="hmclose"><svg class="ic"><use href="#i-x"/></svg>Cerrar</button></div>
+        <button class="h-mi" type="button" data-act="campanas"><span class="h-mi-ic"><svg class="ic"><use href="#i-flag"/></svg></span><span class="h-mi-t"><b>Campaña</b><small id="hmCamp">Entrar o crear una</small></span><i class="h-mi-dot ok" id="hmCampDot" hidden></i></button>
+        <button class="h-mi" type="button" data-act="levelup" id="hmLvl"><span class="h-mi-ic"><svg class="ic"><use href="#i-up"/></svg></span><span class="h-mi-t"><b id="hmLvlT">Subir de nivel</b><small id="hmLvlS">Editar o subir tu personaje</small></span><i class="h-mi-dot" id="hmLvlDot" hidden></i></button>
+        <button class="h-mi" type="button" data-act="hmchars"><span class="h-mi-ic"><svg class="ic"><use href="#i-group"/></svg></span><span class="h-mi-t"><b>Cambiar personaje</b><small id="hmChars">Tus personajes en este aparato</small></span></button>
+        <button class="h-mi" type="button" data-act="settings"><span class="h-mi-ic"><svg class="ic"><use href="#i-gear"/></svg></span><span class="h-mi-t"><b>Ajustes</b><small>Apariencia, dados, idioma, biblioteca</small></span></button>
+        <button class="h-mi" type="button" data-act="close"><span class="h-mi-ic"><svg class="ic"><use href="#i-book"/></svg></span><span class="h-mi-t"><b>Cerrar el diario</b><small>Vuelve a la portada</small></span></button>
+      </nav>
+    </div>
+    <div class="fab-wrap" id="fabWrap" hidden>
+      <div class="fab-scrim" data-act="fab" hidden id="fabScrim"></div>
+      <div class="fab-menu" id="fabMenu" hidden>
+        <button class="fab-mi" type="button" data-act="hpkey"><span class="fab-ic"><svg class="ic"><use href="#i-heart"/></svg></span><span><b>Daño o curación</b><small>Con teclado, sin buscar tus PG</small></span></button>
+        <button class="fab-mi" type="button" data-act="dicesheet"><span class="fab-ic"><svg class="ic"><use href="#i-d20"/></svg></span><span><b>Tirar un dado</b><small>d20, d6… o lo que escribas</small></span></button>
+        <button class="fab-mi" type="button" data-act="restsheet"><span class="fab-ic"><svg class="ic"><use href="#i-moon"/></svg></span><span><b>Descanso</b><small>Corto o largo: recupera lo que toca</small></span></button>
+        <button class="fab-mi" type="button" data-act="usesheet"><span class="fab-ic"><svg class="ic"><use href="#i-flask"/></svg></span><span><b>Usar…</b><small>Tu acceso rápido</small></span></button>
+      </div>
+      <button class="fab" type="button" data-act="fab" id="fabBtn" aria-expanded="false" aria-controls="fabMenu"><svg class="ic"><use href="#i-d20"/></svg><span>Acciones</span></button>
+    </div>
+    <div class="undo-toast" id="undoToast" role="status" hidden><span id="undoTxt"></span><button type="button" data-act="undo"><svg class="ic"><use href="#i-undo"/></svg>Deshacer</button><i class="undo-bar" id="undoBar"></i></div>
+    <div class="sheet gs-sheet" id="searchSheet" hidden role="dialog" aria-label="Buscar en todo el diario">
+      <div class="gs-h"><label class="gs-in"><svg class="ic"><use href="#i-search"/></svg><input id="gsQ" type="search" placeholder="Conjuros, objetos, rasgos, reglas…" aria-label="Buscar en todo el diario" autocomplete="off"></label><button class="btn quiet" type="button" data-act="closesheet">Cerrar</button></div>
+      <div class="gs-chips" id="gsChips"></div>
+      <div class="scroll"><div id="gsRes"></div></div>
+    </div>
+    <div class="sheet" id="hpSheet" hidden role="dialog" aria-labelledby="hpTitle">
+      <div class="sheet-h"><h2 id="hpTitle">Daño o curación</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll"><div id="hpBody"></div></div>
+    </div>
+    <div class="sheet" id="diceSheet" hidden role="dialog" aria-labelledby="diceTitle">
+      <div class="sheet-h"><h2 id="diceTitle">Tirar un dado</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll"><div id="diceBody"></div></div>
+    </div>
+    <div class="sheet" id="restSheet" hidden role="dialog" aria-labelledby="restTitle">
+      <div class="sheet-h"><h2 id="restTitle">Descanso</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll"><div id="restBody"></div></div>
+    </div>
+    <div class="sheet" id="useSheet" hidden role="dialog" aria-labelledby="useTitle">
+      <div class="sheet-h"><h2 id="useTitle">Usar</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>
+      <div class="scroll"><div id="useBody"></div></div>
     </div>
     <div class="sheet" id="addSheet" hidden role="dialog" aria-labelledby="addTitle">
       <div class="sheet-h"><h2 id="addTitle">Agregar enemigos</h2><button class="icon-btn" type="button" data-act="closesheet" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button></div>

@@ -25,7 +25,8 @@ const check = (name, cond) => { console.log((cond ? 'bien ' : 'MAL  ') + name); 
   check('Lyra es Oathbreaker: rojo oscuro con humo y detalles a mano', st.theme && st.theme.key === 'paladin:oathbreaker' && st.theme.p === 'smoke' && st.theme.x && st.theme.x.aura);
   check('el libro toma sus colores', w.document.documentElement.style.getPropertyValue('--id-a') === '#6e0f12' && app.getAttribute('data-id') === 'paladin-oathbreaker');
   check('el emblema en el encabezado, con su borde de metal', !!w.document.querySelector('#head > .id-emb use[href="#gi-broken-skull"]') && !!w.document.querySelector('#head > .id-rim'));
-  check('la tarjeta de identidad en la hoja', /Oathbreaker/.test(w.document.querySelector('#pPersonaje .id-card').textContent));
+  w.document.querySelector('[data-act="ptab"][data-v="comp"]').dispatchEvent(new w.MouseEvent('click', {bubbles:true})); await wait(20);
+  check('la tarjeta de identidad en la hoja (Competencias)', /Oathbreaker/.test(w.document.querySelector('#pPersonaje .id-card').textContent));
   const ac = w.Diario.D().ac; check('el metal sigue a la CA (' + ac + ')', +app.getAttribute('data-ac') === (ac >= 20 ? 4 : ac >= 18 ? 3 : ac >= 16 ? 2 : ac >= 13 ? 1 : 0));
   // la vida
   const X = w.Diario, r = X.rt(X.cur()), max = X.D().hp.max;

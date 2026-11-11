@@ -157,7 +157,7 @@
     renderPersonaje(C); renderConjuros(C); renderRasgos(C); renderEquip(); renderCoins(C); renderChars();
     if (S.tab === 'bestias' && window.Cronica) Cronica.render();
     if (!$('#combat').hidden) renderCombat();
-    save();
+    save(); fabSync();
   }
   /* Retrato en el medallón del encabezado y en la portada (si el personaje tiene imagen) */
   function portraits(C){
@@ -176,6 +176,12 @@
       $('#cvName').textContent = C.name || 'Sin nombre'; $('#cvSub').textContent = D.clsLabel + ' · nivel ' + D.level;
       portraits(C);
       var r0 = rt(C), hpN = r0.hp == null ? D.hp.max : r0.hp, pc = Math.max(0, Math.min(100, Math.round(hpN / D.hp.max * 100)));
+      var pend = D.pending.length, dot = $('#hDot'); if (dot) dot.hidden = !pend;
+      $('.head .lvl').setAttribute('aria-label', 'Nivel ' + D.level + (pend ? ': te faltan ' + pend + ' elecciones' : ': subir de nivel o editar'));
+      $('#hmLvlT').textContent = pend ? 'Completar elecciones' : 'Subir a nivel ' + Math.min(20, D.level + 1);
+      $('#hmLvlS').textContent = pend ? 'Te falta' + (pend > 1 ? 'n ' + pend + ' elecciones' : ' 1 elección') + ' de tu personaje' : 'O editar lo que elegiste';
+      $('#hmLvlDot').hidden = !pend; $('#hmLvl').dataset.step = pend ? D.pending[0].step : '';
+      $('#hmChars').textContent = (C.name || 'Sin nombre') + ' · ' + S.chars.length + ' personaje' + (S.chars.length > 1 ? 's' : '') + ' en este aparato';
       var vit = $('#hVit'); vit.hidden = false;
       vit.innerHTML = '<span class="hv-hp" title="Puntos de golpe"><i style="width:' + pc + '%" class="' + (pc <= 33 ? 'lo' : pc <= 66 ? 'mid' : '') + '"></i></span><b>' + hpN + '</b>/' + D.hp.max + (r0.temp ? ' <em>+' + r0.temp + '</em>' : '') + ' PG<span class="hv-sep">·</span>CA <b>' + D.ac + '</b>';
     } else {
@@ -192,7 +198,13 @@
     var y = sc.scrollTop, on = headFold ? y > 24 : y > 64;
     if (on !== headFold) { headFold = on; hd.classList.toggle('fold', on); }
   }
-  function headLive(){ var l = $('#hLive'); if (l) l.hidden = !inRoom(); }
+  function headLive(){
+    var on = inRoom(), l = $('#hLive'); if (l) l.hidden = !on;
+    var rm = on && Sala.room(), c = $('#hmCamp'), d = $('#hmCampDot');
+    if (c) c.textContent = on ? (rm.name || 'Campaña') + ' · conectada' + (rm.round > 0 ? ' · ronda ' + rm.round : '') : 'Entrar o crear una';
+    if (d) d.hidden = !on;
+    fabSync();
+  }
   var headWired = false;
   function headWire(){
     if (headWired) return; headWired = true;
@@ -205,27 +217,194 @@
     return '<div class="banner"><p>Te falta' + (D.pending.length > 1 ? 'n ' : ' ') + D.pending.length + ' elecci' + (D.pending.length > 1 ? 'ones' : 'ón') + ' para completar tu personaje.</p><button class="btn main sm" type="button" data-act="levelup" data-step="' + D.pending[0].step + '">Completar</button></div>';
   }
   function mcBanner(){ return D.mcReqs && D.mcReqs.length ? '<div class="banner warn"><p>Multiclase sin el requisito de 13: ' + esc(D.mcReqs.join(' · ')) + '. Si tu DM lo permite, no pasa nada.</p></div>' : ''; }
+  /* ---------- La hoja: resumen de combate arriba y tres partes (Características · Habilidades · Competencias) ---------- */
+  var PTABS = [['car','Características'],['hab','Habilidades'],['comp','Competencias']];
+  function hpBox(C, r){
+    var hp = r.hp == null ? D.hp.max : r.hp, pct = Math.max(0, Math.min(100, Math.round(hp / D.hp.max * 100))), col = pct <= 33 ? 'bad' : pct <= 66 ? 'mid' : 'ok';
+    var st = function(v, l, t){ return '<div class="pv-st"' + (t ? ' title="' + attr(t) + '"' : '') + '><b>' + v + '</b><small>' + l + '</small></div>'; };
+    return '<section class="card pv" aria-label="Resumen de combate"><div class="pv-hp"><div class="pv-n"><b>' + hp + '</b><span>/ ' + D.hp.max + ' PG</span><button type="button" class="pv-temp" data-act="hpkey" data-mode="temp">Temporales <b>' + (r.temp || 0) + '</b></button></div>'
+      + '<span class="pv-bar"><i class="' + col + '" style="width:' + pct + '%"></i></span></div>'
+      + '<div class="pv-btns"><button class="btn" type="button" data-act="hpkey" data-mode="dmg"><svg class="ic"><use href="#i-minus"/></svg>Daño</button><button class="btn" type="button" data-act="hpkey" data-mode="heal"><svg class="ic"><use href="#i-plus"/></svg>Curar</button></div>'
+      + (hp <= 0 && D.hp.max > 1 ? deathHtml(r) : '')
+      + '<div class="pv-grid">' + st(D.ac, 'CA', D.acNote) + st(sgn(D.init), 'Iniciativa') + st(D.speed, 'Velocidad') + st(sgn(D.pb), 'Competencia') + st(D.passive, 'Perc. pasiva')
+      + '<button type="button" class="pv-st pv-insp" data-act="insp" aria-pressed="' + !!r.insp + '"><svg class="ic"><use href="#i-star"/></svg><small>Inspiración</small></button></div>'
+      + (r.conc || (r.conds && r.conds.length) || r.exh ? '<div class="vt-chips pv-chips">' + (r.conc ? '<span class="vt-chip conc"><svg class="ic"><use href="#i-star"/></svg>' + esc(Render5e.spName(String(r.conc).split('|')[0])) + ' <small>CD ' + (r.concDc || 10) + ' si te dañan</small><button type="button" data-act="endconc" aria-label="Terminar concentración">×</button></span>' : '') + (r.conds || []).map(function(k){ return '<button type="button" class="vt-chip cond" data-act="condoff" data-v="' + attr(k) + '" aria-label="Quitar ' + attr(COND_ES[k] || k) + '">' + esc(COND_ES[k] || k) + ' ×</button>'; }).join('') + (r.exh ? '<span class="vt-chip exh">Cansancio ' + r.exh + '</span>' : '') + '</div>' : '')
+      + '</section>';
+  }
+  function skillLine(s){
+    var cls = D.expert[s] ? 'dot ex' : D.skills[s] ? 'dot on' : 'dot';
+    return '<div class="line"><span class="' + cls + '" title="' + (D.expert[s] ? 'Pericia' : D.skills[s] ? 'Competencia (' + attr(D.skills[s]) + ')' : 'Sin competencia') + '"></span><span><a class="ref" data-ref="skill|' + attr(s.replace(/\b\w/g, function(c){ return c.toUpperCase(); })) + '|XPHB">' + R.SKES[s] + '</a> <span class="muted">· ' + R.AB[R.SK[s]] + '</span></span><span class="num">' + sgn(D.skill[s]) + '</span></div>';
+  }
   function renderPersonaje(C){
-    var h = pendingBanner() + mcBanner() + portraitCard(C) + (window.Identidad ? Identidad.card() : '');
-    h += '<div class="abil">' + R.ABS.map(function(k){ return '<div class="ab"><small>' + R.AB[k].toUpperCase() + '</small><div class="medal">' + sgn(D.mod[k]) + '</div><span class="score">' + D.abil[k] + '</span></div>'; }).join('') + '</div>';
-    h += '<div class="stats"><div class="stat" title="' + attr(D.acNote) + '"><div class="shield"><svg width="44" height="50" viewBox="0 0 44 50" aria-hidden="true"><path d="M22 2 L41 9 Q41 33 22 48 Q3 33 3 9 Z"/></svg><span>' + D.ac + '</span></div><span class="label">clase de armadura</span></div>'
-      + '<div class="stat"><span class="big">' + sgn(D.init) + '</span><span class="label">iniciativa</span></div><div class="stat"><span class="big">' + D.speed + '</span><span class="label">velocidad</span></div></div>';
-    h += '<p class="note" style="margin-top:-6px">CA: ' + esc(D.acNote) + '</p>';
-    h += '<div class="card"><div class="row" style="margin-bottom:4px"><span class="label"><a class="ref" data-ref="variantrule|Saving Throw|XPHB">tiradas de salvación</a></span>' + (D.aura || D.saveItems ? '<span class="muted" style="font-size:13px">incluye ' + [D.aura ? 'Aura ' + sgn(D.aura) : '', D.saveItems ? 'objetos ' + sgn(D.saveItems) : ''].filter(Boolean).join(' y ') + '</span>' : '') + '</div><div class="saves">'
-      + ['str','wis','dex','cha','con','int'].map(function(k){ return '<div class="line"><span class="dot' + (D.saves.indexOf(k) >= 0 ? ' on' : '') + '"></span><span>' + R.ABL[k] + '</span><span class="num">' + sgn(D.save[k]) + '</span></div>'; }).join('') + '</div></div>';
-    h += '<div class="card"><span class="label">habilidades</span><div class="skl">' + Object.keys(R.SK).sort(function(a, b){ return R.SKES[a].localeCompare(R.SKES[b]); }).map(function(s){
-      var cls = D.expert[s] ? 'dot ex' : D.skills[s] ? 'dot on' : 'dot';
-      return '<div class="line"><span class="' + cls + '" title="' + (D.expert[s] ? 'Pericia' : D.skills[s] ? 'Competencia (' + attr(D.skills[s]) + ')' : 'Sin competencia') + '"></span><span><a class="ref" data-ref="skill|' + attr(s.replace(/\b\w/g, function(c){ return c.toUpperCase(); })) + '|XPHB">' + R.SKES[s] + '</a> <span class="muted">· ' + R.AB[R.SK[s]] + '</span></span><span class="num">' + sgn(D.skill[s]) + '</span></div>';
-    }).join('') + '</div></div>';
-    h += '<div class="mini"><div class="stat"><span class="big">' + sgn(D.pb) + '</span><span class="label">competencia</span></div><div class="stat"><span class="big">' + D.passive + '</span><span class="label">perc. pasiva</span></div><div class="stat"><span class="big">' + (SIZE[D.size] || D.size).slice(0, 4) + '.</span><span class="label">tamaño</span></div></div>';
-    var prof = [['Armaduras', D.armor.map(function(a){ return {light:'ligeras', medium:'medias', heavy:'pesadas', shield:'escudos'}[a] || a; })], ['Armas', D.weapon.map(function(w){ return {simple:'sencillas', martial:'marciales'}[w] || w; })], ['Herramientas', D.tools], ['Idiomas', D.langs]];
-    var sn = D.senses || {dv:D.darkvision, bs:0}, mt = function(ft){ return String(ft / 5 * 1.5).replace('.', ',') + ' m'; };
-    if (sn.dv || sn.bs) prof.push(['Sentidos', (sn.dv ? ['Visión en la oscuridad ' + mt(sn.dv)] : []).concat(sn.bs ? ['Vista ciega ' + mt(sn.bs)] : [])]);
-    if (D.resist.length) prof.push(['Resistencias', D.resist]);
-    h += '<div class="card"><span class="label">competencias y rasgos</span>' + prof.filter(function(p){ return p[1].length; }).map(function(p){ return '<div class="line" style="align-items:flex-start;padding:6px 0"><span class="muted" style="min-width:110px">' + p[0] + '</span><span style="flex:1;text-align:right">' + p[1].map(esc).join(', ') + '</span></div>'; }).join('') + '</div>';
-    compBodies = {}; h += compSection(false);
+    var r = rt(C), tab = S.pTab || 'car', sk = Object.keys(R.SK).sort(function(a, b){ return R.SKES[a].localeCompare(R.SKES[b]); });
+    var h = hpBox(C, r) + mcBanner(), hasComp = (r.comp || []).length || compSuggest()[0];
+    h += '<div class="seg p-seg" role="tablist" aria-label="Partes de la hoja">' + PTABS.map(function(t){ return '<button type="button" role="tab" data-act="ptab" data-v="' + t[0] + '" aria-selected="' + (tab === t[0]) + '" aria-pressed="' + (tab === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</div>';
+    if (tab === 'car') {
+      h += '<div class="abil abil-sv">' + R.ABS.map(function(k){ var pr = D.saves.indexOf(k) >= 0; return '<div class="ab"><small>' + R.AB[k].toUpperCase() + '</small><div class="medal">' + sgn(D.mod[k]) + '</div><span class="score">' + D.abil[k] + '</span><span class="ab-sv' + (pr ? ' on' : '') + '" title="Tirada de salvación' + (pr ? ' (competente)' : '') + '">salv. ' + sgn(D.save[k]) + '</span></div>'; }).join('') + '</div>';
+      if (D.aura || D.saveItems) h += '<p class="note p-note">Las salvaciones ya incluyen ' + [D.aura ? 'tu aura (' + sgn(D.aura) + ')' : '', D.saveItems ? 'tus objetos (' + sgn(D.saveItems) + ')' : ''].filter(Boolean).join(' y ') + '.</p>';
+      var mine = sk.filter(function(x){ return D.skills[x] || D.expert[x]; });
+      h += '<div class="card"><span class="label">tus habilidades</span><div class="skl skl-1">' + (mine.length ? mine.map(skillLine).join('') : '<p class="note">Todavía no eres competente en ninguna.</p>') + '</div><button type="button" class="linkbtn p-more" data-act="ptab" data-v="hab">Ver las ' + sk.length + ' habilidades ›</button></div>';
+      if (hasComp) { compBodies = {}; h += compSection(false); }
+    } else if (tab === 'hab') {
+      h += '<div class="card"><span class="label">habilidades</span><div class="skl">' + sk.map(skillLine).join('') + '</div></div>';
+    } else {
+      var prof = [['Armaduras', D.armor.map(function(a){ return {light:'ligeras', medium:'medias', heavy:'pesadas', shield:'escudos'}[a] || a; })], ['Armas', D.weapon.map(function(w){ return {simple:'sencillas', martial:'marciales'}[w] || w; })], ['Herramientas', D.tools], ['Idiomas', D.langs]];
+      var sn = D.senses || {dv:D.darkvision, bs:0}, mt = function(ft){ return String(ft / 5 * 1.5).replace('.', ',') + ' m'; };
+      if (sn.dv || sn.bs) prof.push(['Sentidos', (sn.dv ? ['Visión en la oscuridad ' + mt(sn.dv)] : []).concat(sn.bs ? ['Vista ciega ' + mt(sn.bs)] : [])]);
+      if (D.resist.length) prof.push(['Resistencias', D.resist]);
+      prof.push(['Tamaño', [SIZE[D.size] || D.size]]);
+      h += '<div class="card"><span class="label">competencias</span>' + prof.filter(function(p){ return p[1].length; }).map(function(p){ return '<div class="line" style="align-items:flex-start;padding:6px 0"><span class="muted" style="min-width:110px">' + p[0] + '</span><span style="flex:1;text-align:right">' + p[1].map(esc).join(', ') + '</span></div>'; }).join('') + '</div>';
+      h += portraitCard(C) + (window.Identidad ? Identidad.card() : '');
+      if (!hasComp) { compBodies = {}; h += compSection(false); }
+    }
     $('#pPersonaje').innerHTML = h;
   }
+
+  /* ---------- Buscador de todo el diario: tu hoja primero, después conjuros, objetos, dotes y reglas ---------- */
+  var GS = {q:'', f:'all'}, GSF = [['all','Todo'],['spell','Conjuros'],['item','Objetos'],['feat','Rasgos y dotes'],['rule','Reglas']];
+  function gsMatch(n, q){ var a = Lib5e.norm(n), b = Lib5e.norm(Render5e.Tname(n)), c = Lib5e.norm(Render5e.spName(n)); return a.indexOf(q) >= 0 || b.indexOf(q) >= 0 || c.indexOf(q) >= 0 ? (a.indexOf(q) === 0 || b.indexOf(q) === 0 || c.indexOf(q) === 0 ? 2 : 1) : 0; }
+  function gsRow(ref, name, sub, tag, ic, spell){
+    var es = spell ? Render5e.spName(name) : Render5e.Tname(name), en = es !== name ? name : '';
+    return '<a class="ref gs-row" data-ref="' + attr(ref) + '" href="#"><svg class="ic"><use href="#' + ic + '"/></svg><span class="gs-t"><b>' + esc(es) + (en ? ' <i lang="en">' + esc(en) + '</i>' : '') + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' + (tag ? '<em>' + esc(tag) + '</em>' : '') + '</a>';
+  }
+  function gsHtml(){
+    var q = Lib5e.norm(GS.q.trim()); if (q.length < 2) return '<p class="note gs-hint">Escribe al menos dos letras, en español o en inglés.</p>';
+    if (!Lib5e.has()) return '<p class="note">Carga tu biblioteca de 5etools en Ajustes para buscar.</p>';
+    var L = Lib5e.get(), out = [], f = GS.f, mineR = [];
+    var C = cur();
+    if (C && D && D.ok && (f === 'all')) {
+      allSpells().forEach(function(x){ if (gsMatch(x.e.name, q)) mineR.push(gsRow('spell|' + x.e.name + '|' + x.e.source, x.e.name, x.e.level ? 'Nivel ' + x.e.level : 'Truco', 'Tu conjuro', 'i-star', true)); });
+      items().forEach(function(it){ if (it.n && (Lib5e.norm(it.n).indexOf(q) >= 0)) mineR.push(it.ref ? gsRow(it.ref, it.n, it.eq ? 'Equipado' : 'En tu mochila', 'Tu objeto', it.ic || 'i-bag') : '<div class="gs-row"><svg class="ic"><use href="#i-bag"/></svg><span class="gs-t"><b>' + esc(it.n) + '</b><small>Objeto propio</small></span></div>'); });
+      D.features.forEach(function(ft){ if (ft.e && gsMatch(ft.name, q)) mineR.push(gsRow((ft.from === 'Dote' ? 'feat|' : (ft.e.subclassShortName ? 'subclassFeature|' : 'classFeature|')) + ft.name + '|' + (ft.e.source || 'XPHB'), ft.name, ft.from || '', 'Tu rasgo', 'i-shield')); });
+    }
+    if (mineR.length) out.push(['En tu hoja', mineR.slice(0, 8)]);
+    function scan(type, lbl, ic, sub, spell){
+      var hits = [], seen = {};
+      (L[type] || []).forEach(function(e){ var sc = gsMatch(e.name, q); if (!sc) return; var k = Lib5e.norm(e.name); if (seen[k] && !(e.source === 'XPHB' || e.source === 'XDMG' || e.source === 'XMM')) return; seen[k] = {e:e, sc:sc}; });
+      Object.keys(seen).forEach(function(k){ hits.push(seen[k]); });
+      hits.sort(function(a, b){ return b.sc - a.sc || a.e.name.length - b.e.name.length; });
+      if (hits.length) out.push([lbl, hits.slice(0, 6).map(function(x){ return gsRow(type + '|' + x.e.name + '|' + x.e.source, x.e.name, sub(x.e), x.e.source, ic, spell); }).concat(hits.length > 6 ? ['<p class="note gs-more">y ' + (hits.length - 6) + ' más: escribe un poco más</p>'] : [])]);
+    }
+    if (f === 'all' || f === 'spell') scan('spell', 'Conjuros', 'i-star', function(e){ return (e.level ? 'Nivel ' + e.level : 'Truco') + ' · ' + ((Render5e.SCHOOL && Render5e.SCHOOL[e.school]) || ''); }, true);
+    if (f === 'all' || f === 'item') { scan('item', 'Objetos', 'i-bag', function(e){ return e.rarity && e.rarity !== 'none' ? e.rarity : 'Objeto'; }); scan('baseitem', 'Armas y armaduras', 'i-sword', function(e){ return e.weaponCategory ? 'Arma' : e.ac ? 'Armadura' : 'Equipo'; }); }
+    if (f === 'all' || f === 'feat') { scan('feat', 'Dotes', 'i-scroll', function(e){ return 'Dote'; }); scan('optionalfeature', 'Opciones de clase', 'i-shield', function(){ return 'Invocación, maniobra…'; }); }
+    if (f === 'all' || f === 'rule') { scan('condition', 'Estados', 'i-eye', function(){ return 'Estado'; }); scan('action', 'Acciones', 'i-swords', function(){ return 'Acción'; }); scan('variantrule', 'Reglas', 'i-tome', function(){ return 'Regla'; }); }
+    if (!out.length) return '<p class="empty-state"><b>Nada con «' + esc(GS.q.trim()) + '»</b>Prueba con otra palabra o en inglés.</p>';
+    return out.map(function(g){ return '<section class="gs-g"><span class="label">' + esc(g[0]) + '</span>' + g[1].join('') + '</section>'; }).join('');
+  }
+  function gsDraw(){ $('#gsChips').innerHTML = GSF.map(function(x){ return '<button type="button" class="chip" data-act="gsf" data-v="' + x[0] + '" aria-pressed="' + (GS.f === x[0]) + '">' + x[1] + '</button>'; }).join(''); $('#gsRes').innerHTML = gsHtml(); }
+  function gsOpen(){ openSheet('searchSheet'); gsDraw(); setTimeout(function(){ var i = $('#gsQ'); if (i) { try { i.focus({preventScroll:true}); } catch(e){ i.focus(); } i.select(); } }, 50); }
+  document.addEventListener('input', function(ev){ if (ev.target.id === 'gsQ') { GS.q = ev.target.value; clearTimeout(gsDraw.t); gsDraw.t = setTimeout(gsDraw, 120); } });
+
+  /* El botón «Acciones» se ve con el libro abierto y fuera de la campaña */
+  try { var fabMO = new MutationObserver(function(){ fabSync(); }); fabMO.observe(cover, {attributes:true, attributeFilter:['hidden']}); fabMO.observe($('#combat'), {attributes:true, attributeFilter:['hidden']}); $$('.sheet').forEach(function(x){ fabMO.observe(x, {attributes:true, attributeFilter:['hidden']}); }); } catch(e){}
+  document.addEventListener('keydown', function(ev){ if (ev.key !== 'Escape') return; if (!$('#hMenu').hidden) { menuOpen(false); ev.preventDefault(); } else if (!$('#fabMenu').hidden) { fabOpen(false); ev.preventDefault(); } });
+  /* ---------- Menú del encabezado ---------- */
+  function menuOpen(on){ var m = $('#hMenu'); m.hidden = !on; $$('[data-act="hmenu"]').forEach(function(b){ b.setAttribute('aria-expanded', String(on)); }); }
+  /* ---------- Botón «Acciones» (abajo a la derecha) ---------- */
+  function fabSync(){
+    var w = $('#fabWrap'); if (!w) return; var C = cur();
+    var sheet = $$('.sheet').some(function(x){ return !x.hidden; });
+    w.hidden = !(cover.hidden && $('#combat').hidden && !sheet && C && D && D.ok);
+    if (w.hidden) fabOpen(false);
+  }
+  function fabOpen(on){ $('#fabMenu').hidden = !on; $('#fabScrim').hidden = !on; $('#fabBtn').setAttribute('aria-expanded', String(on)); $('#fabBtn').classList.toggle('on', on); $('#fabBtn span').textContent = on ? 'Cerrar' : 'Acciones'; }
+  /* ---------- Deshacer: lo último que gastaste (vida, espacios, usos, descansos) durante 5 s ---------- */
+  var UNDO = null, undoT = null;
+  function undoSnap(){ var C = cur(); return C ? {id:C.id, rt:JSON.stringify(rt(C))} : null; }
+  function undoOffer(snap, label){
+    var C = cur(); if (!snap || !C || C.id !== snap.id || JSON.stringify(rt(C)) === snap.rt) return;
+    UNDO = snap; $('#undoTxt').textContent = label; var t = $('#undoToast'); t.hidden = false;
+    var bar = $('#undoBar'); bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = '';
+    document.body.classList.add('undo-on');
+    clearTimeout(undoT); undoT = setTimeout(function(){ t.hidden = true; UNDO = null; document.body.classList.remove('undo-on'); }, 5000);
+  }
+  function undoNow(){
+    var C = cur(); if (!UNDO || !C || C.id !== UNDO.id) return;
+    C.rt = JSON.parse(UNDO.rt); UNDO = null; $('#undoToast').hidden = true; document.body.classList.remove('undo-on'); clearTimeout(undoT);
+    recompute(); save(); render(false); if (!$('#combat').hidden) renderCombat(); toastMsg('Listo, como estaba.');
+  }
+  function undoLabel(a, b, snap, r0){
+    var C = cur(); if (!C) return; var r1 = rt(C), lb = '';
+    if (a === 'pip') { var k = b.dataset.key, u0, u1, nm0;
+      if (k === 'pact') { u0 = r0.pactUsed || 0; u1 = r1.pactUsed || 0; nm0 = 'un espacio de pacto'; }
+      else if (k.indexOf('slot:') === 0) { var lv = +k.slice(5); u0 = (r0.slotsUsed || [])[lv] || 0; u1 = (r1.slotsUsed || [])[lv] || 0; nm0 = 'un espacio de nivel ' + (lv + 1); }
+      else { var rk = k.slice(4), rs = D.resources.filter(function(x){ return x.key === rk; })[0]; u0 = (r0.res || {})[rk] || 0; u1 = (r1.res || {})[rk] || 0; nm0 = 'un uso de ' + (rs ? Render5e.Tname(rs.label) : rk); }
+      lb = (u1 > u0 ? 'Gastaste ' : 'Recuperaste ') + nm0;
+    }
+    else if (a === 'pool') lb = 'Gastaste ' + b.dataset.v + ' de tu reserva';
+    else if (a === 'hp') lb = (+b.dataset.v < 0 ? 'Perdiste ' : 'Ganaste ') + Math.abs(+b.dataset.v) + ' PG';
+    else if (a === 'short') { lb = 'Descanso corto hecho'; closeSheets(); }
+    else if (a === 'long') { lb = 'Descanso largo: todo recuperado'; closeSheets(); }
+    else if (a === 'quse') lb = 'Lo usaste' + (b.closest('#useSheet') ? '' : '');
+    else if (a === 'exh') lb = 'Cansancio ' + (r1.exh || 0);
+    undoOffer(snap, lb);
+    if (!$('#useSheet').hidden) $('#useBody').innerHTML = useHtml();
+  }
+  function toastMsg(t){ if (window.Sala && Sala.toast) Sala.toast(t); }
+  /* ---------- Teclado de daño, curación y temporales ---------- */
+  var HK = {mode:'dmg', v:'', half:false, dbl:false};
+  function hpCalc(){
+    var C = cur(), r = rt(C), n = parseInt(HK.v, 10) || 0;
+    if (HK.mode === 'dmg') { if (HK.half) n = Math.floor(n / 2); if (HK.dbl) n *= 2; }
+    var hp = r.hp == null ? D.hp.max : r.hp, temp = r.temp || 0, to = hp, tt = temp;
+    if (HK.mode === 'dmg') { var t = Math.min(temp, n); tt = temp - t; to = Math.max(0, hp - (n - t)); }
+    else if (HK.mode === 'heal') to = Math.min(D.hp.max, hp + n);
+    else tt = n;
+    return {n:n, hp:hp, to:to, temp:temp, tt:tt};
+  }
+  function hpKeyHtml(){
+    var c = hpCalc(), r = rt(cur()), modes = [['dmg','Daño'],['heal','Curación'],['temp','Temporales']];
+    var h = '<div class="hk">' + '<div class="seg" role="group" aria-label="Qué es">' + modes.map(function(m){ return '<button type="button" data-act="hkmode" data-v="' + m[0] + '" aria-pressed="' + (HK.mode === m[0]) + '">' + m[1] + '</button>'; }).join('') + '</div>';
+    h += '<div class="hk-out" aria-live="polite"><b class="hk-n ' + HK.mode + '">' + (HK.v || '0') + '</b><span>' + (HK.mode === 'temp' ? 'Temporales: ' + c.temp + ' → <b>' + c.tt + '</b>' : c.hp + ' → <b>' + c.to + '</b> PG' + (HK.mode === 'dmg' && c.temp ? ' <small>(' + Math.min(c.temp, c.n) + ' a los temporales)</small>' : '')) + '</span></div>';
+    if (HK.mode === 'dmg') h += '<div class="chips hk-chips"><button type="button" class="chip" data-act="hkhalf" aria-pressed="' + HK.half + '">Mitad (resistencia)</button><button type="button" class="chip" data-act="hkdbl" aria-pressed="' + HK.dbl + '">Doble (vulnerable)</button></div>'
+      + (r.conc ? '<p class="note hk-conc">Te concentras en ' + esc(Render5e.spName(String(r.conc).split('|')[0])) + ': al recibirlo, salvación de Constitución CD ' + Math.max(10, Math.floor(c.n / 2)) + '.</p>' : '');
+    h += '<div class="hk-keys">' + [1,2,3,4,5,6,7,8,9].map(function(n){ return '<button type="button" data-act="hkkey" data-v="' + n + '">' + n + '</button>'; }).join('') + '<button type="button" data-act="hkkey" data-v="del" aria-label="Borrar">Borrar</button><button type="button" data-act="hkkey" data-v="0">0</button><button type="button" data-act="hkkey" data-v="clr">Limpiar</button></div>';
+    h += '<button class="btn main hk-go" type="button" data-act="hkgo"' + (c.n || HK.mode === 'temp' ? '' : ' disabled') + '>' + (HK.mode === 'dmg' ? 'Recibir ' + c.n + ' de daño' : HK.mode === 'heal' ? 'Curar ' + c.n : 'Poner ' + c.n + ' temporales') + '</button></div>';
+    return h;
+  }
+  function hpKeyOpen(mode){ HK = {mode:mode || 'dmg', v:'', half:false, dbl:false}; $('#hpBody').innerHTML = hpKeyHtml(); openSheet('hpSheet'); }
+  function hpKeyDraw(){ $('#hpBody').innerHTML = hpKeyHtml(); }
+  function hpKeyGo(){
+    var C = cur(), r = rt(C), c = hpCalc(), snap = undoSnap();
+    if (HK.mode === 'temp') r.temp = c.tt; else { r.hp = c.to; r.temp = c.tt; if (HK.mode === 'dmg' && r.conc) r.concDc = Math.max(10, Math.floor(c.n / 2)); }
+    if (c.to > 0 && r.death) r.death = null;
+    save(); closeSheets(); render(false); if (!$('#combat').hidden) renderCombat();
+    undoOffer(snap, HK.mode === 'dmg' ? 'Recibiste ' + c.n + ' de daño · te quedan ' + c.to + ' PG' : HK.mode === 'heal' ? 'Te curaste ' + (c.to - c.hp) + ' · tienes ' + c.to + ' PG' : 'Tienes ' + c.tt + ' PG temporales');
+  }
+  window.addEventListener('keydown', function(ev){
+    var sh = $('#hpSheet'); if (!sh || sh.hidden) return;
+    if (/^[0-9]$/.test(ev.key)) { HK.v = (HK.v + ev.key).replace(/^0+(?=\d)/, '').slice(0, 4); hpKeyDraw(); ev.preventDefault(); }
+    else if (ev.key === 'Backspace') { HK.v = HK.v.slice(0, -1); hpKeyDraw(); ev.preventDefault(); }
+    else if (ev.key === 'Enter') { if (parseInt(HK.v, 10) || HK.mode === 'temp') hpKeyGo(); ev.preventDefault(); }
+  });
+  /* ---------- Tirar un dado ---------- */
+  var DK = {expr:'1d20', last:null};
+  function rollExpr(ex){
+    var m, tot = 0, parts = [], rx = /([+-]?)\s*(\d*)d(\d+)|([+-]?)\s*(\d+)/gi, s0 = String(ex || '').replace(/\s+/g, ''), any = false, nat = null;
+    while ((m = rx.exec(s0))) {
+      if (m[3]) { var n = Math.min(50, +m[2] || 1), f = +m[3], sg = m[1] === '-' ? -1 : 1, rr = []; for (var i = 0; i < n; i++) { var a = new Uint32Array(1); crypto.getRandomValues(a); rr.push(1 + a[0] % f); } var sm = rr.reduce(function(x, y){ return x + y; }, 0); tot += sg * sm; parts.push((sg < 0 ? '− ' : parts.length ? '+ ' : '') + n + 'd' + f + ' [' + rr.join(', ') + ']'); if (f === 20 && n === 1) nat = rr[0]; any = true; }
+      else if (m[5]) { var v = (m[4] === '-' ? -1 : 1) * +m[5]; tot += v; parts.push((v < 0 ? '− ' : '+ ') + Math.abs(v)); }
+    }
+    return any ? {total:tot, txt:parts.join(' '), nat:nat, expr:ex} : null;
+  }
+  function diceHtml(){
+    var L = DK.last;
+    return '<div class="dk"><div class="dk-dice">' + ['d4','d6','d8','d10','d12','d20','d100'].map(function(d){ return '<button type="button" data-act="dkroll" data-v="1' + d + '">' + d + '</button>'; }).join('') + '</div>'
+      + '<form class="dk-f" id="dkForm"><input class="field" id="dkIn" value="' + attr(DK.expr) + '" aria-label="Tirada, por ejemplo 2d6+3" autocomplete="off" inputmode="text"><button class="btn main" type="submit"><svg class="ic"><use href="#i-d20"/></svg>Tirar</button></form>'
+      + (L ? '<div class="dk-out' + (L.nat === 20 ? ' crit' : L.nat === 1 ? ' fumble' : '') + '" aria-live="polite"><small>' + esc(L.expr) + '</small><b>' + L.total + '</b><span>' + esc(L.txt) + '</span>' + (L.nat === 20 ? '<em>¡20 natural!</em>' : L.nat === 1 ? '<em>1 natural</em>' : '') + '</div>'
+        + (inRoom() ? '<button class="btn" type="button" data-act="dkshare"><svg class="ic"><use href="#i-chat"/></svg>Mostrarla al grupo</button>' : '') : '<p class="note">Toca un dado o escribe una tirada como «2d6+3».</p>') + '</div>';
+  }
+  function diceRoll(ex){ var res = rollExpr(ex); if (!res) { toastMsg('Escribe algo como 1d20+5.'); return; } DK.expr = ex; DK.last = res; if (window.Sfx) Sfx.play('dice'); $('#diceBody').innerHTML = diceHtml(); }
+  document.addEventListener('submit', function(ev){ if (ev.target.id !== 'dkForm') return; ev.preventDefault(); diceRoll($('#dkIn').value.trim() || '1d20'); });
+  /* ---------- Descanso ---------- */
+  function restHtml(){
+    var shorts = D.resources.filter(function(x){ return x.rest === 'short' || /channel divinity|second wind|wild shape|focus|ki|superiority/.test(x.key); }).map(function(x){ return x.label; });
+    return '<div class="rs"><button class="rs-b" type="button" data-act="short"><svg class="ic"><use href="#i-dusk"/></svg><span><b>Descanso corto</b><small>Una hora. ' + (shorts.length ? 'Recuperas: ' + esc(shorts.slice(0, 4).join(', ')) + (D.pact ? ' y tus espacios de pacto' : '') + '.' : 'Puedes gastar dados de golpe para curarte.') + '</small></span></button>'
+      + '<button class="rs-b" type="button" data-act="long"><svg class="ic"><use href="#i-moon"/></svg><span><b>Descanso largo</b><small>Ocho horas. Recuperas todos tus PG, espacios y usos; un nivel de cansancio menos.</small></span></button></div>';
+  }
+  /* ---------- Usar (acceso rápido) ---------- */
+  function useHtml(){ var r = rt(cur()), keys = quickKeys(r), rows = keys.map(function(k){ return quickRow(k, r); }).filter(Boolean); return (rows.length ? '<div class="card q-card">' + rows.join('') + '</div>' : '<p class="note">Todavía no tienes nada en tu acceso rápido.</p>') + '<button class="btn" type="button" data-act="qedit"><svg class="ic"><use href="#i-pencil"/></svg>Elegir qué va aquí</button>'; }
 
   /* Retrato y formas, arriba de la hoja: como la ficha de un personaje de videojuego */
   function portraitCard(C){
@@ -1184,7 +1363,7 @@
     var c = {id:'k' + Date.now().toString(36), ref:ref}; if (m.summonedBySpellLevel) c.sl = m.summonedBySpellLevel;
     var vs = compVariants(m); if (vs.length) c.v = vs[0];
     r.comp.push(c); var st = compStats(c); c.hp = st ? st.hpMax : 1;
-    save(); closeSheets(); render(false);
+    S.pTab = 'car'; save(); closeSheets(); render(false);
   }
   /* ---------- Editor de la hoja del compañero ---------- */
   var CE = null, SKILL_ES = {perception:'Percepción', stealth:'Sigilo', athletics:'Atletismo', acrobatics:'Acrobacias', insight:'Perspicacia', survival:'Supervivencia', investigation:'Investigación', arcana:'Arcanos', history:'Historia', deception:'Engaño', intimidation:'Intimidación', persuasion:'Persuasión', performance:'Interpretación'};
@@ -1237,7 +1416,7 @@
     o.attacks = o.attacks.filter(function(a){ return a.name; });
     if (CE.i >= 0) { var c = r.comp[CE.i]; c.custom = o; if (c.hp == null || c.hp > o.hpMax) c.hp = o.hpMax; }
     else { r.comp = r.comp || []; r.comp.push({id:'k' + Date.now().toString(36), custom:o, hp:o.hpMax}); }
-    closeSheets(); save(); render(false);
+    S.pTab = 'car'; closeSheets(); save(); render(false);
   });
   /* Pasa un compañero de la biblioteca a hoja editable con sus números de ahora */
   function compFork(i){
@@ -2257,12 +2436,36 @@
   /* ---------- Clics ---------- */
   document.addEventListener('click', function(ev){
     var rl = ev.target.closest('a.ref');
-    if (rl) { ev.preventDefault(); openRef(rl.dataset.ref); return; }
+    if (rl) { ev.preventDefault(); if (rl.closest('#searchSheet')) { closeSheets(); openRef(rl.dataset.ref); var sc0 = $('#scroll'); if (sc0) sc0.scrollTop = 0; return; } openRef(rl.dataset.ref); return; }
     var it = ev.target.closest('.it');
     if (it && grid.contains(it)) { select(it.dataset.id); return; }
     var b = ev.target.closest('[data-act]'); if (!b) return;
     var a = b.dataset.act, C = cur(), r = C ? rt(C) : null;
+    var USNAP = /^(pip|pool|hp|short|long|quse|exh)$/.test(a) && C && D && D.ok ? undoSnap() : null, uBefore = USNAP && JSON.parse(USNAP.rt);
+    if (a !== 'hmenu' && !$('#hMenu').hidden && !b.closest('#hMenu')) menuOpen(false);
+    if (b.closest('#hMenu') && a !== 'hmenu') menuOpen(false);
+    if (b.closest('#fabMenu')) fabOpen(false);
     switch (a) {
+      case 'hmenu': menuOpen($('#hMenu').hidden); break;
+      case 'gsearch': gsOpen(); break;
+      case 'gsf': GS.f = b.dataset.v; gsDraw(); break;
+      case 'hmclose': menuOpen(false); break;
+      case 'hmchars': openSettings(); if (window.Interfaz) Interfaz.show('personajes'); break;
+      case 'ptab': S.pTab = b.dataset.v; save(); renderPersonaje(C); if (b.dataset.v === 'hab') { var pp = $('#pPersonaje .p-seg'); if (pp && pp.scrollIntoView) pp.scrollIntoView({block:'start'}); } break;
+      case 'insp': r.insp = !r.insp; save(); renderPersonaje(C); break;
+      case 'fab': fabOpen($('#fabMenu').hidden); break;
+      case 'hpkey': hpKeyOpen(b.dataset.mode); break;
+      case 'hkmode': HK.mode = b.dataset.v; hpKeyDraw(); break;
+      case 'hkhalf': HK.half = !HK.half; if (HK.half) HK.dbl = false; hpKeyDraw(); break;
+      case 'hkdbl': HK.dbl = !HK.dbl; if (HK.dbl) HK.half = false; hpKeyDraw(); break;
+      case 'hkkey': var kv = b.dataset.v; HK.v = kv === 'del' ? HK.v.slice(0, -1) : kv === 'clr' ? '' : (HK.v + kv).replace(/^0+(?=\d)/, '').slice(0, 4); hpKeyDraw(); break;
+      case 'hkgo': hpKeyGo(); break;
+      case 'dicesheet': $('#diceBody').innerHTML = diceHtml(); openSheet('diceSheet'); break;
+      case 'dkroll': diceRoll(b.dataset.v); break;
+      case 'dkshare': if (DK.last && window.Sala) { Sala.send({t:'chat.roll', label:DK.last.expr, total:DK.last.total, nat:DK.last.nat}); toastMsg('Tu tirada está en el chat del grupo.'); } break;
+      case 'restsheet': $('#restBody').innerHTML = restHtml(); openSheet('restSheet'); break;
+      case 'usesheet': $('#useBody').innerHTML = useHtml(); openSheet('useSheet'); break;
+      case 'undo': undoNow(); break;
       case 'open': openBook(); break;
       case 'close': closeBook(); break;
       case 'tab': if (window.Sfx && S.tab !== b.dataset.tab) Sfx.play('page'); closeSheets(); S.tab = b.dataset.tab; if (S.tab === 'grimorio') G.from = null; render(true); renderGrim(); $('#scroll').scrollTop = 0; if (S.tab === 'grimorio' || S.tab === 'equipo') fxAt(null, 10, b); break;
@@ -2394,6 +2597,7 @@
       case 'pkclose': $('#picker').hidden = true; PK = null; break;
       case 'pkrefback': if (PK) pickerUI(); else $('#picker').hidden = true; break;
     }
+    if (USNAP) undoLabel(a, b, USNAP, uBefore);
   });
   document.addEventListener('change', function(ev){
     var t = ev.target;

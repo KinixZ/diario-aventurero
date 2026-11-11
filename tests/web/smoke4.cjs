@@ -48,6 +48,7 @@ const mc = {id:'mc', name:'Mixto', level:11, cl:['Paladin|XPHB','Paladin|XPHB','
   await wait(30);
   console.log('active head:', $('#hSub').textContent);
   act('tab', '[data-tab="personaje"]'); await wait(20);
+  if (!$('#pPersonaje .comp-card')) { act('ptab', '[data-v="comp"]'); await wait(20); }
   console.log('comp banner:', ($('#pPersonaje .comp-card') || {}).textContent.slice(0, 160));
   act('compnew'); await wait(20);
   console.log('comp list first:', $$('#compList .prow b').slice(0, 5).map(e => e.textContent).join(', '));
