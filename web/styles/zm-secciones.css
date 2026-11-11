@@ -109,3 +109,29 @@
 .case .inv-view button{color:var(--ink);background:var(--parch-2)}
 .case .inv-view button[aria-pressed="true"]{background:var(--oath);color:var(--on-accent)}
 .ses-list[hidden],.ses-list:empty{display:none}
+
+/* ---------- Todo en español (módulo 23) ---------- */
+.rg-en,.g-en{font-style:italic;font-weight:400;font-size:12.5px;color:var(--ink-2);margin-left:6px}
+.orig-btn{display:inline-flex;align-items:center;gap:6px}
+.orig-btn .ic{width:16px;height:16px}
+.orig-btn[aria-pressed="true"]{background:var(--parch-3);border-color:var(--gild,var(--gold))}
+.g-top{margin-bottom:6px}
+.g-top > .label,.g-az{display:block;margin:10px 0 4px}
+.gitem .g-line{display:block;font-size:14px;color:var(--ink-2);font-weight:400;margin-top:2px}
+.tt-box{display:flex;flex-direction:column;margin-top:8px}
+.tt-row{display:flex;align-items:center;gap:12px;min-height:56px;padding:6px 0;border-top:1px solid var(--rule)}
+.tt-row input{width:22px;height:22px;flex:none;accent-color:var(--oath)}
+.tt-row span{flex:1;display:flex;flex-direction:column}
+.tt-row b{font-size:16px}
+.tt-row small{font-size:13.5px;color:var(--ink-2)}
+.tt-ok{flex:none;display:flex;align-items:center;gap:4px;font-style:normal;font-size:13px;font-weight:600;color:#3f7d3a}
+.tt-ok .ic{width:14px;height:14px}
+.tt-prog{display:flex;flex-direction:column;gap:6px;padding-top:8px}
+.tt-bar{height:8px;border-radius:4px;background:var(--rule);overflow:hidden}
+.tt-bar i{display:block;height:100%;background:var(--oath);transition:width .4s}
+.tt-prog small{font-size:13px;color:var(--ink-2)}
+.tt-acts{gap:8px;flex-wrap:wrap;margin-top:10px}
+.g-top .gitem{flex-wrap:wrap;row-gap:2px;padding:8px 2px}
+.g-top .gitem b{flex:1 1 auto}
+.g-top .gitem .g-line{flex:1 0 100%;order:3}
+.gitem b .g-en{display:inline}

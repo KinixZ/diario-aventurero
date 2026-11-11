@@ -3,7 +3,9 @@ var Render5e = (function(){
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function attr(s){ return esc(s).replace(/'/g, '&#39;'); }
   /* ---------- Traducción fija (archivo traduccion-*.json): texto en inglés → español por hash ---------- */
-  var TR = null, TRon = true, missN = 0;
+  var TR = null, TRon = true, missN = 0, ORIG = false;
+  /* «Ver el original»: todo en inglés un momento, sin tocar la preferencia */
+  function orig(on){ if (on != null) ORIG = !!on; return ORIG; }
   function hash(str){
     var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
     for (var i = 0; i < str.length; i++) { var ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
@@ -11,23 +13,27 @@ var Render5e = (function(){
     h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
     return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
   }
-  function T(s){ if (!TR || !TRon || typeof s !== 'string' || s.length < 3) return s; var v = TR[hash(s)]; if (v != null) return v; if (/[a-z]{3}/i.test(s)) missN++; return s; }
+  function T(s){ if (ORIG || !TR || !TRon || typeof s !== 'string' || s.length < 3) return s; var v = TR[hash(s)]; if (v != null) return v; if (/[a-z]{3}/i.test(s)) missN++; return s; }
   /* Nombres en etiquetas: {@spell fireball} → "bola de fuego" (con la mayúscula como venía) */
   /* Nombres de conjuros y dotes: la traducción cargada manda; si no la tiene, el diccionario del diario (NombresES).
      Modo (localStorage 'diario-spname'): 'es' español con el inglés chico, 'only' solo español, 'en' en inglés */
   var SPM = 'es'; try { SPM = localStorage.getItem('diario-spname') || 'es'; } catch(e){}
   function spMode(m){ if (m) { SPM = m; try { localStorage.setItem('diario-spname', m); } catch(e){} } return SPM; }
-  function dict(n, onlySpell){ if (SPM === 'en' || typeof NombresES === 'undefined') return null; var v = NombresES.spell(n); if (v == null && !onlySpell && NombresES.feat) v = NombresES.feat(n); if (v == null) return null; return n.charAt(0) === n.charAt(0).toLowerCase() ? v.charAt(0).toLowerCase() + v.slice(1) : v; }
+  function dict(n, onlySpell){ if (ORIG || SPM === 'en' || typeof NombresES === 'undefined') return null; var v = NombresES.spell(n); if (v == null && !onlySpell && NombresES.feat) v = NombresES.feat(n); if (v == null && !onlySpell && NombresES.rasgo) v = NombresES.rasgo(n); if (v == null) return null; return n.charAt(0) === n.charAt(0).toLowerCase() ? v.charAt(0).toLowerCase() + v.slice(1) : v; }
   function spName(n){
-    if (!n) return n; if (SPM === 'en') return n;
+    if (!n) return n; if (SPM === 'en' || ORIG) return n;
     if (TR && TRon) { var v = TR[hash(n)]; if (v != null) return v; }
     return dict(n, true) || n;
   }
   /* ¿Se enseña el nombre en inglés debajo? */
   function spEn(n){ return SPM === 'es' && spName(n) !== n ? n : ''; }
+  /* El nombre en inglés chico al lado de un rasgo, regla o estado (si se ve en español) */
+  function nmEn(n){ return SPM === 'es' && !ORIG && Tname(n) !== n ? n : ''; }
+  function trHas(s){ return !!(TR && typeof s === 'string' && TR[hash(s)] != null); }
   var DICT_NO = {light:1, shield:1};
   function Tname(n){
     if (!n) return n;
+    if (ORIG) return n;
     if (!TR || !TRon) return DICT_NO[String(n).toLowerCase()] ? n : dict(n) || n;
     var v = TR[hash(n)]; if (v != null) return v;
     var cap = n.charAt(0).toUpperCase() + n.slice(1), tc = n.replace(/(^|[\s(-])([a-z])/g, function(_, a, b){ return a + b.toUpperCase(); });
@@ -158,6 +164,6 @@ var Render5e = (function(){
     var rg = r.type === 'point' ? dist(r.distance) : r.type === 'special' ? 'Especial' : (AREA[r.type] || r.type || '') + (r.distance ? ' ' + dist(r.distance) : '');
     return {time: t.number ? t.number + ' ' + (UNIT_S[t.unit] || t.unit) : '', range: rg, school: SCHOOL[e.school] || e.school || '', conc: (e.duration || []).some(function(d){ return d.concentration; }), rit: !!(e.meta && e.meta.ritual)};
   }
-  return {T:T, Tname:Tname, spName:spName, spEn:spEn, spMode:spMode, setTr:setTr, trOn:trOn, hasTr:function(){ return !!TR && TRon; }, misses:function(){ return missN; }, hash:hash, esc:esc, attr:attr, inline:inline, entries:entries, detail:detail, itemType:itemType, ITYPE:ITYPE, spellShort:spellShort, SCHOOL:SCHOOL};
+  return {T:T, Tname:Tname, spName:spName, spEn:spEn, nmEn:nmEn, orig:orig, trHas:trHas, spMode:spMode, setTr:setTr, trOn:trOn, hasTr:function(){ return !!TR && TRon; }, misses:function(){ return missN; }, hash:hash, esc:esc, attr:attr, inline:inline, entries:entries, detail:detail, itemType:itemType, ITYPE:ITYPE, spellShort:spellShort, SCHOOL:SCHOOL};
 })();
 

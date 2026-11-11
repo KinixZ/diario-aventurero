@@ -210,8 +210,8 @@
     var C = cur();
     if (C && D && D.ok) {
       $('#hLvl').textContent = D.level; $('#hName').textContent = C.name || 'Sin nombre';
-      var clsTxt = D.multi ? D.classes.map(function(E){ return E.cls.name + ' ' + E.lv + (E.sub ? ' (' + E.sub.name + ')' : ''); }).join(' / ') : D.cls.name + (D.sub ? ' · ' + D.sub.name : '');
-      $('#hSub').textContent = [D.race && D.race.name, clsTxt].filter(Boolean).join(' · ');
+      var TN = Render5e.Tname, clsTxt = D.multi ? D.classes.map(function(E){ return TN(E.cls.name) + ' ' + E.lv + (E.sub ? ' (' + TN(E.sub.name) + ')' : ''); }).join(' / ') : TN(D.cls.name) + (D.sub ? ' · ' + TN(D.sub.name) : '');
+      $('#hSub').textContent = [D.race && TN(D.race.name), clsTxt].filter(Boolean).join(' · ');
       $('#cvName').textContent = C.name || 'Sin nombre'; $('#cvSub').textContent = D.clsLabel + ' · nivel ' + D.level;
       portraits(C);
       var r0 = rt(C), hpN = r0.hp == null ? D.hp.max : r0.hp, pc = Math.max(0, Math.min(100, Math.round(hpN / D.hp.max * 100)));
@@ -636,7 +636,7 @@
   function rgRow(f, i, r){
     var cost = featCost(f), x = featRes(f), txt = f.hb ? f.hb.text : plainText(f.e.entries, 400), qk = f.hb ? 'hb:' + f.hb.id : 'f:' + f.name, pinned = quickKeys(r).indexOf(qk) >= 0;
     var line = f.hb ? hbLine(f.hb) : '';
-    return '<div class="rg-f' + (cost ? ' act' : x ? ' pinable' : '') + '"><details class="feat-d" data-feat="' + i + '"><summary><span class="rg-t">' + costBadge(cost, true) + '<b>' + nm(f.name) + '</b>' + (f.level ? '<small>nv ' + (D.multi && f.clv ? f.clv : f.level) + '</small>' : '') + '</span>'
+    return '<div class="rg-f' + (cost ? ' act' : x ? ' pinable' : '') + '"><details class="feat-d" data-feat="' + i + '"><summary><span class="rg-t">' + costBadge(cost, true) + '<b>' + nm(f.name) + '</b>' + (!f.hb && Render5e.nmEn(f.name) ? '<i class="rg-en" lang="en">' + esc(f.name) + '</i>' : '') + (f.level ? '<small>nv ' + (D.multi && f.clv ? f.clv : f.level) + '</small>' : '') + '</span>'
       + (line ? '<span class="rg-line">' + line + '</span>' : '') + (txt ? '<span class="rg-s">' + esc(firstSentence(txt)) + '</span>' : '') + (txt && txt.length > firstSentence(txt).length + 4 ? '<span class="rg-more" aria-hidden="true">más</span>' : '') + '</summary><div class="gtext"></div>'
       + (f.hb ? '<div class="row rg-hbact"><button class="btn sm" type="button" data-act="abedit" data-id="' + attr(f.hb.id) + '">Editar</button><button class="btn sm" type="button" data-act="abdel" data-id="' + attr(f.hb.id) + '">Borrar</button></div>'
         : x && x.pool ? '' : '<div class="row rg-hbact"><button class="btn sm quiet" type="button" data-act="ctropen" data-n="' + attr(f.name) + '">' + (x ? 'Ajustar usos' : 'Contar usos') + '</button>' + (x && (x.auto || x.custom) ? '<small class="muted rg-how">' + (x.custom ? 'usos puestos por ti' : 'usos leídos del texto') + '</small>' : '') + '</div>') + '</details>'
@@ -645,14 +645,16 @@
       + '</div>';
   }
   var rgQ = '', rgFocus = false;
+  /* «Ver el original»: todo en inglés un momento (nombres y textos traducidos), para comparar con la mesa */
+  function origBtn(){ var on = Render5e.orig(); return '<button class="btn sm quiet orig-btn" type="button" data-act="origtoggle" aria-pressed="' + on + '"><svg class="ic"><use href="#i-globe"/></svg>' + (on ? 'Ver en español' : 'Ver el original') + '</button>'; }
   function renderRasgos(C){
     featCache = D.features;
     var r = rt(C), filt = S.rgF || 'all', q = N(rgQ.trim()), groups = [], used = {};
     D.classes.forEach(function(E){
-      groups.push({k:'c:' + E.cls.name, title:E.cls.name + ' ' + E.lv, sub:'clase', test:function(f){ return f.from === 'Clase' && f.cn === E.cls.name; }});
-      if (E.sub) groups.push({k:'s:' + E.cls.name, title:E.sub.name, sub:'subclase de ' + E.cls.name, test:function(f){ return f.from === 'Subclase' && f.cn === E.cls.name; }, intro:E.sub.name});
+      groups.push({k:'c:' + E.cls.name, title:Render5e.Tname(E.cls.name) + ' ' + E.lv, sub:'clase', test:function(f){ return f.from === 'Clase' && f.cn === E.cls.name; }});
+      if (E.sub) groups.push({k:'s:' + E.cls.name, title:Render5e.Tname(E.sub.name), sub:'subclase de ' + Render5e.Tname(E.cls.name).toLowerCase(), test:function(f){ return f.from === 'Subclase' && f.cn === E.cls.name; }, intro:E.sub.name});
     });
-    groups.push({k:'race', title:D.race ? D.race.name : 'Especie', sub:'especie', test:function(f){ return f.from === 'Especie'; }});
+    groups.push({k:'race', title:D.race ? Render5e.Tname(D.race.name) : 'Especie', sub:'especie', test:function(f){ return f.from === 'Especie'; }});
     groups.push({k:'feat', title:'Dotes', sub:'', test:function(f){ return f.from === 'Dote'; }});
     groups.push({k:'hb', title:'Homebrew', sub:'habilidades propias', test:function(f){ return f.from === 'Homebrew'; }, hb:true});
     var all = D.features.map(function(f, i){ return {f:f, i:i}; });
@@ -661,7 +663,7 @@
     var h = pendingBanner() + mcBanner()
       + '<div class="rg-bar"><input class="field" id="rgQ" type="search" placeholder="Buscar entre ' + all.length + ' rasgos" aria-label="Buscar rasgo" autocomplete="off" value="' + attr(rgQ) + '">'
       + '<div class="rg-seg" role="group" aria-label="Filtrar rasgos">' + [['use','Con usos · ' + nUse],['act','En combate · ' + nAct],['all','Todos']].map(function(x){ return '<button type="button" data-act="rgf" data-v="' + x[0] + '" aria-pressed="' + (filt === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>'
-      + '<div class="rg-tools"><button class="btn" type="button" data-act="abnew">Nueva habilidad</button></div></div>'
+      + '<div class="rg-tools"><button class="btn" type="button" data-act="abnew">Nueva habilidad</button>' + origBtn() + '</div></div>'
       + '<div class="rg-legend">' + costBadge('a') + costBadge('b') + costBadge('r') + '<span class="muted">· lo demás es pasivo</span></div>';
     function keep(x){
       var c = featCost(x.f), res = featRes(x.f);
@@ -1850,6 +1852,26 @@
   document.addEventListener('change', function(ev){ if (ev.target.id === 'concSel') { var C = cur(); rt(C).conc = ev.target.value || null; rt(C).concDc = 10; save(); renderCombat(); } });
 
   /* ==================== GRIMORIO ==================== */
+  /* Las reglas más consultadas, con una línea en español (el texto completo se abre al tocar) */
+  var GTOP = [
+    ['variantrule','Advantage','Tira dos d20 y quédate con el mayor.'],
+    ['variantrule','Disadvantage','Tira dos d20 y quédate con el menor.'],
+    ['variantrule','Cover','Media: +2 a la CA y a las salvaciones de Destreza; tres cuartos: +5; total: no te pueden apuntar.'],
+    ['action','Opportunity Attack','Con tu reacción, un ataque cuerpo a cuerpo cuando un enemigo sale de tu alcance.'],
+    ['status','Concentration','Al recibir daño, salvación de Constitución (CD 10 o la mitad del daño, hasta 30) o se acaba.'],
+    ['variantrule','Grappling','Con un golpe sin armas: salvación de Fuerza o Destreza del objetivo o queda agarrado.'],
+    ['action','Hide','Prueba de Destreza (Sigilo) CD 15 sin que te vean: quedas invisible hasta que te encuentren.'],
+    ['variantrule','Difficult Terrain','Cada metro que avanzas te cuesta uno de más.'],
+    ['variantrule','Short Rest','Una hora: gastas dados de golpe para curarte y recuperas algunos rasgos.'],
+    ['variantrule','Long Rest','Ocho horas: recuperas todos tus PG, dados de golpe y espacios; un nivel de cansancio menos.'],
+    ['variantrule','Death Saving Throw','A 0 PG tiras un d20 al empezar tu turno: 10 o más es un éxito. Tres éxitos te estabilizan; tres fallos, mueres.'],
+    ['variantrule','Critical Hit','Con un 20 natural, tiras dos veces los dados de daño del ataque.']
+  ];
+  /* Una fila del grimorio: en español, con el inglés chico y (si se pide) una línea de qué es */
+  function gRow(r, sub, line){
+    var e = r[1], en = Render5e.nmEn(e.name), txt = line === true ? firstSentence(plainText(e.entries, 200)) : line || '';
+    return '<button type="button" class="gitem" data-act="gopen" data-ref="' + attr(r[0] + '|' + e.name + '|' + e.source) + '"><b>' + nm(e.name) + (en ? ' <i class="g-en" lang="en">' + esc(en) + '</i>' : '') + '</b>' + (txt ? '<span class="g-line">' + esc(txt) + '</span>' : '') + '<small>' + esc(sub) + esc(e.source) + '</small></button>';
+  }
   var SECDATA = {
     reglas: function(L){ return L.variantrule.map(function(e){ return ['variantrule', e]; }); },
     acciones: function(L){ return L.action.map(function(e){ return ['action', e]; }); },
@@ -1900,7 +1922,7 @@
     var L = Lib5e.get(), sec = G.sec, rows = SECDATA[sec](L), q = G.q.trim().toLowerCase(), isSp = sec === 'conjuros';
     G.cls = G.cls || '*'; G.school = G.school || '*'; G.mode = G.mode || 'list'; G.sort = G.sort || {k:'lv', dir:1};
     var list = rows.filter(function(r){
-      var e = r[1]; if (!e.name) return false; if (G.hideOld && e.reprintedAs) return false; if (q && e.name.toLowerCase().indexOf(q) < 0) return false;
+      var e = r[1]; if (!e.name) return false; if (G.hideOld && e.reprintedAs) return false; if (q && N(e.name).indexOf(N(q)) < 0 && N(isSp ? Render5e.spName(e.name) : Render5e.Tname(e.name)).indexOf(N(q)) < 0) return false;
       if (isSp) {
         if (G.cls !== '*' && !R.spellHasClass(e, G.cls)) return false;
         if (G.school !== '*' && e.school !== G.school) return false;
@@ -1908,7 +1930,7 @@
         if (G.rit && !(e.meta && e.meta.ritual)) return false;
       }
       return subMatch(sec, r[0], e);
-    }).sort(function(a, b){ return isSp ? (a[1].level - b[1].level || a[1].name.localeCompare(b[1].name)) : a[1].name.localeCompare(b[1].name); });
+    }).sort(function(a, b){ return isSp ? (a[1].level - b[1].level || Render5e.spName(a[1].name).localeCompare(Render5e.spName(b[1].name))) : Render5e.Tname(a[1].name).localeCompare(Render5e.Tname(b[1].name)); });
     var total = list.length, cap = isSp && G.mode === 'table' ? 400 : 150, shown = list.slice(0, cap), subs = SUBS[sec], secName = GSECS.filter(function(s){ return s[0] === sec; })[0][1];
     var fil = '<div class="gfil"><input class="field" id="gq" type="search" placeholder="Buscar en ' + secName.toLowerCase() + '…" aria-label="Buscar en ' + secName + '" value="' + attr(G.q) + '">';
     if (isSp) {
@@ -1918,12 +1940,17 @@
         + '<div class="viewseg"><label class="toggle"><input type="checkbox" id="gconc"' + (G.conc ? ' checked' : '') + '> Concentración</label><label class="toggle"><input type="checkbox" id="grit"' + (G.rit ? ' checked' : '') + '> Ritual</label><label class="toggle"><input type="checkbox" id="gold"' + (G.hideOld ? ' checked' : '') + '> Ocultar 2014 reemplazados</label></div>'
         + '<div class="viewseg" role="group" aria-label="Vista"><button type="button" data-act="gmode" data-v="list" aria-pressed="' + (G.mode === 'list') + '">Lista</button><button type="button" data-act="gmode" data-v="table" aria-pressed="' + (G.mode === 'table') + '">Tabla</button></div>';
     } else fil += '<div class="two">' + (subs ? '<select class="field" id="gsub" aria-label="Filtro">' + subs.map(function(s){ return '<option value="' + s[0] + '"' + (G.sub === s[0] ? ' selected' : '') + '>' + s[1] + '</option>'; }).join('') + '</select>' : '<span></span>') + '<label class="toggle"><input type="checkbox" id="gold"' + (G.hideOld ? ' checked' : '') + '> Ocultar 2014 reemplazadas</label></div>';
-    fil += '</div>';
+    fil += origBtn() + '</div>';
     var body;
     if (isSp && G.mode === 'table') body = spellRowsHtml(shown.map(function(r){ return r[1]; }), {sort:G.sort});
     else if (isSp) {
       var lv = -1; body = '<div class="glist">' + shown.map(function(r){ var e = r[1], h = ''; if (e.level !== lv) { lv = e.level; h += '<div class="group-h" style="margin:12px 0 2px">' + (lv ? 'Nivel ' + lv : 'Trucos') + '</div>'; } var ss = Render5e.spellShort(e); return h + '<button type="button" class="gitem gi-item" data-act="gopen" data-ref="' + attr('spell|' + e.name + '|' + e.source) + '">' + (window.Iconos ? Iconos.spellTile(e, 'sm') : '') + '<b>' + spNm(e.name) + '</b><small>' + esc(ss.school.toLowerCase()) + (ss.conc ? ' · C' : '') + (ss.rit ? ' · R' : '') + ' · ' + esc(e.source) + '</small></button>'; }).join('') + '</div>';
-    } else body = '<div class="glist">' + shown.map(function(r){ var e = r[1], sub = (r[0] === 'item' || r[0] === 'baseitem') ? Render5e.itemType(e).toLowerCase() + ' · ' : ''; return '<button type="button" class="gitem" data-act="gopen" data-ref="' + attr(r[0] + '|' + e.name + '|' + e.source) + '"><b>' + nm(e.name) + '</b><small>' + esc(sub) + esc(e.source) + '</small></button>'; }).join('') + '</div>';
+    } else body = '<div class="glist">' + shown.map(function(r){ var e = r[1], sub = (r[0] === 'item' || r[0] === 'baseitem') ? Render5e.itemType(e).toLowerCase() + ' · ' : ''; return gRow(r, sub); }).join('') + '</div>';
+    /* Reglas: las más consultadas arriba */
+    if (sec === 'reglas' && !q && (!G.sub || G.sub === '*')) {
+      var top = GTOP.map(function(t){ var f = Lib5e.find(t[0], t[1], 'XPHB'); return f ? [t[0], f.e, t[2]] : null; }).filter(Boolean);
+      if (top.length) body = '<div class="glist g-top"><span class="label">más consultadas</span>' + top.map(function(r){ return gRow(r, '', Render5e.orig() || Render5e.spMode() === 'en' ? true : r[2]); }).join('') + '</div><span class="label g-az">todas, de la A a la Z</span>' + body;
+    }
     grim.innerHTML = (wide() ? '<div class="folio"><span>Grimorio · ' + secName + '</span></div>' : '') + grimSecs() + fil
       + '<p class="note" style="margin:10px 0 4px">' + total + ' resultados' + (total > cap ? '; se muestran ' + cap + ', afina con los filtros' : '') + '.</p>' + body;
     var gq = $('#gq'); if (gq) gq.addEventListener('input', function(){ G.q = gq.value; var pos = gq.selectionStart; renderGrim(); var n = $('#gq'); n.focus(); n.setSelectionRange(pos, pos); });
@@ -2001,7 +2028,7 @@
     })(tpl.content);
     return tpl.innerHTML;
   }
-  async function trTranslate(html){
+  async function trTranslate(html, raw){
     var eng = await trEngine();
     if (eng === 'chrome') {
       if (!trChrome) trChrome = await Translator.create({sourceLanguage:'en', targetLanguage:'es'});
@@ -2011,13 +2038,13 @@
       for (var i = 0; i < nodes.length; i++) { var lead = nodes[i].nodeValue.match(/^\s*/)[0], tail = nodes[i].nodeValue.match(/\s*$/)[0]; nodes[i].nodeValue = lead + (await trChrome.translate(nodes[i].nodeValue.trim())) + tail; }
       return tpl.innerHTML;
     }
-    if (eng === 'claude') { var res = await trSample(TR_PROMPT + html, {modelTier:'quick', cache:{gcTime:86400000}}); return trSanitize(res.text); }
+    if (eng === 'claude') { var res = await trSample(TR_PROMPT + html, {modelTier:'quick', cache:{gcTime:86400000}}); return raw ? res.text : trSanitize(res.text); }
     if (eng === 'server') {
       var rr, ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, tmo = ctl && setTimeout(function(){ ctl.abort(); }, 90000);
       try { rr = await fetch('api/translate', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({html:html}), signal: ctl ? ctl.signal : undefined}); } catch(e){ throw {code: e && e.name === 'AbortError' ? 'timeout' : 'offline'}; } finally { clearTimeout(tmo); }
       var jj = await rr.json().catch(function(){ return {}; });
       if (!rr.ok) throw {code: jj.code || 'error', msg: jj.msg};
-      return trSanitize(jj.html);
+      return raw ? String(jj.html || '') : trSanitize(jj.html);
     }
     throw {code:'no_engine'};
   }
@@ -2081,7 +2108,7 @@
   function trdSettings(){
     var box = $('#trdList'); if (!box) return;
     var ks = Object.keys(TRD);
-    box.innerHTML = ks.length ? ks.map(function(k){ var t = TRD[k]; return '<div class="line"><span style="flex:1;min-width:0"><b>' + esc(k) + '</b><br><small class="muted">' + (t.textos || 0).toLocaleString('es-MX') + ' textos' + (t.creado ? ' · ' + new Date(t.creado).toLocaleDateString('es-MX') : '') + '</small></span><button class="btn sm" type="button" data-act="trddel" data-k="' + attr(k) + '">Quitar</button></div>'; }).join('') : '<p class="note" style="margin:4px 0">No hay ninguna cargada.</p>';
+    box.innerHTML = ks.length ? ks.map(function(k){ var t = TRD[k]; return '<div class="line"><span style="flex:1;min-width:0"><b>' + esc(t.nombre || k) + '</b><br><small class="muted">' + (t.textos || 0).toLocaleString('es-MX') + ' textos' + (t.creado ? ' · ' + new Date(t.creado).toLocaleDateString('es-MX') : '') + '</small></span><button class="btn sm" type="button" data-act="trddel" data-k="' + attr(k) + '">Quitar</button></div>'; }).join('') : '<p class="note" style="margin:4px 0">No hay ninguna cargada.</p>';
     var on = $('#trdOn'); if (on) { on.checked = !S.trdOff; on.disabled = !ks.length; }
   }
   function trdImport(file){
@@ -2101,7 +2128,144 @@
     if (ev.target.id === 'trdFile' && ev.target.files && ev.target.files[0]) { trdImport(ev.target.files[0]); ev.target.value = ''; }
     if (ev.target.id === 'trdOn') { S.trdOff = !ev.target.checked; save(); Render5e.trOn(!S.trdOff); render(false); renderGrim(); }
   });
+  /* ==================== TRADUCIR TODO (módulo 23) ====================
+     Junta los textos en inglés de lo que elijas, los manda por tandas al traductor (el del servidor del grupo, el de
+     Chrome o Claude), y guarda lo traducido como una traducción fija más ('trd:auto'): se ve en todo el diario, sin
+     internet, y se puede exportar para el grupo. Las etiquetas {@…} viajan como marcas que el traductor no toca. */
+  var TT_SRC = {XPHB:1, XDMG:1, XMM:1};
+  var TT_CATS = [
+    ['mine', 'Tu personaje', 'Rasgos de tu clase, especie y dotes'],
+    ['rules', 'Reglas y estados', 'El Grimorio: reglas, estados, acciones y sentidos'],
+    ['feats', 'Rasgos y dotes', 'Todas las clases, subclases, especies, trasfondos y dotes'],
+    ['items', 'Objetos', 'Mochila y Grimorio'],
+    ['spells', 'Conjuros', 'Descripciones completas']
+  ];
+  var TT = {on:{mine:true, rules:true}, run:false, done:0, todo:0, msg:'', map:null, counts:null};
+  try { var tt0 = JSON.parse(localStorage.getItem('diario-tt') || 'null'); if (tt0 && tt0.on) TT.on = tt0.on; } catch(e){}
+  var TT_TOP = ['name', 'entries', 'entriesHigherLevel', 'additionalEntries', 'headerEntries', 'footerEntries', 'trait', 'action', 'bonus', 'reaction'];
+  var TT_IN = {name:1, entry:1, entries:1, items:1, caption:1, colLabels:1, rows:1, text:1, title:1, headerEntries:1, footerEntries:1};
+  var TT_NOT = {type:1, source:1, page:1, style:1, href:1, hash:1, path:1, url:1, id:1, width:1, height:1, imageType:1, roll:1, min:1, max:1, exact:1, pad:1, ability:1, attributes:1};
+  function ttSkip(x){ return x.length < 3 || /^[\s\d+\-–—/×x.,:%()dD]+$/.test(x) || (/^\{@\w+ [^{}]*\}$/.test(x) && !/\{@(b|i|bold|italic|note)\b/.test(x)); }
+  function ttCollect(e, out){
+    var add = function(x, isName){ if (typeof x !== 'string' || ttSkip(x)) return; if (isName && (NombresES.spell(x) || NombresES.feat(x) || NombresES.rasgo(x))) return; out.push(x); };
+    var walk = function(v, k){
+      if (typeof v === 'string') { if (!TT_NOT[k]) add(v, k === 'name'); return; }
+      if (Array.isArray(v)) { v.forEach(function(x){ walk(x, k); }); return; }
+      if (v && typeof v === 'object') Object.keys(v).forEach(function(kk){ if (kk.charAt(0) === '_' || TT_NOT[kk]) return; if (TT_IN[kk]) walk(v[kk], kk); });
+    };
+    TT_TOP.forEach(function(k){ if (e[k] == null) return; if (k === 'name') add(e.name, true); else walk(e[k], k); });
+  }
+  function ttStrings(cat){
+    var L = Lib5e.get(), out = [], pick = function(list){ (list || []).forEach(function(e){ if (TT_SRC[e.source]) ttCollect(e, out); }); };
+    if (cat === 'mine') { var C = cur(); if (C && D && D.ok) { D.features.forEach(function(f){ if (f.e) ttCollect(f.e, out); }); if (D.race) ttCollect(D.race, out); } }
+    else if (cat === 'rules') ['variantrule', 'condition', 'status', 'action', 'sense'].forEach(function(t){ pick(L[t]); });
+    else if (cat === 'feats') ['classFeature', 'subclassFeature', 'race', 'feat', 'optionalfeature', 'background'].forEach(function(t){ pick(L[t]); });
+    else if (cat === 'items') ['item', 'baseitem', 'itemProperty', 'itemMastery'].forEach(function(t){ pick(L[t]); });
+    else if (cat === 'spells') pick(L.spell);
+    var seen = {}; return out.filter(function(x){ if (seen[x]) return false; seen[x] = 1; return true; });
+  }
+  function ttCount(){ if (!Lib5e.has()) return null; var c = {}; TT_CATS.forEach(function(k){ var all = ttStrings(k[0]); c[k[0]] = {all:all.length, left:all.filter(function(x){ return !Render5e.trHas(x); }).length}; }); return c; }
+  /* {@spell fireball|XPHB} → marca; {@b …} e {@i …} → <b>/<i> para que se traduzca lo de dentro */
+  function ttProtect(x, keep){
+    var out = '', i = 0, m, re = /\{@(\w+) ([^{}]*)\}|\{@(\w+)\}/g, last = 0;
+    var e2 = function(t){ return String(t).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; }); };
+    while ((m = re.exec(x))) {
+      out += e2(x.slice(last, m.index)); last = re.lastIndex;
+      if (m[1] && /^(b|bold)$/.test(m[1])) out += '<b>' + e2(m[2]) + '</b>';
+      else if (m[1] && /^(i|italic)$/.test(m[1])) out += '<i>' + e2(m[2]) + '</i>';
+      else { keep.push(m[0]); out += '<code data-t="' + (keep.length - 1) + '"></code>'; i++; }
+    }
+    return out + e2(x.slice(last));
+  }
+  function ttRestore(node, keep, used){
+    var out = '';
+    Array.prototype.forEach.call(node.childNodes, function(ch){
+      if (ch.nodeType === 3) out += ch.nodeValue;
+      else if (ch.nodeType === 1) {
+        var tg = ch.tagName.toLowerCase();
+        if (tg === 'code' && ch.hasAttribute('data-t')) { var k = +ch.getAttribute('data-t'); if (keep[k] != null) { out += keep[k]; used[k] = 1; } }
+        else if (tg === 'b' || tg === 'strong') out += '{@b ' + ttRestore(ch, keep, used) + '}';
+        else if (tg === 'i' || tg === 'em') out += '{@i ' + ttRestore(ch, keep, used) + '}';
+        else out += ttRestore(ch, keep, used);
+      }
+    });
+    return out;
+  }
+  async function ttBatch(list){
+    var keeps = [], html = list.map(function(x, i){ var k = []; keeps.push(k); return '<p data-i="' + i + '">' + ttProtect(x, k) + '</p>'; }).join('');
+    /* sin limpiar: aquí solo se leen los textos (en una plantilla inerte), y hacen falta data-i y data-t */
+    var res = await trTranslate(html, true), tpl = document.createElement('template'); tpl.innerHTML = res;
+    var got = {};
+    Array.prototype.forEach.call(tpl.content.querySelectorAll('p[data-i]'), function(p0){
+      var i = +p0.getAttribute('data-i'), src = list[i]; if (src == null) return;
+      var used = {}, t = ttRestore(p0, keeps[i], used).replace(/\s+/g, ' ').trim();
+      if (Object.keys(used).length !== keeps[i].length || !t || t === src) return;
+      if (src.length < 70 && src.indexOf('{@') < 0) t = t.replace(new RegExp('\\s*\\(' + src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\)\\s*', 'g'), ' ').trim();
+      got[Render5e.hash(src)] = t;
+    });
+    return got;
+  }
+  function ttSave(final){
+    var meta = {de:'auto', textos:Object.keys(TT.map).length, creado:Date.now(), nombre:'Traducido en este aparato'};
+    return idbSet('trd:auto', {_traduccion:meta, s:TT.map}).then(function(){ return idbGet('trd-list'); }).then(function(list){
+      list = list || []; if (list.indexOf('auto') < 0) { list.push('auto'); return idbSet('trd-list', list); }
+    }).then(function(){ return final ? trdLoad() : null; });
+  }
+  async function ttRun(){
+    if (TT.run) return; var eng = await trEngine().catch(function(){ return null; });
+    if (!eng) { TT.msg = 'Aquí no hay traductor: el servidor del grupo no tiene uno configurado y este navegador no trae uno.'; ttDraw(); return; }
+    var cats = TT_CATS.filter(function(k){ return TT.on[k[0]]; }).map(function(k){ return k[0]; });
+    var todo = []; cats.forEach(function(c){ ttStrings(c).forEach(function(x){ if (!Render5e.trHas(x) && todo.indexOf(x) < 0) todo.push(x); }); });
+    if (!todo.length) { TT.msg = 'Todo lo que elegiste ya está en español.'; ttDraw(); return; }
+    var prev = await idbGet('trd:auto'); TT.map = prev && prev.s ? prev.s : {};
+    TT.run = true; TT.done = 0; TT.todo = todo.length; TT.msg = ''; ttDraw();
+    var i = 0, fails = 0, lastLoad = Date.now();
+    while (TT.run && i < todo.length) {
+      var batch = [], n = 0;
+      while (i < todo.length && batch.length < 12 && n + todo[i].length < 5000) { batch.push(todo[i]); n += todo[i].length; i++; }
+      if (!batch.length) { batch.push(todo[i]); i++; }
+      try {
+        var got = await ttBatch(batch); Object.keys(got).forEach(function(h){ TT.map[h] = got[h]; }); fails = 0;
+      } catch(e){
+        var code = e && e.code;
+        if (code === 'rate_limited' && /hoy/.test(e.msg || '')) { TT.msg = 'Se llegó al límite de traducciones de hoy del servidor. Mañana sigue donde se quedó.'; break; }
+        if (code === 'rate_limited' || code === 'timeout') { i -= batch.length; TT.msg = 'El traductor pidió una pausa; sigue en 30 s…'; ttDraw(); await new Promise(function(r){ setTimeout(r, 30000); }); TT.msg = ''; continue; }
+        if (++fails >= 3) { TT.msg = (e && e.msg) || 'El traductor no respondió. Prueba otra vez más tarde.'; break; }
+      }
+      TT.done = Math.min(todo.length, i); ttDraw();
+      if (Date.now() - lastLoad > 20000) { lastLoad = Date.now(); await ttSave(true); TT.counts = null; render(false); }
+      if (eng === 'server') await new Promise(function(r){ setTimeout(r, window.DIARIO_TT_GAP != null ? window.DIARIO_TT_GAP : 1600); });
+    }
+    var stopped = !TT.run; TT.run = false;
+    await ttSave(true); TT.counts = null;
+    if (stopped) TT.msg = 'En pausa. Lo traducido ya se ve en el diario; «Traducir» sigue donde se quedó.'; else if (!TT.msg) TT.msg = 'Listo: ' + TT.done.toLocaleString('es-MX') + ' textos en español.';
+    render(false); renderGrim(); trdSettings(); ttDraw();
+  }
+  function ttExport(){
+    Promise.all([idbGet('trd-list')]).then(function(r){
+      var list = r[0] || []; return Promise.all(list.map(function(k){ return idbGet('trd:' + k); }));
+    }).then(function(files){
+      var s0 = {}; (files || []).forEach(function(f){ if (f && f.s) for (var k in f.s) s0[k] = f.s[k]; });
+      var n = Object.keys(s0).length; if (!n) { TT.msg = 'Todavía no hay nada traducido para exportar.'; ttDraw(); return; }
+      var blob = new Blob([JSON.stringify({_traduccion:{de:'diario', textos:n, creado:Date.now()}, s:s0})], {type:'application/json'});
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'traduccion-diario.json'; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      TT.msg = 'Exportado: ' + n.toLocaleString('es-MX') + ' textos. Tu grupo lo carga en Ajustes › Idioma › Cargar traducción.'; ttDraw();
+    });
+  }
+  function ttDraw(){
+    var box = $('#ttBox'); if (!box) return;
+    if (!Lib5e.has()) { box.innerHTML = '<p class="note">Carga primero tu biblioteca de 5etools.</p>'; return; }
+    if (!TT.counts && !TT.run) TT.counts = ttCount();
+    var c = TT.counts || {}, pct = TT.todo ? Math.round(TT.done / TT.todo * 100) : 0;
+    box.innerHTML = TT_CATS.map(function(k){ var x = c[k[0]] || {all:0, left:0}, done = x.all && !x.left;
+      return '<label class="tt-row"><input type="checkbox" data-tt="' + k[0] + '"' + (TT.on[k[0]] ? ' checked' : '') + (TT.run ? ' disabled' : '') + '><span><b>' + k[1] + '</b><small>' + k[2] + ' · ' + x.all.toLocaleString('es-MX') + ' textos' + (x.all && x.left && x.left < x.all ? ' · faltan ' + x.left.toLocaleString('es-MX') : '') + '</small></span>' + (done ? '<em class="tt-ok"><svg class="ic"><use href="#i-check"/></svg>listo</em>' : '') + '</label>'; }).join('')
+      + (TT.run ? '<div class="tt-prog"><span class="tt-bar"><i style="width:' + pct + '%"></i></span><small>' + TT.done.toLocaleString('es-MX') + ' de ' + TT.todo.toLocaleString('es-MX') + ' · ' + pct + '%</small></div>' : '')
+      + (TT.msg ? '<p class="note tt-msg" role="status">' + esc(TT.msg) + '</p>' : '')
+      + '<div class="row tt-acts">' + (TT.run ? '<button class="btn" type="button" data-act="ttpause">Pausar</button>' : '<button class="btn main" type="button" data-act="ttgo">Traducir lo elegido</button>') + '<button class="btn" type="button" data-act="ttexport">Exportar para el grupo</button></div>';
+  }
+  document.addEventListener('change', function(ev){ var k = ev.target.dataset && ev.target.dataset.tt; if (!k) return; TT.on[k] = ev.target.checked; try { localStorage.setItem('diario-tt', JSON.stringify({on:TT.on})); } catch(e){} });
   function trSettings(){
+    if (!TT.run) TT.counts = null; setTimeout(ttDraw, 30);
     trdSettings();
     var m = S.trMode || 'manual';
     $('#trModes').innerHTML = [['off','Desactivada'],['manual','Con botón'],['auto','Automática']].map(function(x){ return '<button type="button" data-act="trmode" data-v="' + x[0] + '" aria-pressed="' + (m === x[0]) + '">' + x[1] + '</button>'; }).join('');
@@ -2694,6 +2858,10 @@
       case 'delyes': S.chars = S.chars.filter(function(x){ return x.id !== b.dataset.id; }); if (S.active === b.dataset.id) S.active = S.chars[0] ? S.chars[0].id : null; pendingDel = null; render(false); break;
       case 'selslot': select(b.dataset.id); break;
       case 'invview': S.invView = b.dataset.v; save(); renderGrid(); break;
+      case 'ttgo': ttRun(); break;
+      case 'ttpause': TT.run = false; TT.msg = 'Pausando…'; ttDraw(); break;
+      case 'ttexport': ttExport(); break;
+      case 'origtoggle': Render5e.orig(!Render5e.orig()); render(false); renderGrim(); toastMsg(Render5e.orig() ? 'Viendo el original en inglés.' : 'De vuelta en español.'); break;
       case 'nttab': S.ntTab = b.dataset.v; save(); renderNotas(C); break;
       case 'ntnew': var Jn = journal(r), nx = b.dataset.k === 'ses' ? {id:'s' + Date.now().toString(36), n:ntNext(Jn), at:Date.now(), title:'', text:''} : {id:'f' + Date.now().toString(36), k:b.dataset.k, name:'', text:'', at:Date.now()}; (nx.k ? Jn.fi : Jn.ses).push(nx); save(); ntOpen(nx.id); break;
       case 'ntopen': ntOpen(b.dataset.id); break;
