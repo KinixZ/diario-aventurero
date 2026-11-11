@@ -1,0 +1,70 @@
+/* ===== El turno en tres pasos (módulo 19): ¿con qué?, ¿a quién?, tirar, y el resultado ===== */
+.cs-comp.tw{padding:0;overflow:hidden;display:flex;flex-direction:column}
+.tw-h{display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:var(--parch-3);border-bottom:1px solid var(--rule)}
+.tw-top{display:flex;align-items:center;gap:8px}
+.tw-t{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.15}
+.tw-t b{font-family:var(--display);font-size:19px;letter-spacing:.03em}
+.tw-t small{font-size:14px;color:var(--ink-2);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tw-back{flex:none;min-height:38px;padding:0 8px 0 2px;display:inline-flex;align-items:center;gap:2px}
+.tw-steps{display:flex;gap:14px;margin:0;padding:0;list-style:none;font-size:14px;color:var(--ink-3,var(--ink-2))}
+.tw-steps li{display:flex;align-items:center;gap:5px}
+.tw-steps i{width:22px;height:22px;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-family:var(--display);font-size:12px;border:1px solid var(--rule)}
+.tw-steps li.done{color:var(--ink-2)} .tw-steps li.done i{border-color:var(--gild,var(--gold))}
+.tw-steps li.on{color:var(--ink);font-weight:600} .tw-steps li.on i{background:var(--gild,var(--gold));border-color:var(--gild,var(--gold));color:var(--on-accent,#24130f)}
+.tw-b{display:flex;flex-direction:column;gap:10px;padding:12px}
+.tw-b > .label{margin-top:4px}
+.tw-actor{display:flex;align-items:center;gap:8px;font-family:var(--display);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.tw-actor .field{flex:1;text-transform:none;letter-spacing:0;font-family:var(--body,inherit);font-size:16px}
+.tw-econ{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.tw-econ span{min-height:32px;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:14px;border:1px solid var(--rule)}
+.tw-econ .e-a{border-color:#3f6b3a;background:rgba(95,155,85,.14)} .tw-econ .e-b{border-color:#8a5a2a;background:rgba(208,138,58,.14)}
+.tw-econ .e-r{border-color:#5a4a7a;background:rgba(169,138,216,.14)} .tw-econ .e-m{border-color:#2f5d8a;background:rgba(95,155,232,.14)}
+.tw-econ span.used{opacity:.4;text-decoration:line-through}
+.tw-list{display:flex;flex-direction:column;gap:8px}
+.tw-src{display:flex;align-items:center;gap:12px;min-height:64px;width:100%;padding:8px 12px;border-radius:12px;border:1px solid var(--rule);background:var(--parch-2,transparent);color:var(--ink);text-align:left;cursor:pointer;font:inherit}
+.tw-src[aria-pressed="true"]{border:2px solid var(--gild,var(--gold));background:color-mix(in srgb,var(--oath) 18%,var(--parch-2,transparent))}
+.tw-src:disabled{opacity:.45;cursor:default}
+.tw-ic{width:42px;height:42px;flex:none;border-radius:10px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--oath) 22%,transparent);color:var(--gild,var(--gold))}
+.tw-ic .ic{width:22px;height:22px}
+.tw-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.tw-tx b{font-family:var(--display);font-size:16px;letter-spacing:.02em}
+.tw-tx small{font-size:14px;color:var(--ink-2)}
+.tw-cost{flex:none;font-style:normal;font-size:12px;padding:2px 8px;border-radius:10px;border:1px solid var(--rule);color:var(--ink-2);white-space:nowrap}
+.tw-cost.c-a{border-color:#3f6b3a} .tw-cost.c-b{border-color:#8a5a2a} .tw-cost.c-r{border-color:#5a4a7a}
+.tw-free{min-height:46px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:10px;border:1px dashed var(--rule);background:transparent;color:var(--ink-2);font:inherit;font-size:15px;cursor:pointer}
+.tw-tgs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (min-width:700px){.tw-tgs{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.tw-tg{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:14px;border:1px solid var(--rule);background:var(--parch-2,transparent);color:var(--ink);cursor:pointer;font:inherit;min-width:0}
+.tw-tg[aria-pressed="true"]{border:2px solid var(--gild,var(--gold));background:color-mix(in srgb,var(--oath) 18%,var(--parch-2,transparent))}
+.tw-tg .cs-pic{width:60px;height:60px;font-size:22px}
+.tw-tg b{font-family:var(--display);font-size:14px;text-align:center;line-height:1.15;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.tw-tg small{font-size:12.5px;text-align:center;color:var(--ink-2)}
+.tw-tg small.ok{color:var(--ok)} .tw-tg small.hurt{color:var(--warn)} .tw-tg small.bad{color:var(--bad)}
+.tw-tg.down{opacity:.6}
+.tw-next{min-height:50px;font-size:17px}
+.tw-sum{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border-radius:14px;border:2px solid var(--gild,var(--gold));background:var(--parch-2,transparent)}
+.tw-sum-h{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.tw-sum-h b{font-family:var(--display);font-size:19px;display:block}
+.tw-sum-h small{font-size:15px;color:var(--ink-2)}
+.tw-sum-h small b{font-family:inherit;font-size:inherit;display:inline;color:var(--ink)}
+.tw-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0;padding:7px 0;border-top:1px solid var(--rule);font-size:15px}
+.tw-row span{color:var(--ink-2);flex:none} .tw-row b{font-family:var(--body,inherit);font-weight:600;font-size:17px;text-align:right}
+.tw-k button{min-height:44px;font-size:15px}
+.tw-more{align-self:flex-start;min-height:40px;padding:0;border:0;background:none;color:var(--ink-2);font:inherit;font-size:15px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.tw-nums{display:flex;flex-direction:column;gap:10px;padding:10px;border-radius:10px;border:1px dashed var(--rule)}
+.tw-go{flex-direction:column;align-items:stretch}
+.tw-go .btn.main{min-height:58px;font-family:var(--display);font-size:21px;letter-spacing:.04em;justify-content:center}
+.tw-go small{text-align:center}
+.tw-res{display:flex;flex-direction:column;gap:10px;padding:12px}
+.tw-res .ac-card{margin:0;border-width:2px}
+.tw-res .ac-verdict .vd{font-size:30px}
+.tw-res .ac-dmgbig .ac-n{font-size:52px}
+.tw-res .ac-btns .btn{min-height:46px;font-size:16px}
+.tw-then{display:flex;flex-direction:column;gap:8px}
+.tw-then .btn{min-height:46px;justify-content:center}
+.tw-tgs.sm .tw-tg{padding:8px 4px}.tw-tgs.sm .cs-pic{width:44px;height:44px;font-size:17px}
+/* En el teléfono, mientras eliges: el compositor arriba, sin la tarjeta del turno ni el turno en grande */
+@media (max-width:899px){
+  .combat.composing .c-mine,.combat.composing .cs-stage .cs-turn{display:none}
+  .combat.composing .cs-stage{padding-bottom:6px}
+}

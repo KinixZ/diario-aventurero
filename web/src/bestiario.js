@@ -219,7 +219,7 @@ var Bestiario = (function(){
         var reach = /reach (\d+) ?f(?:ee|oo)?t/i.exec(s), rng = /range (\d+)(?:\/(\d+))? ?f(?:ee|oo)?t/i.exec(s), melee = /\{@atkr? m|Melee (?:Weapon |Spell )?Attack/i.test(s) && !/\{@atkr? r\}|Ranged (?:Weapon |Spell )?Attack/i.test(s);
         var conds = [], cr = /\{@condition (\w+)/g, cm; while ((cm = cr.exec(s))) { var ck = cm[1].toLowerCase(); if (conds.indexOf(ck) < 0) conds.push(ck); }
         var area = !hit && window.Hechizos ? Hechizos.areaIn(a.entries) : null;
-        out.push({key:'m:' + g[0] + ':' + a.name, group:g[1], title:Render5e.Tname(strip(a.name)), atk:hit ? {bonus:+hit[1]} : null,
+        out.push({key:'m:' + g[0] + ':' + a.name, group:g[1], cost:{action:'a', bonus:'b', reaction:'r', legendary:'l'}[g[0]], multi:/^multiattack/i.test(strip(a.name)), title:Render5e.Tname(strip(a.name)), atk:hit ? {bonus:+hit[1]} : null,
           save:dc ? {ab:sv ? SAVE_EN[sv[1].toLowerCase()] || sv[1].toLowerCase() : 'dex', dc:+dc[1], half:/half as much damage|half damage|Success:[^.]*half/i.test(s)} : null,
           dmg:dmg, text:plain(a.entries).slice(0, 400), melee:!!hit && melee, reach:reach ? Math.max(1, Math.round(+reach[1] / 5)) : 1, range:rng ? [+rng[1], +(rng[2] || rng[1])] : null,
           def:area || conds.length ? {area:area, self:!!(area && area.self), conds:conds.length ? conds : null, repeat:/end of each of (?:its|their) turns|repeat the save/i.test(s) && conds.length > 0} : null});

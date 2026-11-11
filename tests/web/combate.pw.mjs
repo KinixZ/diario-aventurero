@@ -51,14 +51,18 @@ ok('el DM ve la CA del goblin solo cuando es su turno; ahora la del jugador no s
 
 /* ---------- El jugador: un ataque libre y un hechizo de daño seguro ---------- */
 await act(pj, 'actopen'); await pj.waitForTimeout(200);
-ok('se abre el compositor con los objetivos', await has(pj, '.cs-comp [data-act="acttg"][data-id="' + ids.gob + '"]'));
+ok('se abre el paso 1 (¿con qué?) con «Otra cosa»', await has(pj, '.cs-comp.tw [data-act="actfree"]') && await pj.evaluate(() => /¿Con qué\?/.test(document.querySelector('.tw-t b').textContent)));
+await act(pj, 'actfree'); await pj.waitForTimeout(150);
+ok('«Otra cosa» va a tirar con los números abiertos y los objetivos', await has(pj, '.cs-comp [data-act="acttg"][data-id="' + ids.gob + '"]') && await has(pj, '.cs-comp [data-actf="title"]'));
 await field(pj, 'title', 'Espada corta'); await field(pj, 'atkOn', true); await pj.waitForTimeout(100);
 await field(pj, 'bonus', '5'); await field(pj, 'dmg', '1d6+3'); await field(pj, 'type', 'perforante');
 await target(pj, ids.gob); await submit(pj);
 ok('la tarjeta del ataque llega a los dos', await until(dm, () => document.querySelectorAll('.ac-card.pc').length === 1) && await until(pj, () => document.querySelectorAll('.ac-card.pc').length === 1));
 ok('dice si impacta o falla', await pj.evaluate(() => !!document.querySelector('.ac-card .ac-badge.hit, .ac-card .ac-badge.miss')));
 ok('el DM ve la CA del objetivo; el jugador no', await dm.evaluate(() => /CA 15/.test(document.querySelector('.ac-card .ac-tg').textContent)) && await pj.evaluate(() => !/CA 15/.test(document.querySelector('.ac-card .ac-tg').textContent)));
-await act(pj, 'actopen'); await pj.waitForTimeout(150);
+ok('el resultado sale en grande con «Usar otra cosa»', await until(pj, () => !!document.querySelector('.tw-res .ac-card')));
+await pj.evaluate(() => document.querySelector('.tw-res [data-act="actopen"]').click()); await pj.waitForTimeout(150);
+await act(pj, 'actfree'); await pj.waitForTimeout(150);
 await field(pj, 'title', 'Proyectil mágico'); await field(pj, 'dmg', '3d4+3'); await field(pj, 'type', 'fuerza'); await target(pj, ids.gob); await submit(pj);
 ok('sin ataque: se puede aplicar', await until(pj, () => !!document.querySelector('.ac-card [data-act="actapply"][data-v="full"]')));
 const amt = await pj.evaluate(() => +document.querySelector('.ac-card [data-act="actapply"][data-v="full"]').textContent.replace(/\D+/g, ''));
@@ -73,17 +77,20 @@ await act(pj, 'salaturn', 'next');
 ok('turno del goblin: el DM tiene «Su acción»', await until(dm, () => !!document.querySelector('.cs-stage [data-act="actopen"][data-actor]')));
 await dm.evaluate(() => document.querySelector('.cs-stage [data-act="actopen"][data-actor]').click()); await dm.waitForTimeout(300);
 if (withBest) {
-  ok('acciones del Manual en el compositor', await until(dm, () => document.querySelectorAll('.cs-comp .cs-pick').length >= 2));
-  await dm.evaluate(() => [...document.querySelectorAll('.cs-comp .cs-pick')].find((b) => /Scimitar|Cimitarra/i.test(b.textContent)).click()); await dm.waitForTimeout(150);
+  ok('acciones del Manual en el paso 1', await until(dm, () => document.querySelectorAll('.cs-comp [data-act="actpick"]').length >= 2));
+  await dm.evaluate(() => [...document.querySelectorAll('.cs-comp [data-act="actpick"]')].find((b) => /Scimitar|Cimitarra/i.test(b.textContent)).click()); await dm.waitForTimeout(150);
+  ok('elegir la cimitarra pasa a ¿A quién?', await dm.evaluate(() => Acciones._comp().step === 'tg'));
   const f = await dm.evaluate(() => Acciones._comp());
   ok('la cimitarra llena el ataque y el daño', f.atkOn && f.bonus === 4 && /1d6\+2/.test(f.dmg.replace(/\s+/g, '')) && f.type === 'cortante');
   if (out) await dm.screenshot({ path: out + '-dm-compositor.png' });
-  await target(dm, ids.pj); await submit(dm);
+  await target(dm, ids.pj); await dm.waitForTimeout(150);
+  ok('tocar al jugador pasa a tirar', await dm.evaluate(() => Acciones._comp().step === 'go' && /contra/.test(document.querySelector('.tw-sum').textContent)));
+  await submit(dm);
   ok('al jugador le llega la acción del goblin', await until(pj, () => !!document.querySelector('.ac-card.npc')));
   ok('y un aviso', await pj.evaluate(() => /Goblin: Scimitar/.test(document.getElementById('salaToast').textContent)));
 } else console.log('(sin bestiario: se salta la acción del Manual)');
-await act(dm, 'actopen'); await dm.waitForTimeout(150);
-await field(dm, 'actor', 'dm'); await dm.waitForTimeout(100);
+await dm.evaluate(() => Acciones.open({ actor: 'dm' })); await dm.waitForTimeout(150);
+await act(dm, 'actfree'); await dm.waitForTimeout(100);
 await field(dm, 'title', 'Explota un barril'); await field(dm, 'saveOn', true); await dm.waitForTimeout(100);
 await field(dm, 'dc', '12'); await field(dm, 'dmg', '2d6'); await field(dm, 'type', 'fuego'); await target(dm, ids.pj); await submit(dm);
 ok('el jugador puede tirar su salvación', await until(pj, () => !!document.querySelector('.ac-card.dm [data-act="actsave"]')));
@@ -113,7 +120,7 @@ if (existsSync(PKG)) {
   ok('en Mi turno, el arma tiene «Atacar»', await has(ly, '.wpn [data-act="actpick"][data-k="w:esp"]'));
   await ly.evaluate(() => document.querySelector('.wpn [data-act="actpick"][data-k="w:esp"]').click());
   ok('se abre la escena con la espada lista', await until(ly, () => { const k = Acciones._comp(); return !!k && k.key === 'w:esp' && k.atkOn && k.bonus > 0 && /1d(8|10)/.test(k.dmg) && !!document.querySelector('.cs-comp'); }));
-  ok('y sus conjuros para elegir', await ly.evaluate(() => [...document.querySelectorAll('.cs-src .label')].some((l) => /Conjuros/i.test(l.textContent))));
+  ok('salta directo a ¿A quién? (paso 2)', await ly.evaluate(() => Acciones._comp().step === 'tg' && !!document.querySelector('.tw-tgs')));
   if (out) await ly.screenshot({ path: out + '-lyra-compositor.png' });
   await target(ly, ids.gob); await submit(ly);
   ok('la tarjeta de Lyra con su espada', await until(dm, () => [...document.querySelectorAll('.ac-card.pc')].some((c) => /Lyra/.test(c.textContent) && /Espada larga/.test(c.textContent))));
