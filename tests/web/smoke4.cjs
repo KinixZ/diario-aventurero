@@ -34,9 +34,9 @@ const mc = {id:'mc', name:'Mixto', level:11, cl:['Paladin|XPHB','Paladin|XPHB','
   act('tab', '[data-tab="conjuros"]'); await wait(20);
   console.log('trios:', $$('#pConjuros .trio').length, '| toggle', !!$('[data-act="fullspells"]'));
   const tog = $(`[data-act="fullspells"]`); click(tog); await wait(30);
-  console.log('cards after full list:', $$('#pConjuros .spell').length, '| search box', !!$('#spQ'));
+  console.log('cards after full list:', $$('#pConjuros .sp-row').length, '| search box', !!$('#spQ'));
   const q = $('#spQ'); q.value = 'cure'; q.dispatchEvent(new w.Event('input', {bubbles:true})); await wait(20);
-  console.log('after search "cure":', $$('#pConjuros .spell').map(e => e.querySelector('h3').textContent).join(', '));
+  console.log('after search "cure":', $$('#pConjuros .sp-row').map(e => e.querySelector('.sp-n').textContent).join(', '));
   // creator: add multiclass level
   act('levelup'); await wait(40);
   console.log('lvbtns:', $$('.lvbtns button').map(b => b.textContent + (b.disabled ? '(x)' : '')).join(' | '));

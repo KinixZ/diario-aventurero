@@ -278,7 +278,7 @@ var Mesa = (function(){
   }
   function finishSession(snap){
     var id = 's' + snap.started.toString(36), title = snap.title || 'Sesión del ' + new Date(snap.started).toLocaleDateString('es-MX');
-    if (window.Diario && Diario.addNote) Diario.addNote(plain(snap));
+    if (window.Diario && Diario.addNote) Diario.addNote(plain(snap).split('\n').slice(1).join('\n'), {title:snap.title || 'Sesión de la campaña', at:snap.started, camp:true});
     fileHtml(snap).then(function(html){
       idbPut('ses:' + id, html);
       var ix = index().filter(function(x){ return x.id !== id; }); ix.unshift({id:id, title:title, date:snap.started}); setIndex(ix.slice(0, 60));

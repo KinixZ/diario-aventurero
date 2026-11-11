@@ -51,9 +51,11 @@ const [htmlFile, bundle] = process.argv.slice(2), html = fs.readFileSync(htmlFil
     M.click(M.$('[data-act="mesatab"][data-v="chat"]')); await wait(20);
     M.click(M.$('[data-act="mesaend"]')); await wait(10); M.click(M.$('[data-act="mesaend"]'));
     await until(() => (JSON.parse(B.w.localStorage.getItem('diario-sesiones') || '[]')).length === 1, 6000);
-    const notesB = JSON.parse(B.w.localStorage.getItem('diario-v4')).chars[0].rt.notes || '';
+    const jtext = (st) => ((st.chars[0].rt.journal || {}).ses || []).map((x) => x.title + '\n' + x.text).join('\n');
+    const notesB = jtext(JSON.parse(B.w.localStorage.getItem('diario-v4')));
     console.log('notas de Bram:', notesB.split('\n').slice(0, 6).join(' / '));
-    console.log('Bram no ve el susurro en sus notas:', !/observa/.test(notesB), '| Lyra sí:', /observa/.test(JSON.parse(A.w.localStorage.getItem('diario-v4')).chars[0].rt.notes || ''));
+    console.log('Bram no ve el susurro en sus notas:', !/observa/.test(notesB), '| Lyra sí:', /observa/.test(jtext(JSON.parse(A.w.localStorage.getItem('diario-v4')))));
+    if (!/observa/.test(jtext(JSON.parse(A.w.localStorage.getItem('diario-v4')))) || /observa/.test(notesB)) errors.push('el resumen de la sesión no llegó bien a las notas');
     console.log('sesiones guardadas en Bram:', JSON.parse(B.w.localStorage.getItem('diario-sesiones')).map(x => x.title).join(', '));
     B.click(B.$('[data-act="tab"][data-tab="notas"]')); await wait(30);
     console.log('lista en Notas:', (B.$('#sesList') || {}).textContent.replace(/\s+/g, ' ').trim().slice(0, 80));

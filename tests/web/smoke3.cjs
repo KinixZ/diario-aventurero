@@ -48,7 +48,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   console.log('detail open:', !!d.querySelector('#grim .gdetail'), '| trbar:', (d.querySelector('#grim .trbar') || {}).textContent);
   act('trgo'); await wait(200); console.log('tr result:', (d.querySelector('#grim .trbar') || {}).textContent);
   // conjuros del personaje en tabla
-  act('tab', '[data-tab="conjuros"]'); await wait(20); act('spview', '[data-v="table"]'); await wait(20);
+  act('tab', '[data-tab="conjuros"]'); await wait(20); act('spfopen'); await wait(20); act('spview', '[data-v="table"]'); await wait(20);
   console.log('char spell table rows:', d.querySelectorAll('#pConjuros .stable tbody tr').length);
   // ajustes traducción
   act('settings'); await wait(50); console.log('tr modes:', [...d.querySelectorAll('#trModes button')].map(b => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')).join(', '));
