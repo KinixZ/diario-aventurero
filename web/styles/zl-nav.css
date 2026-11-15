@@ -74,3 +74,15 @@
 @keyframes wakePulse{0%,100%{opacity:.55;transform:scale(.94)}50%{opacity:1;transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){ .wake-ic .ic{animation:none} }
 .nv-more-p:focus{outline:none}
+
+/* Combate en el teléfono vertical: la vida y la tarjeta del turno se van al bajar; solo las pestañas
+   (Mesa · Acciones · Recursos) se quedan pegadas arriba, con la vida y la CA en chico */
+.c-mini{display:none}
+@media (max-width:899px) and (orientation:portrait){
+  .combat .c-top{display:contents}
+  .combat .c-sub{position:sticky;top:0;z-index:5;display:flex;align-items:stretch;background:var(--parch);border-bottom:1px solid var(--rule);box-shadow:0 6px 14px -10px rgba(0,0,0,.55);padding:0 8px}
+  .combat .c-sub button{flex:1 1 0;min-width:0}
+  .combat .c-sub{flex-wrap:wrap}
+  .combat.vit-off .c-mini{display:flex;align-items:baseline;justify-content:center;gap:4px;order:-1;flex:1 0 100%;padding:5px 0 0;font-size:13px;color:var(--ink-2);white-space:nowrap}
+  .combat.vit-off .c-mini b{font-family:var(--display);font-size:15px;color:var(--ink)}
+}
