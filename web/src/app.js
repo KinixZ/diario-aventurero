@@ -1797,12 +1797,21 @@
       + (open ? '<div class="wpn-det"><p class="muted">' + esc(a.notes) + (a.extra.length ? ' · ' + a.extra.map(function(x){ return esc(x.note); }).join(', ') : '') + '</p>' + (a.mastery.length ? '<p><b>Maestría:</b> ' + a.mastery.map(function(mm){ return '<a class="ref" data-ref="itemMastery|' + attr(mm) + '|XPHB">' + esc(mm) + '</a>'; }).join(', ') + '</p>' : '') + (a.hbNotes ? '<p style="white-space:pre-line">' + esc(a.hbNotes) + '</p>' : '') + '</div>' : '')
       + '</div>';
   }
+  /* En el teléfono, al bajar, la vida y la CA se van con la página y las pestañas se quedan arriba con un resumen chico */
+  function cMiniSync(){
+    var cb = $('#combat'), bd = cb && cb.querySelector('.combat-b'), v = $('#cVitals'); if (!bd || !v) return;
+    var off = !!v.firstChild && v.getBoundingClientRect().bottom < bd.getBoundingClientRect().top + 8;
+    cb.classList.toggle('vit-off', off);
+  }
+  (function(){ var bd = document.querySelector('#combat .combat-b'); if (bd) bd.addEventListener('scroll', cMiniSync, {passive:true}); })();
   /* Lo de arriba (vida, pestañas, aviso de turno): se repinta solo, sin tocar la sala, cuando cambia el estado de la sala */
   function combatHead(){
     var ir = inRoom(); if (ir && !combatHead.was) S.cSub = 'orden'; combatHead.was = ir;
     var C = cur(), sub = combatSub(), cb = $('#combat'), mine = myTurnNow();
     cb.setAttribute('data-sub', sub); cb.classList.toggle('my-turn', mine);
-    $('#cSub').innerHTML = CSUB.map(function(x){ return '<button type="button" role="tab" data-act="csub" data-v="' + x[0] + '" aria-selected="' + (sub === x[0]) + '">' + x[1] + (x[0] === 'turno' && mine ? '<i class="dot" aria-label="Es tu turno"></i>' : '') + '</button>'; }).join('');
+    $('#cSub').innerHTML = CSUB.map(function(x){ return '<button type="button" role="tab" data-act="csub" data-v="' + x[0] + '" aria-selected="' + (sub === x[0]) + '">' + x[1] + (x[0] === 'turno' && mine ? '<i class="dot" aria-label="Es tu turno"></i>' : '') + '</button>'; }).join('')
+      + (C && D && D.ok ? '<span class="c-mini" aria-hidden="true"><b>' + rt(C).hp + '</b>/' + D.hp.max + (rt(C).temp ? ' +' + rt(C).temp : '') + ' PG · CA ' + D.ac + '</span>' : '');
+    cMiniSync();
     var R = inRoom() && window.Sala && Sala.room(); cb.setAttribute('data-fight', R && R.round > 0 ? 'on' : '');
     var typing = document.activeElement && document.activeElement.id === 'hpIn';
     if (!typing) $('#cVitals').innerHTML = C && D && D.ok ? vitalsHtml(C, rt(C)) : '';
